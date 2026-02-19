@@ -1,0 +1,9 @@
+/target
+**/target
+.DS_Store
+node_modules
+apps/ettlex-desktop/.svelte-kit
+apps/ettlex-desktop/build
+apps/ettlex-desktop/dist
+coverage
+**/coverage

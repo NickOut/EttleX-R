@@ -1,0 +1,16 @@
+<!-- File: .idea/codeStyles/Project.xml -->
+<component name="ProjectCodeStyleConfiguration">
+  <code_scheme name="Project" version="173">
+    <RustCodeStyleSettings>
+      <option name="ALIGN_RET_TYPE" value="true" />
+      <option name="ALIGN_WHERE_CLAUSE" value="true" />
+      <option name="ALLOW_ONE_LINE_MATCH" value="true" />
+      <option name="INDENT_SIZE" value="4" />
+      <option name="MIN_NUMBER_OF_BLANKS_BETWEEN_ITEMS" value="1" />
+    </RustCodeStyleSettings>
+    <TypeScriptCodeStyleSettings version="0">
+      <option name="INDENT_SIZE" value="2" />
+      <option name="TAB_SIZE" value="2" />
+    </TypeScriptCodeStyleSettings>
+  </code_scheme>
+</component>

@@ -1,0 +1,53 @@
+[workspace]
+members = [
+  "crates/ettlex-core",
+  "crates/ettlex-store",
+  "crates/ettlex-projection",
+  "crates/ettlex-engine",
+  "crates/ettlex-mcp",
+  "crates/ettlex-cli",
+  "crates/ettlex-tauri",
+]
+resolver = "2"
+
+[workspace.dependencies]
+tokio = { version = "1.0", features = [
+  "full",
+] } # Async runtime (de facto standard)
+async-trait = "0.1" # Async traits
+futures = "0.3" # Future utilities
+serde = { version = "1.0", features = ["derive"] } # Serialization framework
+serde_json = "1.0" # JSON support
+toml = "0.8" # TOML parsing
+anyhow = "1.0" # Flexible error handling
+thiserror = "1.0" # Custom error types
+clap = { version = "4.4", features = [
+  "derive",
+] } # Command line argument parsing
+config = "0.14" # Configuration management
+dotenvy = "0.15" # Environment variables
+reqwest = { version = "0.11", features = ["json"] } # HTTP client
+axum = "0.7" # Web framework
+tower = "0.4" # Service abstractions
+hyper = "1.0" # Low-level HTTP
+sqlx = { version = "0.7", features = [
+  "runtime-tokio-rustls",
+  "postgres",
+] } # Async SQL
+diesel = { version = "2.1", features = ["postgres"] } # ORM alternative
+redis = "0.24" # Redis client
+ring = "0.17" # Cryptographic operations
+rustls = "0.21" # TLS implementation
+argon2 = "0.5" # Password hashing
+uuid = { version = "1.0", features = ["v4", "serde"] } # UUID generation
+chrono = { version = "0.4", features = ["serde"] } # Date and time handling
+time = "0.3" # Alternative to chrono
+tracing = "0.1" # Structured logging (modern standard)
+tracing-subscriber = "0.3" # Tracing backend
+log = "0.4" # Traditional logging (legacy)
+env_logger = "0.10" # Simple logger
+tokio-test = "0.4" # Async testing utilities
+testcontainers = "0.15" # Integration testing
+criterion = "0.5" # Benchmarking
+proptest = "1.4" # Property-based testing
+mockall = "0.12" # Mocking framework

@@ -1,0 +1,16 @@
+# Build output
+target/
+**/target/
+
+# Node artifacts
+node_modules/
+dist/
+build/
+.svelte-kit/
+
+# Generated reports / coverage artifacts
+coverage/
+**/coverage/
+
+# Optional: workspace tooling output (if applicable)
+pnpm-lock.yaml
