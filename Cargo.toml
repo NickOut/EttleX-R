@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/ettlex-core-types",
   "crates/ettlex-core",
   "crates/ettlex-store",
   "crates/ettlex-projection",
@@ -39,7 +40,7 @@ redis = "0.24" # Redis client
 ring = "0.17" # Cryptographic operations
 rustls = "0.21" # TLS implementation
 argon2 = "0.5" # Password hashing
-uuid = { version = "1.0", features = ["v4", "serde"] } # UUID generation
+uuid = { version = "1.0", features = ["v4", "v7", "serde"] } # UUID generation
 chrono = { version = "0.4", features = ["serde"] } # Date and time handling
 time = "0.3" # Alternative to chrono
 tracing = "0.1" # Structured logging (modern standard)
@@ -51,3 +52,10 @@ testcontainers = "0.15" # Integration testing
 criterion = "0.5" # Benchmarking
 proptest = "1.4" # Property-based testing
 mockall = "0.12" # Mocking framework
+
+[workspace.lints.rust]
+unused_must_use = "warn"
+
+[workspace.lints.clippy]
+result_large_err = "warn"
+missing_errors_doc = "warn"

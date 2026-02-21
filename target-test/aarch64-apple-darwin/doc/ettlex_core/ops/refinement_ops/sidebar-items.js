@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["link_child","list_children","set_parent","unlink_child"]};

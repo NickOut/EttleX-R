@@ -14,3 +14,9 @@ coverage/
 
 # Optional: workspace tooling output (if applicable)
 pnpm-lock.yaml
+
+# Prompts
+prompts/**
+
+handoff/**
+

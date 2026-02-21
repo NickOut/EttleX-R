@@ -3,4 +3,18 @@ name = "ettlex-core"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
+ettlex-core-types = { path = "../ettlex-core-types" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+
+[dev-dependencies]
+proptest = { workspace = true }
