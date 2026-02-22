@@ -77,6 +77,7 @@ Do not treat TES as a placeholder excuse to skip tests or documentation.
 - Ensure dependencies align with the intended architectural layer.
 
 ## Acceptance gates (MANDATORY)
+Coverage percentage is MANDATORY, you MUST NOT adjust the threshold in the makefile in order to pass.
 
 1. All tests run
 2. Build passes without any errors or warnings

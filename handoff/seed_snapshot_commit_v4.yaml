@@ -46,6 +46,30 @@ ettles:
       '
     what: "This Ettle is a structural anchor for the already-implemented Phase 1 Store Spine milestone.\nIt represents the existence of:\n  - SQLite schema + migrations discipline (including facet_snapshots/provenance_events stubs)\n  - Filesystem CAS with atomic writes\n  - cas_blobs index population (non-load-bearing)\n  - Seed Format v0 importer\n\nThe normative implementation detail for this milestone is defined in the bootstrap markdown Ettle\n\u201CPhase 1 Store Spine (SQLite + CAS + Seed Import)\u201D.\n"
     how: "No new implementation scenarios here. The milestone is already delivered.\nThis EP exists to:\n  - provide a stable parent refinement node for snapshot commit,\n  - preserve the dependency relationship in the refinement tree,\n  - and ensure rendered views show correct prerequisites.\n"
+  - id: ep:store:1
+    ordinal: 1
+    normative: true
+    why:  '|
+      The constraint schema stubs milestone introduces canonical persistence for
+      constraints as first-class entities. This requires a stable refinement anchor
+      in the storage spine so the dependency relationship is explicit in the tree
+      and rendered views show correct prerequisites for snapshot diff and later
+      evaluation work. '
+    what:  '|
+      Structural anchor for the constraint schema stubs milestone under the storage
+      spine. Represents the existence of:
+        - constraints and ep_constraint_refs tables (additive migrations)
+        - family-agnostic manifest constraint envelope
+        - cas_blobs and provenance event wiring for constraint objects
+  
+      The normative implementation detail is defined in the constraint schema stubs
+      seed (seed_constraint_schema_stubs_v3.yaml). '
+    how:  '|
+      No new implementation scenarios here. This EP exists to:
+        - provide a stable parent refinement node for ettle:constraint_schema_stubs,
+        - preserve the dependency relationship in the refinement tree,
+        - and ensure rendered views show constraint stubs as a prerequisite sibling
+          to snapshot commit before snapshot diff is implemented. '
 - id: ettle:snapshot_commit
   title: Snapshot Commit Pipeline (End-to-End)
   eps:
@@ -93,9 +117,4 @@ links:
 - parent: ettle:store
   parent_ep: ep:store:0
   child: ettle:snapshot_commit
-- parent: ettle:store
-  parent_ep: ep:store:0
-  child: ettle:constraint_schema_stubs
-- parent: ettle:snapshot_commit
-  parent_ep: ep:snapshot_commit:0
-  child: ettle:snapshot_diff
+

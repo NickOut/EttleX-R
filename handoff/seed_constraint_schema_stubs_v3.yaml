@@ -47,5 +47,5 @@ ettles:
 "
 links:
 - parent: ettle:store
-  parent_ep: ep:store:0
+  parent_ep: ep:store:1
   child: ettle:constraint_schema_stubs
