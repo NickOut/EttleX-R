@@ -7,6 +7,7 @@
 use crate::errors::Result;
 use crate::repo::SqliteRepo;
 use crate::seed::{compute_seed_digest, parse_seed_file_with_db};
+use ettlex_core::ops::refinement_ops;
 use ettlex_core::ops::store::Store;
 use rusqlite::Connection;
 use std::path::Path;
@@ -110,38 +111,59 @@ pub fn import_seed(path: &Path, conn: &mut Connection) -> Result<String> {
         crate::seed::provenance::emit_applied(&tx, &seed_digest, &seed_ettle.id)?;
     }
 
-    // Handle links: update EP.child_ettle_id
+    // Handle links using core refinement ops (enforces invariants)
     for link in &seed.links {
-        // Try to get EP from in-memory store first
-        if let Ok(ep) = store.get_ep_mut(&link.parent_ep) {
-            ep.child_ettle_id = Some(link.child.clone());
-            // Persist updated EP
-            SqliteRepo::persist_ep_tx(&tx, ep)?;
-        } else {
-            // EP not in current seed - load from database and update
-            if let Some(mut ep) = SqliteRepo::get_ep(&tx, &link.parent_ep)? {
-                ep.child_ettle_id = Some(link.child.clone());
-                // Persist updated EP
-                SqliteRepo::persist_ep_tx(&tx, &ep)?;
-            }
-        }
-    }
+        // For cross-seed links, we may need to load entities from database into store
+        // to make them available to link_child operation
 
-    // Update parent_id for child Ettles
-    for link in &seed.links {
-        // Try to get Ettle from in-memory store first
-        if let Ok(child_ettle) = store.get_ettle_mut(&link.child) {
-            child_ettle.parent_id = Some(link.parent.clone());
-            // Persist updated Ettle
-            SqliteRepo::persist_ettle_tx(&tx, child_ettle)?;
-        } else {
-            // Ettle not in current seed - load from database and update
-            if let Some(mut child_ettle) = SqliteRepo::get_ettle(&tx, &link.child)? {
-                child_ettle.parent_id = Some(link.parent.clone());
-                // Persist updated Ettle
-                SqliteRepo::persist_ettle_tx(&tx, &child_ettle)?;
+        // Load parent Ettle if not in store (including all its EPs)
+        if store.get_ettle(&link.parent).is_err() {
+            if let Some(mut ettle) = SqliteRepo::get_ettle(&tx, &link.parent)? {
+                // Load all EPs for this parent Ettle so link_child can verify EP is active
+                let mut stmt = tx
+                    .prepare("SELECT id FROM eps WHERE ettle_id = ?1 AND deleted = 0")
+                    .map_err(crate::errors::from_rusqlite)?;
+                let ep_rows = stmt
+                    .query_map([&link.parent], |row| row.get::<_, String>(0))
+                    .map_err(crate::errors::from_rusqlite)?;
+
+                let mut ep_ids = Vec::new();
+                for ep_id_result in ep_rows {
+                    let ep_id = ep_id_result.map_err(crate::errors::from_rusqlite)?;
+                    if let Some(ep) = SqliteRepo::get_ep(&tx, &ep_id)? {
+                        ep_ids.push(ep_id.clone());
+                        store.insert_ep(ep);
+                    }
+                }
+
+                // Update ettle's ep_ids list before inserting into store
+                ettle.ep_ids = ep_ids;
+                store.insert_ettle(ettle);
             }
         }
+
+        // Load parent EP if not in store
+        if store.get_ep(&link.parent_ep).is_err() {
+            if let Some(ep) = SqliteRepo::get_ep(&tx, &link.parent_ep)? {
+                store.insert_ep(ep);
+            }
+        }
+
+        // Load child Ettle if not in store
+        if store.get_ettle(&link.child).is_err() {
+            if let Some(ettle) = SqliteRepo::get_ettle(&tx, &link.child)? {
+                store.insert_ettle(ettle);
+            }
+        }
+
+        // Use core refinement operation (enforces EpAlreadyHasChild invariant)
+        refinement_ops::link_child(&mut store, &link.parent_ep, &link.child)?;
+
+        // Persist updated EP and Ettle
+        let ep = store.get_ep(&link.parent_ep)?;
+        let child = store.get_ettle(&link.child)?;
+        SqliteRepo::persist_ep_tx(&tx, ep)?;
+        SqliteRepo::persist_ettle_tx(&tx, child)?;
     }
 
     // Emit provenance: completed
@@ -276,6 +298,7 @@ mod tests {
         );
 
         // Create a child seed that references entities from parent seed
+        // Use ep:root:0 which doesn't have a child yet (ep:root:1 is already linked)
         let child_yaml = r#"
 schema_version: 0
 project:
@@ -292,7 +315,7 @@ ettles:
         how: "Child how"
 links:
   - parent: ettle:root
-    parent_ep: ep:root:1
+    parent_ep: ep:root:0
     child: ettle:child
 "#;
 
@@ -312,7 +335,7 @@ links:
         // Verify cross-seed link was created
         let parent_ep_child: Option<String> = conn
             .query_row(
-                "SELECT child_ettle_id FROM eps WHERE id = 'ep:root:1'",
+                "SELECT child_ettle_id FROM eps WHERE id = 'ep:root:0'",
                 [],
                 |row| row.get(0),
             )
@@ -339,5 +362,104 @@ links:
 
         // Cleanup
         std::fs::remove_file(child_path).ok();
+    }
+
+    #[test]
+    fn test_import_fails_when_ep_already_has_child() {
+        let mut conn = setup_test_db();
+
+        // Import first seed that creates a link
+        let first_path = fixtures_dir().join("seed_full.yaml");
+        let first_result = import_seed(&first_path, &mut conn);
+        assert!(
+            first_result.is_ok(),
+            "First seed import should succeed: {:?}",
+            first_result.err()
+        );
+
+        // Verify the link was created
+        let ep_child: Option<String> = conn
+            .query_row(
+                "SELECT child_ettle_id FROM eps WHERE id = 'ep:root:1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            ep_child,
+            Some("ettle:store".to_string()),
+            "EP should already have a child"
+        );
+
+        // Create a second seed that tries to link the SAME EP to a different child
+        let conflicting_yaml = r#"
+schema_version: 0
+project:
+  name: conflict-test
+ettles:
+  - id: ettle:other_child
+    title: "Other Child"
+    eps:
+      - id: ep:other:0
+        ordinal: 0
+        normative: true
+        why: "Other why"
+        what: "Other what"
+        how: "Other how"
+links:
+  - parent: ettle:root
+    parent_ep: ep:root:1
+    child: ettle:other_child
+"#;
+
+        // Write conflicting seed to temp file
+        let temp_dir = std::env::temp_dir();
+        let conflict_path = temp_dir.join("seed_conflict_test.yaml");
+        std::fs::write(&conflict_path, conflicting_yaml).unwrap();
+
+        // Import should fail with EpAlreadyHasChild error
+        let conflict_result = import_seed(&conflict_path, &mut conn);
+        assert!(
+            conflict_result.is_err(),
+            "Import should fail when EP already has a child"
+        );
+
+        let err = conflict_result.unwrap_err();
+        let err_msg = format!("{:?}", err);
+        assert!(
+            err_msg.contains("DuplicateMapping") || err_msg.contains("already maps"),
+            "Error should indicate EP already has a child, got: {}",
+            err_msg
+        );
+
+        // Verify the original link is unchanged (rollback)
+        let ep_child_after: Option<String> = conn
+            .query_row(
+                "SELECT child_ettle_id FROM eps WHERE id = 'ep:root:1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            ep_child_after,
+            Some("ettle:store".to_string()),
+            "Original link should be unchanged after failed import"
+        );
+
+        // Verify the conflicting ettle was not created (rollback)
+        let other_child_exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM ettles WHERE id = 'ettle:other_child'",
+                [],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        assert!(
+            !other_child_exists,
+            "Conflicting ettle should not exist after rollback"
+        );
+
+        // Cleanup
+        std::fs::remove_file(conflict_path).ok();
     }
 }
