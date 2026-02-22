@@ -22,7 +22,7 @@ fn test_scenario_08_happy_active_eps_sorted_and_stable() {
             format!("EP{}", ordinal),
             "".to_string(),
         )
-        .expect(&format!("Should create EP{}", ordinal));
+        .unwrap_or_else(|_| panic!("Should create EP{}", ordinal));
     }
 
     // WHEN calling active_eps multiple times
@@ -127,7 +127,7 @@ fn test_scenario_08_active_eps_deterministic_on_concurrent_access() {
             format!("EP{}", i),
             "".to_string(),
         )
-        .expect(&format!("Should create EP{}", i));
+        .unwrap_or_else(|_| panic!("Should create EP{}", i));
     }
 
     // WHEN calling active_eps many times

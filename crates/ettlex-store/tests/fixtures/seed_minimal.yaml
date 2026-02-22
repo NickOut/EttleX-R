@@ -4,13 +4,13 @@ project:
 
 ettles:
   - id: ettle:root
-    title: "EttleX Root"
+    title: 'EttleX Root'
     eps:
       - id: ep:root:0
         ordinal: 0
         normative: false
-        why: "Bootstrap the semantic kernel"
-        what: "A minimal root Ettle"
-        how: "Import via Seed Format v0"
+        why: 'Bootstrap the semantic kernel'
+        what: 'A minimal root Ettle'
+        how: 'Import via Seed Format v0'
 
 links: []

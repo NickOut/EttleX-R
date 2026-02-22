@@ -23,7 +23,7 @@ ettlex/
             txn.rs               # transactional wrapper
             cas/                 # content-addressed blob store
             ledger/              # append-only facet_snapshots + provenance_events
-    
+
         ettlex-projection/       # exporters: markdown/json/graph views
           Cargo.toml
           src/
@@ -31,7 +31,7 @@ ettlex/
             markdown/
             json/
             archimate/           # optional: view generation scaffolding
-    
+
         ettlex-engine/           # application service layer (orchestrates core+store)
           Cargo.toml
           src/
@@ -40,19 +40,19 @@ ettlex/
             preview/             # impact preview computation
             snapshot/            # snapshot commit flow
             git_mirror/          # optional: export + commit + record git hash
-    
+
         ettlex-mcp/              # MCP server (tool surface)
           Cargo.toml
           src/
             main.rs
             tools/               # tool handlers mapping to engine commands
-    
+
         ettlex-cli/              # CLI (calls engine directly or via MCP)
           Cargo.toml
           src/
             main.rs
             commands/
-    
+
         ettlex-tauri/            # Tauri backend (IPC bridge to engine)
           Cargo.toml
           src/

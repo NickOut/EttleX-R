@@ -3,6 +3,7 @@
 ## Overview
 
 Phase 1 implements the persistent storage layer for EttleX, enabling:
+
 - Durable SQLite-backed storage for Ettles and EPs
 - Content-addressable storage (CAS) for EP content
 - Seed Format v0 for bootstrapping canonical state
@@ -43,6 +44,7 @@ Phase 1 implements the persistent storage layer for EttleX, enabling:
 ### Tables
 
 **1. schema_version** - Migration tracking
+
 ```sql
 CREATE TABLE schema_version (
     id INTEGER PRIMARY KEY,
@@ -53,6 +55,7 @@ CREATE TABLE schema_version (
 ```
 
 **2. ettles** - Ettle entities
+
 ```sql
 CREATE TABLE ettles (
     id TEXT PRIMARY KEY,
@@ -69,6 +72,7 @@ CREATE INDEX idx_ettles_parent_id ON ettles(parent_id);
 ```
 
 **3. eps** - Ettle Partitions
+
 ```sql
 CREATE TABLE eps (
     id TEXT PRIMARY KEY,
@@ -91,6 +95,7 @@ CREATE INDEX idx_eps_ordinal ON eps(ettle_id, ordinal);
 ```
 
 **4. facet_snapshots** - Snapshot facets (Phase 2)
+
 ```sql
 CREATE TABLE facet_snapshots (
     id INTEGER PRIMARY KEY,
@@ -106,6 +111,7 @@ CREATE INDEX idx_facet_snapshot ON facet_snapshots(snapshot_id);
 ```
 
 **5. provenance_events** - Import tracking
+
 ```sql
 CREATE TABLE provenance_events (
     id INTEGER PRIMARY KEY,
@@ -119,6 +125,7 @@ CREATE INDEX idx_provenance_correlation ON provenance_events(correlation_id);
 ```
 
 **6. cas_blobs** - CAS index (non-load-bearing)
+
 ```sql
 CREATE TABLE cas_blobs (
     digest TEXT PRIMARY KEY,
@@ -172,25 +179,25 @@ let content = cas.read(&digest)?;
 ### Schema
 
 ```yaml
-schema_version: 0  # Must be 0
+schema_version: 0 # Must be 0
 project:
-  name: "project-name"
+  name: 'project-name'
 
 ettles:
-  - id: "ettle:identifier"
-    title: "Human Title"
+  - id: 'ettle:identifier'
+    title: 'Human Title'
     eps:
-      - id: "ep:identifier:ordinal"
-        ordinal: 0  # Unique within ettle
-        normative: true  # or false
-        why: "Rationale"
-        what: "Description"  # or { text: "Description" }
-        how: "Implementation"
+      - id: 'ep:identifier:ordinal'
+        ordinal: 0 # Unique within ettle
+        normative: true # or false
+        why: 'Rationale'
+        what: 'Description' # or { text: "Description" }
+        how: 'Implementation'
 
 links:
-  - parent: "ettle:parent-id"
-    parent_ep: "ep:parent-id:ordinal"
-    child: "ettle:child-id"
+  - parent: 'ettle:parent-id'
+    parent_ep: 'ep:parent-id:ordinal'
+    child: 'ettle:child-id'
 ```
 
 ### Validation Rules
@@ -204,6 +211,7 @@ links:
 ### Examples
 
 **Minimal Seed**:
+
 ```yaml
 schema_version: 0
 project:
@@ -211,19 +219,20 @@ project:
 
 ettles:
   - id: ettle:root
-    title: "Root Ettle"
+    title: 'Root Ettle'
     eps:
       - id: ep:root:0
         ordinal: 0
         normative: false
-        why: "Bootstrap"
-        what: "Initial state"
-        how: "Seed import"
+        why: 'Bootstrap'
+        what: 'Initial state'
+        how: 'Seed import'
 
 links: []
 ```
 
 **With Links**:
+
 ```yaml
 schema_version: 0
 project:
@@ -231,24 +240,24 @@ project:
 
 ettles:
   - id: ettle:parent
-    title: "Parent"
+    title: 'Parent'
     eps:
       - id: ep:parent:0
         ordinal: 0
         normative: true
-        why: "Define structure"
-        what: "Parent concept"
-        how: "Contains child"
+        why: 'Define structure'
+        what: 'Parent concept'
+        how: 'Contains child'
 
   - id: ettle:child
-    title: "Child"
+    title: 'Child'
     eps:
       - id: ep:child:0
         ordinal: 0
         normative: true
-        why: "Refine parent"
-        what: "Child concept"
-        how: "Implements parent"
+        why: 'Refine parent'
+        what: 'Child concept'
+        how: 'Implements parent'
 
 links:
   - parent: ettle:parent
@@ -401,6 +410,7 @@ cargo tarpaulin -p ettlex-store --out Html
 ## Phase 1 Deliverables
 
 ✅ **Completed**:
+
 - SQLite schema with 6 tables
 - Migration framework with checksums
 - CAS filesystem store (sharded, atomic)
@@ -414,6 +424,7 @@ cargo tarpaulin -p ettlex-store --out Html
 - Round-trip determinism verified
 
 ⏭️ **Deferred to Phase 2**:
+
 - CAS index (cas_blobs upsert) - non-load-bearing
 - Snapshot commit pipeline
 - `--commit` flag implementation
@@ -431,18 +442,22 @@ cargo tarpaulin -p ettlex-store --out Html
 ### Common Issues
 
 **Foreign Key Constraint Failure**:
+
 - Ensure parent entities created before children
 - Check link references point to existing Ettles/EPs
 
 **Duplicate Ordinal Error**:
+
 - Ordinals must be unique within an Ettle
 - Check seed YAML for duplicate ordinal values
 
 **Migration Checksum Mismatch**:
+
 - Migration SQL file was modified after initial run
 - Create new migration instead of modifying existing
 
 **CAS Collision**:
+
 - Two different contents produced same SHA256 (extremely unlikely)
 - Check for file corruption
 

@@ -26,7 +26,7 @@ fn test_load_ettle() {
     let loaded = store.get_ettle("ettle-1").unwrap();
     assert_eq!(loaded.id, "ettle-1");
     assert_eq!(loaded.title, "Test Ettle");
-    assert_eq!(loaded.deleted, false);
+    assert!(!loaded.deleted);
 }
 
 #[test]

@@ -4,30 +4,30 @@ project:
 
 ettles:
   - id: ettle:root
-    title: "EttleX Product"
+    title: 'EttleX Product'
     eps:
       - id: ep:root:0
         ordinal: 0
         normative: false
-        why: "Define vision"
-        what: "Semantic architecture management"
-        how: "Rust monorepo"
+        why: 'Define vision'
+        what: 'Semantic architecture management'
+        how: 'Rust monorepo'
       - id: ep:root:1
         ordinal: 1
         normative: true
-        why: "Establish persistence"
-        what: "SQLite + CAS storage"
-        how: "Phase 1 implementation"
+        why: 'Establish persistence'
+        what: 'SQLite + CAS storage'
+        how: 'Phase 1 implementation'
 
   - id: ettle:store
-    title: "Storage Spine"
+    title: 'Storage Spine'
     eps:
       - id: ep:store:0
         ordinal: 0
         normative: true
-        why: "Enable durable state"
-        what: "SQLite schema with 6 tables"
-        how: "Migration-driven evolution"
+        why: 'Enable durable state'
+        what: 'SQLite schema with 6 tables'
+        how: 'Migration-driven evolution'
 
 links:
   - parent: ettle:root

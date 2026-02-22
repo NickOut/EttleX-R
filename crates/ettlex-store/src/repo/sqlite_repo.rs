@@ -239,7 +239,7 @@ mod tests {
 
         assert_eq!(retrieved.id, "test-ettle-1");
         assert_eq!(retrieved.title, "Test Ettle");
-        assert_eq!(retrieved.deleted, false);
+        assert!(!retrieved.deleted);
     }
 
     #[test]
@@ -269,7 +269,7 @@ mod tests {
         assert_eq!(retrieved.id, "test-ep-1");
         assert_eq!(retrieved.ettle_id, "test-ettle-1");
         assert_eq!(retrieved.ordinal, 0);
-        assert_eq!(retrieved.normative, true);
+        assert!(retrieved.normative);
         assert_eq!(retrieved.why, "Why content");
         assert_eq!(retrieved.what, "What content");
         assert_eq!(retrieved.how, "How content");

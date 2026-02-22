@@ -4,19 +4,19 @@ project:
 
 ettles:
   - id: ettle:test
-    title: "Test"
+    title: 'Test'
     eps:
       - id: ep:test:0
         ordinal: 0
         normative: true
-        why: "First"
-        what: "First EP"
-        how: "First"
+        why: 'First'
+        what: 'First EP'
+        how: 'First'
       - id: ep:test:1
-        ordinal: 0  # Duplicate ordinal!
+        ordinal: 0 # Duplicate ordinal!
         normative: false
-        why: "Second"
-        what: "Second EP"
-        how: "Second"
+        why: 'Second'
+        what: 'Second EP'
+        how: 'Second'
 
 links: []
