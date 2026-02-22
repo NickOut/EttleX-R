@@ -6,32 +6,43 @@
 
 use crate::errors::{seed_validation, Result};
 use crate::seed::format_v0::SeedV0;
+use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
 /// Parse a seed file from a path
 pub fn parse_seed_file(path: &Path) -> Result<SeedV0> {
+    parse_seed_file_with_db(path, None)
+}
+
+/// Parse a seed file from a path with optional database context for cross-seed validation
+pub fn parse_seed_file_with_db(path: &Path, conn: Option<&Connection>) -> Result<SeedV0> {
     let content = fs::read_to_string(path)
         .map_err(|e| seed_validation(&format!("Failed to read seed file: {}", e)))?;
 
-    parse_seed_str(&content)
+    parse_seed_str_with_db(&content, conn)
 }
 
 /// Parse a seed from a string
 pub fn parse_seed_str(content: &str) -> Result<SeedV0> {
+    parse_seed_str_with_db(content, None)
+}
+
+/// Parse a seed from a string with optional database context for cross-seed validation
+pub fn parse_seed_str_with_db(content: &str, conn: Option<&Connection>) -> Result<SeedV0> {
     // Parse YAML
     let seed: SeedV0 = serde_yaml::from_str(content)
         .map_err(|e| seed_validation(&format!("YAML parse error: {}", e)))?;
 
     // Validate seed
-    validate_seed(&seed)?;
+    validate_seed(&seed, conn)?;
 
     Ok(seed)
 }
 
 /// Validate a parsed seed
-fn validate_seed(seed: &SeedV0) -> Result<()> {
+fn validate_seed(seed: &SeedV0, conn: Option<&Connection>) -> Result<()> {
     // Validate schema version
     if seed.schema_version != 0 {
         return Err(seed_validation(&format!(
@@ -62,20 +73,56 @@ fn validate_seed(seed: &SeedV0) -> Result<()> {
         .collect();
 
     for link in &seed.links {
-        // Check parent exists
+        // Check parent exists (check database first if available)
         if !ettle_ids.contains(&link.parent) {
-            return Err(seed_validation(&format!(
-                "Link references non-existent parent Ettle: {}",
-                link.parent
-            )));
+            if let Some(conn) = conn {
+                // Check if parent exists in database
+                let exists: bool = conn
+                    .query_row(
+                        "SELECT 1 FROM ettles WHERE id = ?1 AND deleted = 0",
+                        [&link.parent],
+                        |_| Ok(true),
+                    )
+                    .unwrap_or(false);
+
+                if !exists {
+                    return Err(seed_validation(&format!(
+                        "Link references non-existent parent Ettle: {}",
+                        link.parent
+                    )));
+                }
+            } else {
+                return Err(seed_validation(&format!(
+                    "Link references non-existent parent Ettle: {}",
+                    link.parent
+                )));
+            }
         }
 
-        // Check parent_ep exists
+        // Check parent_ep exists (check database first if available)
         if !ep_ids.contains(&link.parent_ep) {
-            return Err(seed_validation(&format!(
-                "Link references non-existent parent EP: {}",
-                link.parent_ep
-            )));
+            if let Some(conn) = conn {
+                // Check if parent EP exists in database
+                let exists: bool = conn
+                    .query_row(
+                        "SELECT 1 FROM eps WHERE id = ?1 AND deleted = 0",
+                        [&link.parent_ep],
+                        |_| Ok(true),
+                    )
+                    .unwrap_or(false);
+
+                if !exists {
+                    return Err(seed_validation(&format!(
+                        "Link references non-existent parent EP: {}",
+                        link.parent_ep
+                    )));
+                }
+            } else {
+                return Err(seed_validation(&format!(
+                    "Link references non-existent parent EP: {}",
+                    link.parent_ep
+                )));
+            }
         }
 
         // Check child exists

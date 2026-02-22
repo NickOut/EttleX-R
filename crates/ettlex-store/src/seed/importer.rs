@@ -6,7 +6,7 @@
 
 use crate::errors::Result;
 use crate::repo::SqliteRepo;
-use crate::seed::{compute_seed_digest, parse_seed_file};
+use crate::seed::{compute_seed_digest, parse_seed_file_with_db};
 use ettlex_core::ops::store::Store;
 use rusqlite::Connection;
 use std::path::Path;
@@ -14,7 +14,7 @@ use std::path::Path;
 /// Import a seed file into the database
 ///
 /// This is the main entry point for seed import. It:
-/// 1. Parses and validates the seed YAML
+/// 1. Parses and validates the seed YAML (checking database for cross-seed references)
 /// 2. Computes the seed digest
 /// 3. Creates Ettles and EPs using Phase 0.5 ops
 /// 4. Persists to SQLite within a transaction
@@ -22,8 +22,8 @@ use std::path::Path;
 ///
 /// Returns the seed digest on success
 pub fn import_seed(path: &Path, conn: &mut Connection) -> Result<String> {
-    // Parse seed
-    let seed = parse_seed_file(path)?;
+    // Parse seed (pass connection to allow cross-seed reference validation)
+    let seed = parse_seed_file_with_db(path, Some(conn))?;
 
     // Compute seed digest
     let seed_digest = compute_seed_digest(&seed);
@@ -112,21 +112,35 @@ pub fn import_seed(path: &Path, conn: &mut Connection) -> Result<String> {
 
     // Handle links: update EP.child_ettle_id
     for link in &seed.links {
+        // Try to get EP from in-memory store first
         if let Ok(ep) = store.get_ep_mut(&link.parent_ep) {
             ep.child_ettle_id = Some(link.child.clone());
-
             // Persist updated EP
             SqliteRepo::persist_ep_tx(&tx, ep)?;
+        } else {
+            // EP not in current seed - load from database and update
+            if let Some(mut ep) = SqliteRepo::get_ep(&tx, &link.parent_ep)? {
+                ep.child_ettle_id = Some(link.child.clone());
+                // Persist updated EP
+                SqliteRepo::persist_ep_tx(&tx, &ep)?;
+            }
         }
     }
 
     // Update parent_id for child Ettles
     for link in &seed.links {
+        // Try to get Ettle from in-memory store first
         if let Ok(child_ettle) = store.get_ettle_mut(&link.child) {
             child_ettle.parent_id = Some(link.parent.clone());
-
             // Persist updated Ettle
             SqliteRepo::persist_ettle_tx(&tx, child_ettle)?;
+        } else {
+            // Ettle not in current seed - load from database and update
+            if let Some(mut child_ettle) = SqliteRepo::get_ettle(&tx, &link.child)? {
+                child_ettle.parent_id = Some(link.parent.clone());
+                // Persist updated Ettle
+                SqliteRepo::persist_ettle_tx(&tx, &child_ettle)?;
+            }
         }
     }
 
@@ -246,5 +260,84 @@ mod tests {
             })
             .unwrap();
         assert_eq!(prov_count, 0, "Rollback should remove provenance events");
+    }
+
+    #[test]
+    fn test_cross_seed_link_import() {
+        let mut conn = setup_test_db();
+
+        // Import parent seed first
+        let parent_path = fixtures_dir().join("seed_full.yaml");
+        let parent_result = import_seed(&parent_path, &mut conn);
+        assert!(
+            parent_result.is_ok(),
+            "Parent seed import should succeed: {:?}",
+            parent_result.err()
+        );
+
+        // Create a child seed that references entities from parent seed
+        let child_yaml = r#"
+schema_version: 0
+project:
+  name: cross-seed-test
+ettles:
+  - id: ettle:child
+    title: "Child Ettle"
+    eps:
+      - id: ep:child:0
+        ordinal: 0
+        normative: true
+        why: "Child why"
+        what: "Child what"
+        how: "Child how"
+links:
+  - parent: ettle:root
+    parent_ep: ep:root:1
+    child: ettle:child
+"#;
+
+        // Write child seed to temp file
+        let temp_dir = std::env::temp_dir();
+        let child_path = temp_dir.join("seed_cross_test.yaml");
+        std::fs::write(&child_path, child_yaml).unwrap();
+
+        // Import child seed (should validate parent against database)
+        let child_result = import_seed(&child_path, &mut conn);
+        assert!(
+            child_result.is_ok(),
+            "Child seed import should succeed: {:?}",
+            child_result.err()
+        );
+
+        // Verify cross-seed link was created
+        let parent_ep_child: Option<String> = conn
+            .query_row(
+                "SELECT child_ettle_id FROM eps WHERE id = 'ep:root:1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            parent_ep_child,
+            Some("ettle:child".to_string()),
+            "Parent EP should link to child Ettle"
+        );
+
+        // Verify child Ettle has parent_id set
+        let child_parent: Option<String> = conn
+            .query_row(
+                "SELECT parent_id FROM ettles WHERE id = 'ettle:child'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            child_parent,
+            Some("ettle:root".to_string()),
+            "Child Ettle should have parent_id set"
+        );
+
+        // Cleanup
+        std::fs::remove_file(child_path).ok();
     }
 }

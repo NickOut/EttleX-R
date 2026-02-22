@@ -16,4 +16,6 @@ pub mod provenance;
 pub use digest::compute_seed_digest;
 pub use format_v0::SeedV0;
 pub use importer::import_seed;
-pub use parser::{parse_seed_file, parse_seed_str};
+pub use parser::{
+    parse_seed_file, parse_seed_file_with_db, parse_seed_str, parse_seed_str_with_db,
+};
