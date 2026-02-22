@@ -1,0 +1,5 @@
+# Migration checksums for validation
+# Each migration's SHA256 checksum ensures integrity
+
+[migrations]
+"001_initial_schema" = ""  # Will be computed on first run

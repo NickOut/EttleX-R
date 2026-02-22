@@ -7,3 +7,7 @@ apps/ettlex-desktop/build
 apps/ettlex-desktop/dist
 coverage
 **/coverage
+
+# Prevent fragmented target directories
+target-doc/
+target-test/

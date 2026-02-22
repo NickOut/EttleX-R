@@ -8,9 +8,9 @@ NC='\033[0m' # No Color
 
 echo "Checking for banned patterns..."
 
-# Check for println!/eprintln! outside tests and examples
+# Check for println!/eprintln! outside tests and examples (excluding doc comments)
 echo "Checking for println!/eprintln! in non-test code..."
-PRINTLN_VIOLATIONS=$(git grep -n 'println!\|eprintln!' -- 'crates/*/src/**/*.rs' ':!crates/*/src/**/*test*.rs' ':!crates/*/examples/**' ':!crates/*/tests/**' || true)
+PRINTLN_VIOLATIONS=$(git grep -n 'println!\|eprintln!' -- 'crates/*/src/**/*.rs' ':!crates/*/src/**/*test*.rs' ':!crates/*/examples/**' ':!crates/*/tests/**' | grep -v '^\([^:]*\):[0-9]*:\s*//' || true)
 
 if [ -n "$PRINTLN_VIOLATIONS" ]; then
     echo -e "${RED}ERROR: Found println!/eprintln! in non-test code:${NC}"

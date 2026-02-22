@@ -18,6 +18,7 @@ pub mod ops;
 pub mod policy;
 pub mod render;
 pub mod rules;
+pub mod snapshot;
 pub mod traversal;
 
 // Re-export commonly used types

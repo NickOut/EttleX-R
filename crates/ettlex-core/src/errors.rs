@@ -446,6 +446,10 @@ pub enum EttleXError {
     DeleteReferencesMissingEpInOwningEttle { ep_id: String, ettle_id: String },
 
     // ===== Generic Errors =====
+    /// Serialization error (JSON encoding/decoding)
+    #[error("Serialization error: {message}")]
+    Serialization { message: String },
+
     /// Generic internal error
     #[error("Internal error: {message}")]
     Internal { message: String },
@@ -717,6 +721,10 @@ impl From<EttleXError> for ExError {
                 .with_message(format!("EP already maps to {}", current_child_id)),
 
             // Internal Errors
+            EttleXError::Serialization { message } => {
+                ExError::new(ExErrorKind::Serialization).with_message(message)
+            }
+
             EttleXError::Internal { message } => {
                 ExError::new(ExErrorKind::Internal).with_message(message)
             }
@@ -724,6 +732,15 @@ impl From<EttleXError> for ExError {
             EttleXError::ApplyAtomicityBreach { message } => ExError::new(ExErrorKind::Internal)
                 .with_op("apply")
                 .with_message(format!("Apply atomicity breach: {}", message)),
+        }
+    }
+}
+
+/// Conversion from serde_json::Error to EttleXError
+impl From<serde_json::Error> for EttleXError {
+    fn from(err: serde_json::Error) -> Self {
+        EttleXError::Serialization {
+            message: err.to_string(),
         }
     }
 }

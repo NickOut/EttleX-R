@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ettlex-core = { path = "../ettlex-core" }
+ettlex-store = { path = "../ettlex-store" }
+clap = { version = "4.0", features = ["derive"] }
+rusqlite = { version = "0.29", features = ["bundled"] }

@@ -1,9 +1,0 @@
-(function() {
-    var implementors = Object.fromEntries([["ettlex_core",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"enum\" href=\"ettlex_core/errors/enum.EttleXError.html\" title=\"enum ettlex_core::errors::EttleXError\">EttleXError</a>",1,["ettlex_core::errors::EttleXError"]],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"ettlex_core/model/ep/struct.Ep.html\" title=\"struct ettlex_core::model::ep::Ep\">Ep</a>",1,["ettlex_core::model::ep::Ep"]],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"ettlex_core/model/ettle/struct.Ettle.html\" title=\"struct ettlex_core::model::ettle::Ettle\">Ettle</a>",1,["ettlex_core::model::ettle::Ettle"]],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"ettlex_core/model/metadata/struct.Metadata.html\" title=\"struct ettlex_core::model::metadata::Metadata\">Metadata</a>",1,["ettlex_core::model::metadata::Metadata"]],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"ettlex_core/ops/store/struct.Store.html\" title=\"struct ettlex_core::ops::store::Store\">Store</a>",1,["ettlex_core::ops::store::Store"]]]]]);
-    if (window.register_implementors) {
-        window.register_implementors(implementors);
-    } else {
-        window.pending_implementors = implementors;
-    }
-})()
-//{"start":57,"fragment_lengths":[1607]}

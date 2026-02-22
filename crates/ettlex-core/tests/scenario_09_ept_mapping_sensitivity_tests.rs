@@ -91,12 +91,18 @@ fn test_scenario_09_ept_uses_only_active_eps() {
     // WHEN computing EPT
     let ept_ids = compute_ept(&store, &child_id, None).expect("Should compute EPT");
 
-    // THEN EPT should include parent EP1 (active) and child EP0
-    assert_eq!(ept_ids.len(), 2);
+    // THEN EPT should include parent EP0, parent EP1 (active), and child EP0
+    assert_eq!(ept_ids.len(), 3);
 
     // Verify EP1 is in EPT (not deleted EP2)
     assert!(ept_ids.contains(&ep1_id));
     assert!(!ept_ids.contains(&ep2_id));
+
+    // Verify child EP0 is included
+    let child = store.get_ettle(&child_id).expect("Child should exist");
+    let child_eps = active_eps(&store, child).expect("Should get child EPs");
+    let child_ep0 = &child_eps[0];
+    assert!(ept_ids.contains(&child_ep0.id));
 }
 
 #[test]

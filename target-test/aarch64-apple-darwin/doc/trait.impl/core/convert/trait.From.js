@@ -1,9 +1,0 @@
-(function() {
-    var implementors = Object.fromEntries([["ettlex_core",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"ettlex_core/model/metadata/struct.Metadata.html\" title=\"struct ettlex_core::model::metadata::Metadata\">Metadata</a>&gt; for <a class=\"struct\" href=\"https://doc.rust-lang.org/1.93.1/std/collections/hash/map/struct.HashMap.html\" title=\"struct std::collections::hash::map::HashMap\">HashMap</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html\" title=\"struct alloc::string::String\">String</a>, <a class=\"enum\" href=\"https://docs.rs/serde_json/1.0.149/serde_json/value/enum.Value.html\" title=\"enum serde_json::value::Value\">Value</a>&gt;"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.93.1/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.93.1/std/collections/hash/map/struct.HashMap.html\" title=\"struct std::collections::hash::map::HashMap\">HashMap</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.93.1/alloc/string/struct.String.html\" title=\"struct alloc::string::String\">String</a>, <a class=\"enum\" href=\"https://docs.rs/serde_json/1.0.149/serde_json/value/enum.Value.html\" title=\"enum serde_json::value::Value\">Value</a>&gt;&gt; for <a class=\"struct\" href=\"ettlex_core/model/metadata/struct.Metadata.html\" title=\"struct ettlex_core::model::metadata::Metadata\">Metadata</a>"]]]]);
-    if (window.register_implementors) {
-        window.register_implementors(implementors);
-    } else {
-        window.pending_implementors = implementors;
-    }
-})()
-//{"start":57,"fragment_lengths":[1559]}

@@ -30,8 +30,8 @@ fn test_ept_walks_rt_and_collects_eps() {
 
     let ept = ept::compute_ept(&store, &leaf_id, None).unwrap();
 
-    // Should have 3 EPs: root EP0, root EP1 (to mid), mid EP1 (to leaf)
-    assert_eq!(ept.len(), 3);
+    // Should have 4 EPs: root EP0, root EP1 (to mid), mid EP1 (to leaf), leaf EP0
+    assert_eq!(ept.len(), 4);
 
     // Verify ordinals
     let ep0 = store.get_ep(&ept[0]).unwrap();
@@ -45,6 +45,10 @@ fn test_ept_walks_rt_and_collects_eps() {
     let ep2 = store.get_ep(&ept[2]).unwrap();
     assert_eq!(ep2.ettle_id, mid_id);
     assert_eq!(ep2.ordinal, 1);
+
+    let ep3 = store.get_ep(&ept[3]).unwrap();
+    assert_eq!(ep3.ettle_id, leaf_id);
+    assert_eq!(ep3.ordinal, 0);
 }
 
 #[test]
@@ -223,8 +227,8 @@ fn test_ept_includes_ep0_from_each_level() {
 
     let ept = ept::compute_ept(&store, &leaf_id, None).unwrap();
 
-    // Verify we have EP0 from root, EP1 from root (to mid), EP0 from mid, EP1 from mid (to leaf)
-    assert_eq!(ept.len(), 3);
+    // Verify we have EP0 from root, EP1 from root (to mid), EP1 from mid (to leaf), EP0 from leaf
+    assert_eq!(ept.len(), 4);
 
     // Root EP0
     let ep0 = store.get_ep(&ept[0]).unwrap();
@@ -237,9 +241,14 @@ fn test_ept_includes_ep0_from_each_level() {
     assert_eq!(ep1.ordinal, 1);
     assert_eq!(ep1.child_ettle_id, Some(mid_id.clone()));
 
-    // Mid EP1 (maps to leaf) - this is the leaf EP
+    // Mid EP1 (maps to leaf)
     let ep2 = store.get_ep(&ept[2]).unwrap();
     assert_eq!(ep2.ettle_id, mid_id);
     assert_eq!(ep2.ordinal, 1);
-    assert_eq!(ep2.child_ettle_id, Some(leaf_id));
+    assert_eq!(ep2.child_ettle_id, Some(leaf_id.clone()));
+
+    // Leaf EP0 (the actual leaf EP)
+    let ep3 = store.get_ep(&ept[3]).unwrap();
+    assert_eq!(ep3.ettle_id, leaf_id);
+    assert_eq!(ep3.ordinal, 0);
 }

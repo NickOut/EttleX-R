@@ -1,0 +1,22 @@
+schema_version: 0
+project:
+  name: ettlex
+
+ettles:
+  - id: ettle:test
+    title: "Test"
+    eps:
+      - id: ep:test:0
+        ordinal: 0
+        normative: true
+        why: "First"
+        what: "First EP"
+        how: "First"
+      - id: ep:test:1
+        ordinal: 0  # Duplicate ordinal!
+        normative: false
+        why: "Second"
+        what: "Second EP"
+        how: "Second"
+
+links: []

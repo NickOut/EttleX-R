@@ -80,7 +80,10 @@ Do not treat TES as a placeholder excuse to skip tests or documentation.
 
 1. All tests run
 2. Build passes without any errors or warnings
-3. Documentation produced (crate-level / rustdocs / product docs)
+3. Documentation produced:
+   - crate-level docs (`ettlex/crates/<crate>/README.md`)
+   - rustdocs (`target/aarch64-apple-darwin/doc/`)
+   - product docs under `ettlex/docs/` for cross-cutting behaviour (preferred for user-facing workflows)
 
 Run the canonical Makefile targets in order (details in policy files):
 

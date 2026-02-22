@@ -119,7 +119,13 @@ pub fn compute_ept(
                 leaf_id: leaf_ettle_id.clone(),
             });
         }
-        // If leaf has exactly 1 EP, it's already in EPT (from step 1 or step 2)
+        // Leaf has exactly 1 EP - add it if not already present
+        if leaf_ep_count == 1 {
+            let leaf_ep = &leaf_active[0];
+            if !ept.contains(&leaf_ep.id) {
+                ept.push(leaf_ep.id.clone());
+            }
+        }
     }
 
     Ok(ept)

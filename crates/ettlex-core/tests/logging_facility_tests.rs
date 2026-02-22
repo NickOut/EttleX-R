@@ -63,7 +63,7 @@ fn test_log_op_error_includes_kind() {
 
     let error_event = error_events[0];
     assert_eq!(
-        error_event.fields.get("err_code"),
+        error_event.fields.get("err.code"),
         Some(&"ERR_NOT_FOUND".to_string())
     );
 }
@@ -111,7 +111,7 @@ fn test_error_event_includes_error_code() {
         .expect("Should have error event");
 
     assert_eq!(
-        error_event.fields.get("err_code"),
+        error_event.fields.get("err.code"),
         Some(&"ERR_CYCLE_DETECTED".to_string())
     );
 }
@@ -204,7 +204,7 @@ fn test_error_conversion_preserves_context() {
 
     // Verify the error code is in the logged event
     assert_eq!(
-        error_event.fields.get("err_code"),
+        error_event.fields.get("err.code"),
         Some(&"ERR_CANNOT_DELETE".to_string())
     );
 }

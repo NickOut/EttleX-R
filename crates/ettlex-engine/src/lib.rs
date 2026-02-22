@@ -1,5 +1,6 @@
-//! Stub crate
+//! EttleX Engine - Orchestration layer
+//!
+//! Provides high-level command orchestration that coordinates between
+//! core domain logic and persistence layer.
 
-pub fn hello() -> &'static str {
-    "hello"
-}
+pub mod commands;

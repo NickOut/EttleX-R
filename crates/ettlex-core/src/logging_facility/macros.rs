@@ -78,8 +78,8 @@ macro_rules! log_op_error {
             op = $op,
             event = ettlex_core_types::schema::EVENT_END_ERROR,
             duration_ms = $duration,
-            err_kind = ?ex_err.kind(),
-            err_code = ex_err.code(),
+            "err.kind" = ?ex_err.kind(),
+            "err.code" = ex_err.code(),
         );
     }};
     ($op:expr, $err:expr, duration_ms = $duration:expr, $($field:tt)*) => {{
@@ -90,8 +90,8 @@ macro_rules! log_op_error {
             op = $op,
             event = ettlex_core_types::schema::EVENT_END_ERROR,
             duration_ms = $duration,
-            err_kind = ?ex_err.kind(),
-            err_code = ex_err.code(),
+            "err.kind" = ?ex_err.kind(),
+            "err.code" = ex_err.code(),
             $($field)*
         );
     }};
