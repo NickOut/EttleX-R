@@ -29,7 +29,7 @@ doc:
 	cargo doc --workspace --no-deps --target aarch64-apple-darwin
 
 test:
-	cargo test --workspace
+	cargo test --workspace -- --test-threads=1
 
 build:
 	cargo build --workspace
