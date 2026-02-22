@@ -99,12 +99,13 @@ fn test_generate_manifest_v0_fields_empty() {
     .unwrap();
 
     // V0 fields should be empty
-    assert!(manifest.effective_constraints.is_empty());
+    assert!(manifest.constraints.declared_refs.is_empty());
+    assert!(manifest.constraints.families.is_empty());
+    assert!(manifest.constraints.applicable_abb.is_empty());
+    assert!(manifest.constraints.resolved_sbb.is_empty());
+    assert!(manifest.constraints.resolution_evidence.is_empty());
+    assert!(!manifest.constraints.constraints_digest.is_empty());
     assert!(manifest.exceptions.is_empty());
-    assert_eq!(
-        manifest.constraint_resolution,
-        serde_json::Value::Object(serde_json::Map::new())
-    );
     assert_eq!(
         manifest.coverage,
         serde_json::Value::Object(serde_json::Map::new())

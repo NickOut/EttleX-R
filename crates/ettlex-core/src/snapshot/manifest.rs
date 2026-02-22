@@ -14,8 +14,13 @@
 //! - `policy_ref`: Policy identifier
 //! - `profile_ref`: Profile identifier
 //! - `ept`: Ordered list of EP entries with ordinals
-//! - `effective_constraints`: Constraint IDs (empty in v0)
-//! - `constraint_resolution`: Constraint resolution details (empty in v0)
+//! - `constraints`: Constraints envelope (family-agnostic, extensible)
+//!   - `declared_refs`: Ordered list of constraint refs
+//!   - `families`: Map of family-specific constraint data (BTreeMap for determinism)
+//!   - `applicable_abb`: Frozen ABB projection (backward compatibility)
+//!   - `resolved_sbb`: Frozen SBB projection (backward compatibility)
+//!   - `resolution_evidence`: Evidence records
+//!   - `constraints_digest`: Digest of constraints envelope
 //! - `coverage`: Coverage metrics (empty in v0)
 //! - `exceptions`: Exception records (empty in v0)
 //! - `root_ettle_id`: Root ettle identifier
@@ -27,6 +32,58 @@
 
 use crate::errors::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+/// Constraints envelope for snapshot manifests.
+///
+/// Provides a family-agnostic, extensible structure for constraint tracking
+/// while preserving frozen ABB→SBB projections for backward compatibility.
+///
+/// ## Determinism Guarantees
+///
+/// - `declared_refs`: Ordered by family, kind, id (lexicographic)
+/// - `families`: BTreeMap ensures deterministic key ordering
+/// - All nested lists maintain deterministic order
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConstraintsEnvelope {
+    /// Ordered list of constraint refs active on the EPT
+    pub declared_refs: Vec<String>,
+
+    /// Map of family_name → family-specific data
+    /// BTreeMap ensures deterministic serialization order
+    pub families: BTreeMap<String, FamilyConstraints>,
+
+    /// Frozen ABB constraint projection (for backward compatibility)
+    pub applicable_abb: Vec<String>,
+
+    /// Frozen SBB constraint projection (for backward compatibility)
+    pub resolved_sbb: Vec<String>,
+
+    /// Resolution evidence records (predicate matches, selected ids, etc.)
+    pub resolution_evidence: Vec<serde_json::Value>,
+
+    /// Digest of canonicalized constraints envelope (excluding manifest-level created_at)
+    pub constraints_digest: String,
+}
+
+/// Family-specific constraint data.
+///
+/// Allows different constraint families (ABB→SBB, observability, etc.)
+/// to coexist without schema lock-in.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FamilyConstraints {
+    /// Active constraint refs for this family
+    pub active_refs: Vec<String>,
+
+    /// Outcomes from constraint evaluation
+    pub outcomes: Vec<serde_json::Value>,
+
+    /// Evidence supporting the outcomes
+    pub evidence: Vec<serde_json::Value>,
+
+    /// Digest of this family's data
+    pub digest: String,
+}
 
 /// Snapshot manifest schema.
 ///
@@ -49,11 +106,8 @@ pub struct SnapshotManifest {
     /// Ordered list of EP entries with computed digests
     pub ept: Vec<EpEntry>,
 
-    /// Effective constraint IDs (empty in v0)
-    pub effective_constraints: Vec<String>,
-
-    /// Constraint resolution details (empty in v0)
-    pub constraint_resolution: serde_json::Value,
+    /// Constraints envelope (family-agnostic, extensible)
+    pub constraints: ConstraintsEnvelope,
 
     /// Coverage metrics (empty in v0)
     pub coverage: serde_json::Value,
@@ -163,6 +217,9 @@ pub fn generate_manifest(
     // Generate timestamp
     let created_at = chrono::Utc::now().to_rfc3339();
 
+    // Create empty constraints envelope (all fields present but empty in v0)
+    let constraints = create_empty_constraints_envelope()?;
+
     // Create manifest (without full digest initially)
     let mut manifest = SnapshotManifest {
         manifest_schema_version: 1,
@@ -170,10 +227,9 @@ pub fn generate_manifest(
         policy_ref,
         profile_ref,
         ept: ep_entries,
-        effective_constraints: Vec::new(), // Empty in v0
-        constraint_resolution: serde_json::Value::Object(serde_json::Map::new()), // Empty in v0
+        constraints,
         coverage: serde_json::Value::Object(serde_json::Map::new()), // Empty in v0
-        exceptions: Vec::new(),            // Empty in v0
+        exceptions: Vec::new(),                                      // Empty in v0
         root_ettle_id,
         ept_digest,
         manifest_digest: String::new(),          // Computed below
@@ -187,6 +243,39 @@ pub fn generate_manifest(
     manifest.manifest_digest = compute_manifest_digest(&manifest)?;
 
     Ok(manifest)
+}
+
+/// Create empty constraints envelope with computed digest.
+///
+/// Returns a constraints envelope with all fields empty but present,
+/// ensuring the structure is always available even when no constraints exist.
+///
+/// ## Errors
+///
+/// Returns `EttleXError::Serialization` if digest computation fails.
+fn create_empty_constraints_envelope() -> Result<ConstraintsEnvelope> {
+    use sha2::{Digest, Sha256};
+
+    // Create empty envelope
+    let envelope = ConstraintsEnvelope {
+        declared_refs: Vec::new(),
+        families: BTreeMap::new(),
+        applicable_abb: Vec::new(),
+        resolved_sbb: Vec::new(),
+        resolution_evidence: Vec::new(),
+        constraints_digest: String::new(), // Computed below
+    };
+
+    // Compute digest over canonical JSON (excluding the digest field itself)
+    let canonical = serde_json::to_string(&envelope)?;
+    let mut hasher = Sha256::new();
+    hasher.update(canonical.as_bytes());
+    let digest = hex::encode(hasher.finalize());
+
+    Ok(ConstraintsEnvelope {
+        constraints_digest: digest,
+        ..envelope
+    })
 }
 
 /// Compute EP content digest.
