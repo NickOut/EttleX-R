@@ -290,9 +290,16 @@ ettlex-core/
 ├── snapshot/          # Manifest generation
 │   ├── manifest.rs    # Snapshot manifest with constraints envelope
 │   └── digest.rs      # Deterministic digest computation
-└── render/            # Export
-    ├── ettle_render.rs    # render_ettle() (uses active_eps)
-    └── bundle_render.rs   # render_leaf_bundle()
+├── render/            # Export
+│   ├── ettle_render.rs    # render_ettle() (uses active_eps)
+│   └── bundle_render.rs   # render_leaf_bundle()
+├── logging_facility/  # Structured logging
+│   ├── macros.rs      # log_op_start!, log_op_end!, log_op_error!
+│   ├── test_capture.rs # Test utilities for logging verification
+│   └── mod.rs         # Facility initialization and configuration
+├── coverage/          # Test coverage analysis (stub)
+├── diff/              # Snapshot diff engine (stub)
+└── tes/               # Test Evidence Schema generation (stub)
 ```
 
 ## Testing
