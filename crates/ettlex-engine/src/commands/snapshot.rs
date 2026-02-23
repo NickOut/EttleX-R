@@ -162,6 +162,7 @@ fn snapshot_commit_impl(
         root_ettle_id.to_string(),
         store_schema_version,
         seed_digest,
+        &store,
     )?;
 
     // 6. Persist to CAS + ledger
@@ -227,4 +228,192 @@ fn get_seed_digest(conn: &Connection) -> Result<Option<String>> {
         })?;
 
     Ok(digest)
+}
+
+/// Validate that an EP is a leaf (has no child_ettle_id).
+///
+/// ## Errors
+///
+/// - `ExErrorKind::NotFound`: EP not found
+/// - `ExErrorKind::ConstraintViolation`: EP is not a leaf (has child_ettle_id)
+fn validate_leaf_ep(store: &ettlex_core::ops::store::Store, ep_id: &str) -> Result<()> {
+    use ettlex_core::errors::EttleXError;
+
+    // Get EP (returns NotFound if missing or deleted)
+    let ep = store.get_ep(ep_id).map_err(|e| match e {
+        EttleXError::EpNotFound { .. } => ExError::new(ExErrorKind::NotFound)
+            .with_op("validate_leaf_ep")
+            .with_ep_id(ep_id)
+            .with_message("EP not found"),
+        EttleXError::EpDeleted { .. } => ExError::new(ExErrorKind::NotFound)
+            .with_op("validate_leaf_ep")
+            .with_ep_id(ep_id)
+            .with_message("EP was deleted"),
+        _ => ExError::from(e),
+    })?;
+
+    // Check if EP is a leaf
+    if !ep.is_leaf() {
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_op("validate_leaf_ep")
+            .with_ep_id(ep_id)
+            .with_message("EP is not a leaf (has child_ettle_id)"));
+    }
+
+    Ok(())
+}
+
+/// Commit a snapshot for a leaf EP (CANONICAL entry point).
+///
+/// This is the canonical way to commit a snapshot via action commands.
+/// Use `apply_engine_command()` instead of calling this directly.
+///
+/// ## Arguments
+///
+/// - `leaf_ep_id`: Leaf EP identifier (must have no child_ettle_id)
+/// - `policy_ref`: Policy identifier (e.g., "policy/default@0")
+/// - `profile_ref`: Profile identifier (e.g., "profile/default@0")
+/// - `options`: Commit options (expected_head, dry_run)
+/// - `conn`: Database connection
+/// - `cas`: CAS store instance
+///
+/// ## Returns
+///
+/// `SnapshotCommitResult` with snapshot ID and digests
+///
+/// ## Errors
+///
+/// - `ExErrorKind::NotFound`: EP not found or deleted
+/// - `ExErrorKind::ConstraintViolation`: EP is not a leaf
+/// - Other errors from snapshot_commit_impl
+pub fn snapshot_commit_by_leaf(
+    leaf_ep_id: &str,
+    policy_ref: &str,
+    profile_ref: &str,
+    options: SnapshotOptions,
+    conn: &mut Connection,
+    cas: &FsStore,
+) -> Result<SnapshotCommitResult> {
+    // 1. Hydrate tree to validate leaf EP
+    let store = ettlex_store::repo::hydration::load_tree(conn).map_err(|e| {
+        ExError::new(ExErrorKind::Persistence)
+            .with_op("snapshot_commit_by_leaf")
+            .with_message(format!("Failed to load tree: {}", e))
+    })?;
+
+    // 2. Validate that EP is a leaf
+    validate_leaf_ep(&store, leaf_ep_id)?;
+
+    // 3. Get the root ettle for this EP
+    let ep = store.get_ep(leaf_ep_id).map_err(ExError::from)?;
+    let root_ettle_id = &ep.ettle_id;
+
+    // 4. Delegate to existing snapshot_commit implementation
+    snapshot_commit(root_ettle_id, policy_ref, profile_ref, options, conn, cas)
+}
+
+/// Resolve root Ettle to exactly one leaf EP (legacy support).
+///
+/// This function walks the tree rooted at the given Ettle and finds all leaf EPs.
+/// For deterministic resolution, exactly one leaf must exist.
+///
+/// ## Errors
+///
+/// - `ExErrorKind::NotFound`: Ettle not found or no leaf EPs exist
+/// - `ExErrorKind::AmbiguousSelection`: Multiple leaf EPs exist (includes candidate IDs)
+fn resolve_root_to_leaf(
+    store: &ettlex_core::ops::store::Store,
+    root_ettle_id: &str,
+) -> Result<String> {
+    use ettlex_core::errors::EttleXError;
+
+    // Get root ettle (returns NotFound if missing or deleted)
+    let ettle = store.get_ettle(root_ettle_id).map_err(|e| match e {
+        EttleXError::EttleNotFound { .. } => ExError::new(ExErrorKind::NotFound)
+            .with_op("resolve_root_to_leaf")
+            .with_entity_id(root_ettle_id)
+            .with_message("Root ettle not found"),
+        EttleXError::EttleDeleted { .. } => ExError::new(ExErrorKind::NotFound)
+            .with_op("resolve_root_to_leaf")
+            .with_entity_id(root_ettle_id)
+            .with_message("Root ettle was deleted"),
+        _ => ExError::from(e),
+    })?;
+
+    // Find all leaf EPs in this ettle
+    let leaf_eps: Vec<String> = ettle
+        .ep_ids
+        .iter()
+        .filter_map(|ep_id| {
+            store
+                .get_ep(ep_id)
+                .ok()
+                .filter(|ep| ep.is_leaf())
+                .map(|ep| ep.id.clone())
+        })
+        .collect();
+
+    match leaf_eps.len() {
+        0 => Err(ExError::new(ExErrorKind::NotFound)
+            .with_op("resolve_root_to_leaf")
+            .with_entity_id(root_ettle_id)
+            .with_message("No leaf EPs found in root ettle")),
+        1 => Ok(leaf_eps[0].clone()),
+        _ => Err(ExError::new(ExErrorKind::AmbiguousSelection)
+            .with_op("resolve_root_to_leaf")
+            .with_entity_id(root_ettle_id)
+            .with_message(format!("Multiple leaf EPs found: {:?}", leaf_eps))),
+    }
+}
+
+/// Legacy entry point: resolve root to leaf, then commit.
+///
+/// This function provides backward compatibility for the old API that took
+/// a root_ettle_id parameter. It resolves the root to exactly one leaf EP,
+/// then delegates to `snapshot_commit_by_leaf()`.
+///
+/// ## Deterministic Resolution
+///
+/// - Succeeds if exactly one leaf EP exists in the root ettle
+/// - Fails with `AmbiguousSelection` if multiple leaves exist
+/// - Fails with `NotFound` if no leaves exist
+///
+/// ## Arguments
+///
+/// - `root_ettle_id`: Root ettle identifier
+/// - `policy_ref`: Policy identifier (e.g., "policy/default@0")
+/// - `profile_ref`: Profile identifier (e.g., "profile/default@0")
+/// - `options`: Commit options (expected_head, dry_run)
+/// - `conn`: Database connection
+/// - `cas`: CAS store instance
+///
+/// ## Returns
+///
+/// `SnapshotCommitResult` with snapshot ID and digests
+///
+/// ## Errors
+///
+/// - `ExErrorKind::NotFound`: Root ettle not found or no leaf EPs exist
+/// - `ExErrorKind::AmbiguousSelection`: Multiple leaf EPs exist
+/// - Other errors from snapshot_commit_by_leaf
+pub fn snapshot_commit_by_root_legacy(
+    root_ettle_id: &str,
+    policy_ref: &str,
+    profile_ref: &str,
+    options: SnapshotOptions,
+    conn: &mut Connection,
+    cas: &FsStore,
+) -> Result<SnapshotCommitResult> {
+    // 1. Hydrate tree to resolve leaf EP
+    let store = ettlex_store::repo::hydration::load_tree(conn).map_err(|e| {
+        ExError::new(ExErrorKind::Persistence)
+            .with_op("snapshot_commit_by_root_legacy")
+            .with_message(format!("Failed to load tree: {}", e))
+    })?;
+
+    // 2. Resolve root to exactly one leaf
+    let leaf_ep_id = resolve_root_to_leaf(&store, root_ettle_id)?;
+
+    // 3. Delegate to leaf-scoped commit
+    snapshot_commit_by_leaf(&leaf_ep_id, policy_ref, profile_ref, options, conn, cas)
 }

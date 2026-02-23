@@ -1,0 +1,84 @@
+schema_version: 0
+project:
+  name: ettlex
+
+ettles:
+  - id: ettle:store
+    title: Storage Spine (SQLite + CAS + Seed Import)
+    eps:
+      - id: ep:store:0
+        ordinal: 0
+        normative: true
+        why: |
+          Snapshot commit is only meaningful if canonical state is durable and content-addressed.
+          The storage spine is therefore the immediate prerequisite for snapshot commit and later
+          diff/GC work.
+        what: |
+          Structural anchor for the already-implemented Phase 1 Store Spine milestone.
+          Represents the existence of:
+            - SQLite schema + migrations discipline (including facet_snapshots/provenance_events stubs)
+            - Filesystem CAS with atomic writes
+            - cas_blobs index population (non-load-bearing)
+            - Seed Format v0 importer
+          
+          The normative implementation detail for this milestone is defined in the bootstrap
+          markdown Ettle "Phase 1 Store Spine (SQLite + CAS + Seed Import)".
+        how: |
+          No new implementation scenarios here. The milestone is already delivered.
+          This EP exists to:
+            - provide a stable parent refinement node for snapshot commit,
+            - preserve the dependency relationship in the refinement tree,
+            - and ensure rendered views show correct prerequisites.
+
+      - id: ep:store:1
+        ordinal: 1
+        normative: true
+        why: |
+          The constraint schema stubs milestone introduces canonical persistence for constraints
+          as first-class entities. This requires a stable refinement anchor in the storage spine
+          so the dependency relationship is explicit in the tree and rendered views show correct
+          prerequisites for snapshot diff and later evaluation work.
+        what: |
+          Structural anchor for semantic canonical storage extensions under the storage spine.
+          Represents the existence of:
+            - constraints and ep_constraint_refs tables (additive migrations)
+            - family-agnostic manifest constraint envelope
+            - cas_blobs and provenance event wiring for constraint objects
+          
+          The normative implementation detail is defined in the constraint schema stubs seed
+          (seed_constraint_schema_stubs_v3_REWRITE.yaml).
+        how: |
+          No new implementation scenarios here. This EP exists to:
+            - provide a stable parent refinement node for ettle:constraint_schema_stubs,
+            - preserve the dependency relationship in the refinement tree,
+            - and ensure rendered views show constraint stubs as a prerequisite sibling
+              to snapshot commit before snapshot diff is implemented.
+
+      - id: ep:store:2
+        ordinal: 2
+        normative: true
+        why: |
+          Governance artefacts — decisions, rationale, evidence — are first-class canonical
+          entities that require durable storage alongside semantic artefacts. Without a stable
+          refinement anchor, decision schema stubs and later governance work (policy gates,
+          evidence workflows, audit trails) have no coherent position in the tree.
+        what: |
+          Structural anchor for governance artefact storage under the storage spine. Represents
+          the existence of:
+            - decisions, decision_evidence_items, and decision_links tables (additive migrations)
+            - portable evidence capture and deterministic query surfaces
+            - action:commands and action:queries for decision lifecycle management
+          
+          The normative implementation detail is defined in the decision schema stubs seed
+          (seed_decision_schema_stubs_v2.yaml).
+        how: |
+          No new implementation scenarios here. This EP exists to:
+            - provide a stable parent refinement node for ettle:decision_schema_stubs,
+            - separate governance artefact storage from semantic canonical storage (ep:store:1),
+            - and ensure rendered views correctly reflect the two-track storage architecture
+              (semantic vs governance) under the store spine.
+
+links:
+  - parent: ettle:root
+    parent_ep: ep:root:1
+    child: ettle:store

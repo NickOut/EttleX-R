@@ -20,6 +20,8 @@ enum Commands {
     Seed(commands::seed::SeedArgs),
     /// Render operations (ettle or bundle to Markdown)
     Render(commands::render::RenderArgs),
+    /// Snapshot operations
+    Snapshot(commands::snapshot::SnapshotArgs),
 }
 
 fn main() {
@@ -28,6 +30,7 @@ fn main() {
     let result = match cli.command {
         Commands::Seed(args) => commands::seed::execute(args),
         Commands::Render(args) => commands::render::execute(args),
+        Commands::Snapshot(args) => commands::snapshot::execute(args),
     };
 
     if let Err(e) = result {

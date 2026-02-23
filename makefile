@@ -1,9 +1,7 @@
 .PHONY: help check-banned lint fmt test build clean coverage-check coverage-html
 
 # Minimum coverage threshold (%)
-# Set to 79% to reflect current baseline after snapshot commit implementation
-# (161 tests, 79.03% coverage - high quality TDD coverage)
-COVERAGE_MIN ?= 79
+COVERAGE_MIN ?= 80
 
 help:
 	@echo "Available targets:"

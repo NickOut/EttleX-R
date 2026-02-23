@@ -19,5 +19,9 @@ pub fn get_migrations() -> Vec<Migration> {
             id: "002_snapshot_ledger",
             sql: include_str!("../../migrations/002_snapshot_ledger.sql"),
         },
+        Migration {
+            id: "003_constraints_schema",
+            sql: include_str!("../../migrations/003_constraints_schema.sql"),
+        },
     ]
 }

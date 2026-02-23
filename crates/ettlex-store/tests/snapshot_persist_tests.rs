@@ -1,6 +1,7 @@
 // Test suite for snapshot persistence
 // Tests CAS storage, ledger entries, atomic commits, and idempotency
 
+use ettlex_core::ops::Store;
 use ettlex_core::snapshot::manifest::generate_manifest;
 use ettlex_store::cas::FsStore;
 use ettlex_store::snapshot::persist::{commit_snapshot, persist_manifest_to_cas, SnapshotOptions};
@@ -31,6 +32,7 @@ fn create_test_manifest() -> ettlex_core::snapshot::manifest::SnapshotManifest {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap()
 }
@@ -182,6 +184,7 @@ fn test_commit_snapshot_expected_head_success() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 

@@ -1,11 +1,14 @@
-//! Command types representing all Phase 0.5 operations
+//! Command types representing all EttleX operations
 //!
 //! This module defines a command inventory that serves as the entry point for
 //! functional-boundary operations via the `apply()` function.
+//!
+//! Includes commands for Ettles, EPs, refinement relationships, and constraints.
 
 use crate::model::Metadata;
+use serde_json::Value as JsonValue;
 
-/// Command enum representing all Phase 0.5 operations
+/// Command enum representing all EttleX operations (Phase 1)
 ///
 /// Commands are processed by the `apply()` function, which takes ownership of
 /// the current state, executes the command, and returns a new valid state.
@@ -60,6 +63,37 @@ pub enum Command {
 
     /// Unlink a child Ettle from a parent EP
     RefineUnlinkChild { parent_ep_id: String },
+
+    /// Create a new constraint
+    ConstraintCreate {
+        constraint_id: String,
+        family: String,
+        kind: String,
+        scope: String,
+        payload_json: JsonValue,
+    },
+
+    /// Update a constraint's payload
+    ConstraintUpdate {
+        constraint_id: String,
+        payload_json: JsonValue,
+    },
+
+    /// Tombstone a constraint (soft delete)
+    ConstraintTombstone { constraint_id: String },
+
+    /// Attach a constraint to an EP
+    ConstraintAttachToEp {
+        ep_id: String,
+        constraint_id: String,
+        ordinal: i32,
+    },
+
+    /// Detach a constraint from an EP
+    ConstraintDetachFromEp {
+        ep_id: String,
+        constraint_id: String,
+    },
 }
 
 #[cfg(test)]

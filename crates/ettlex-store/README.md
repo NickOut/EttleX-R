@@ -131,6 +131,8 @@ SQL migration framework with automatic version tracking and application.
 **Migrations**:
 
 - `001_initial_schema.sql` - Ettles, EPs, provenance_events, facet_snapshots stub
+- `002_snapshots_ledger.sql` - Snapshots ledger for committed manifests
+- `003_constraints_schema.sql` - Constraints and EP-constraint attachment tables
 
 **Public API**:
 
@@ -151,14 +153,20 @@ Bridges between domain models (`ettlex_core::model`) and SQLite persistence.
 
 - `SqliteRepo::persist_ettle()` - Insert/update Ettle
 - `SqliteRepo::persist_ep()` - Insert/update EP
+- `SqliteRepo::persist_constraint()` - Insert/update Constraint
+- `SqliteRepo::persist_ep_constraint_ref()` - Insert EP-constraint attachment
 - `SqliteRepo::get_ettle()` - Load Ettle by ID
 - `SqliteRepo::get_ep()` - Load EP by ID
-- `hydration::load_tree()` - Hydrate full tree into Store
+- `SqliteRepo::get_constraint()` - Load Constraint by ID
+- `SqliteRepo::list_constraints()` - Load all Constraints
+- `SqliteRepo::list_ep_constraint_refs()` - Load attachments for EP
+- `hydration::load_tree()` - Hydrate full tree into Store (includes constraints)
 
 **Transaction support**:
 
 - `persist_ettle_tx(tx, ettle)` - Within transaction
 - `persist_ep_tx(tx, ep)` - Within transaction
+- `persist_constraint_tx(tx, constraint)` - Within transaction
 
 ### `seed` - Seed Import
 
@@ -253,6 +261,63 @@ CREATE TABLE eps (
     FOREIGN KEY (child_ettle_id) REFERENCES ettles(id)
 );
 ```
+
+### `constraints` Table
+
+Stores constraint entities with family-agnostic design (Migration 003).
+
+```sql
+CREATE TABLE constraints (
+    constraint_id TEXT PRIMARY KEY NOT NULL,
+    family TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    payload_digest TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+) STRICT;
+```
+
+**Fields**:
+
+- `family` - Constraint family (e.g., "ABB", "observability", "custom-org")
+- `kind` - Constraint kind (e.g., "Rule", "Metric", "Policy")
+- `scope` - Constraint scope (e.g., "EP", "Ettle", "Global")
+- `payload_json` - JSON payload with constraint data
+- `payload_digest` - SHA-256 digest of payload (for content-addressable deduplication)
+
+**Design**:
+
+- No closed enums - arbitrary family/kind/scope strings for open extension
+- Tombstone pattern with `deleted_at` for historical preservation
+- Content-addressable via `payload_digest`
+
+### `ep_constraint_refs` Table
+
+Many-to-many relationship between EPs and constraints (Migration 003).
+
+```sql
+CREATE TABLE ep_constraint_refs (
+    ep_id TEXT NOT NULL,
+    constraint_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (ep_id, constraint_id),
+    FOREIGN KEY (ep_id) REFERENCES eps(id) ON DELETE CASCADE,
+    FOREIGN KEY (constraint_id) REFERENCES constraints(constraint_id) ON DELETE CASCADE
+) STRICT;
+```
+
+**Fields**:
+
+- `ordinal` - Deterministic ordering within EP (for manifest serialization)
+
+**Invariants**:
+
+- Composite primary key prevents duplicate attachments
+- Cascade deletes maintain referential integrity
 
 ### `provenance_events` Table
 
@@ -379,8 +444,8 @@ Key dependencies:
 
 Planned enhancements:
 
-- [ ] Migration 002: Snapshot ledger schema
-- [ ] Constraint persistence tables
+- [x] Migration 002: Snapshot ledger schema (completed)
+- [x] Migration 003: Constraint persistence tables (completed)
 - [ ] Event sourcing for all CRUD operations
 - [ ] Read-optimized views (materialized EPT)
 - [ ] Multi-repository support

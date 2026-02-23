@@ -20,6 +20,67 @@ The binary will be at `target/release/ettlex-cli`.
 
 ## Commands
 
+### `snapshot` - Snapshot Operations
+
+Commit snapshots of the current tree state.
+
+#### `snapshot commit` - Commit a Snapshot
+
+Commit a snapshot for a leaf EP or root Ettle.
+
+**Leaf-scoped (canonical)**:
+
+```bash
+ettlex snapshot commit --leaf <LEAF_EP_ID>
+```
+
+**Arguments**:
+
+- `--leaf <EP_ID>` - Leaf EP identifier (mutually exclusive with `--root`)
+- `--policy <REF>` - Policy reference (default: `policy/default@0`)
+- `--profile <REF>` - Profile reference (default: `profile/default@0`)
+- `--dry-run` - Compute manifest but don't persist
+- `--db <PATH>` - Database path (default: `.ettlex/store.db`)
+- `--cas <PATH>` - CAS directory (default: `.ettlex/cas`)
+
+**Example**:
+
+```bash
+ettlex snapshot commit --leaf ep:my-leaf:0
+```
+
+**Output**:
+
+```
+Snapshot committed:
+  snapshot_id: 01963c74-8b2c-7a3f-9d4e-12345678abcd
+  manifest_digest: ce110808dd873059470af8e81d94b3ba9ac0e5f5d6acaafc83b2db26b4d1fe2d
+  semantic_manifest_digest: a1b2c3d4e5f6...
+```
+
+**Root-scoped (legacy)**:
+
+```bash
+ettlex snapshot commit --root <ROOT_ETTLE_ID>
+```
+
+**Arguments**:
+
+- `--root <ETTLE_ID>` - Root Ettle identifier (mutually exclusive with `--leaf`)
+- Same options as leaf-scoped
+
+**Resolution rules**:
+
+- Succeeds if exactly one leaf EP exists in the root Ettle
+- Fails with error if multiple leaves exist (ambiguous)
+- Fails with error if no leaves exist
+
+**Example**:
+
+```bash
+ettlex snapshot commit --root ettle:root
+```
+
 ### `seed` - Seed Operations
 
 Import seed YAML files into the repository.
@@ -164,6 +225,7 @@ ettlex-cli/
     ├── commands/
     │   ├── mod.rs       # Command module registry
     │   ├── seed.rs      # Seed import commands
+    │   ├── snapshot.rs  # Snapshot commit commands
     │   └── render.rs    # Render commands
     └── main.rs          # CLI argument parsing and dispatch
 ```
@@ -216,7 +278,6 @@ Key dependencies:
 
 Planned commands:
 
-- `ettlex snapshot commit` - Create snapshot commit
 - `ettlex snapshot list` - List committed snapshots
 - `ettlex snapshot diff` - Diff two snapshots
 - `ettlex validate` - Run tree validation

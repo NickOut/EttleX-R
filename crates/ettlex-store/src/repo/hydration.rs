@@ -5,6 +5,7 @@
 #![allow(clippy::result_large_err)]
 
 use crate::errors::{from_rusqlite, Result};
+use crate::repo::SqliteRepo;
 use ettlex_core::model::{Ep, Ettle};
 use ettlex_core::ops::store::Store;
 use rusqlite::Connection;
@@ -195,7 +196,7 @@ pub fn load_all_eps(conn: &Connection, store: &mut Store) -> Result<()> {
 
 /// Load the complete tree from the database
 ///
-/// Loads all Ettles and EPs with their relationships in deterministic order
+/// Loads all Ettles, EPs, Constraints, and their relationships in deterministic order
 pub fn load_tree(conn: &Connection) -> Result<Store> {
     let mut store = Store::new();
 
@@ -204,6 +205,18 @@ pub fn load_tree(conn: &Connection) -> Result<Store> {
 
     // Load all EPs (deterministic order: sorted by ettle_id, ordinal)
     load_all_eps(conn, &mut store)?;
+
+    // Load all Constraints (deterministic order: sorted by constraint_id)
+    let constraints = SqliteRepo::list_constraints(conn)?;
+    for constraint in constraints {
+        store.insert_constraint(constraint);
+    }
+
+    // Load all EP-Constraint attachment records (deterministic order: sorted by ep_id, ordinal)
+    let ep_constraint_refs = SqliteRepo::list_all_ep_constraint_refs(conn)?;
+    for ref_record in ep_constraint_refs {
+        store.insert_ep_constraint_ref(ref_record);
+    }
 
     // Reconstruct ep_ids lists for each Ettle
     // Group EPs by ettle_id using BTreeMap for deterministic iteration

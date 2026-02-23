@@ -1,6 +1,7 @@
 // Test suite for snapshot digest computation
 // Tests determinism, semantic digest properties, and digest algorithms
 
+use ettlex_core::ops::Store;
 use ettlex_core::snapshot::digest::{
     compute_ept_digest, compute_manifest_digest, compute_semantic_digest,
 };
@@ -41,6 +42,7 @@ fn test_semantic_digest_excludes_created_at() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -53,6 +55,7 @@ fn test_semantic_digest_excludes_created_at() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -81,6 +84,7 @@ fn test_manifest_digest_includes_created_at() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -93,6 +97,7 @@ fn test_manifest_digest_includes_created_at() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 

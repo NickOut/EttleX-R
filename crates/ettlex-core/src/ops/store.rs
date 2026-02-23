@@ -1,19 +1,23 @@
 use std::collections::HashMap;
 
 use crate::errors::{EttleXError, Result};
-use crate::model::{Ep, Ettle};
+use crate::model::{Constraint, Ep, EpConstraintRef, Ettle};
 
-/// In-memory store for Ettles and EPs
+/// In-memory store for Ettles, EPs, and Constraints
 ///
-/// This is a simple HashMap-based storage implementation for Phase 0.5.
+/// This is a simple HashMap-based storage implementation for Phase 1.
 /// Not thread-safe (no Arc/RwLock) - designed for single-threaded use.
-/// All storage access is encapsulated here for easy refactoring in Phase 1.
+/// All storage access is encapsulated here for easy refactoring in future phases.
 #[derive(Debug, Clone, Default)]
 pub struct Store {
     /// Map of Ettle ID to Ettle
     pub(crate) ettles: HashMap<String, Ettle>,
     /// Map of EP ID to EP
     pub(crate) eps: HashMap<String, Ep>,
+    /// Map of Constraint ID to Constraint
+    pub(crate) constraints: HashMap<String, Constraint>,
+    /// Map of (EP ID, Constraint ID) to EP-Constraint attachment record
+    pub(crate) ep_constraint_refs: HashMap<(String, String), EpConstraintRef>,
 }
 
 impl Store {
@@ -22,6 +26,8 @@ impl Store {
         Self {
             ettles: HashMap::new(),
             eps: HashMap::new(),
+            constraints: HashMap::new(),
+            ep_constraint_refs: HashMap::new(),
         }
     }
 
@@ -169,6 +175,102 @@ impl Store {
     /// Returns None if EP doesn't exist, Some(EP) if it exists (even if deleted).
     pub fn get_ep_raw(&self, id: &str) -> Option<&Ep> {
         self.eps.get(id)
+    }
+
+    /// Get a Constraint by ID
+    ///
+    /// Returns the Constraint if found and not deleted, otherwise returns an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConstraintNotFound` if the constraint doesn't exist,
+    /// or `ConstraintDeleted` if it was tombstoned.
+    pub fn get_constraint(&self, id: &str) -> Result<&Constraint> {
+        let constraint =
+            self.constraints
+                .get(id)
+                .ok_or_else(|| EttleXError::ConstraintNotFound {
+                    constraint_id: id.to_string(),
+                })?;
+
+        if constraint.is_deleted() {
+            return Err(EttleXError::ConstraintDeleted {
+                constraint_id: id.to_string(),
+            });
+        }
+
+        Ok(constraint)
+    }
+
+    /// Get a mutable reference to a Constraint by ID
+    ///
+    /// Returns the Constraint if found and not deleted, otherwise returns an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConstraintNotFound` if the constraint doesn't exist,
+    /// or `ConstraintDeleted` if it was tombstoned.
+    pub fn get_constraint_mut(&mut self, id: &str) -> Result<&mut Constraint> {
+        let constraint =
+            self.constraints
+                .get_mut(id)
+                .ok_or_else(|| EttleXError::ConstraintNotFound {
+                    constraint_id: id.to_string(),
+                })?;
+
+        if constraint.is_deleted() {
+            return Err(EttleXError::ConstraintDeleted {
+                constraint_id: id.to_string(),
+            });
+        }
+
+        Ok(constraint)
+    }
+
+    /// Insert a Constraint into the store
+    ///
+    /// This is an internal method used by CRUD operations.
+    pub fn insert_constraint(&mut self, constraint: Constraint) {
+        self.constraints
+            .insert(constraint.constraint_id.clone(), constraint);
+    }
+
+    /// Insert an EP-Constraint attachment record
+    ///
+    /// This is an internal method used by constraint attachment operations.
+    pub fn insert_ep_constraint_ref(&mut self, ref_record: EpConstraintRef) {
+        let key = (ref_record.ep_id.clone(), ref_record.constraint_id.clone());
+        self.ep_constraint_refs.insert(key, ref_record);
+    }
+
+    /// Remove an EP-Constraint attachment record
+    ///
+    /// This is an internal method used by constraint detachment operations.
+    pub fn remove_ep_constraint_ref(&mut self, ep_id: &str, constraint_id: &str) {
+        let key = (ep_id.to_string(), constraint_id.to_string());
+        self.ep_constraint_refs.remove(&key);
+    }
+
+    /// Check if a constraint is attached to an EP
+    pub fn is_constraint_attached_to_ep(&self, ep_id: &str, constraint_id: &str) -> bool {
+        let key = (ep_id.to_string(), constraint_id.to_string());
+        self.ep_constraint_refs.contains_key(&key)
+    }
+
+    /// List all EP-Constraint attachment records for a given EP
+    pub fn list_ep_constraint_refs(&self, ep_id: &str) -> Vec<&EpConstraintRef> {
+        self.ep_constraint_refs
+            .values()
+            .filter(|r| r.ep_id == ep_id)
+            .collect()
+    }
+
+    /// List all non-deleted Constraints
+    pub fn list_constraints(&self) -> Vec<&Constraint> {
+        self.constraints
+            .values()
+            .filter(|c| !c.is_deleted())
+            .collect()
     }
 }
 

@@ -1,0 +1,369 @@
+schema_version: 0
+project:
+  name: ettlex
+ettles:
+- id: ettle:constraint_schema_stubs
+  title: Constraint Schema Stubs (CORE spine extensibility contract; decision-compatible rewrite)
+  eps:
+  - id: ep:constraint_schema_stubs:0
+    ordinal: 0
+    normative: true
+    why: |-
+      Snapshot diff and later evaluation work depend on being able to persist, reference, and transport
+      constraints without prematurely locking the system into a single constraint family (e.g., ABB/SBB).
+
+      CORE requires that the snapshot manifest contains effective ABB constraints and resolved SBB selections,
+      but MEDIUM generalises constraints into multiple families.
+
+      This seed introduces the minimal canonical persistence and manifest-envelope stubs needed so that later work
+      (diff, evaluation, resolution, bytecode, policy) can evolve without schema churn or ABI breakage.
+
+      This rewrite explicitly clarifies separation of concerns with the Decision Schema Stubs seed:
+        - Constraints are semantic closure artefacts and participate in snapshot manifests.
+        - Decisions are governance artefacts and are non-snapshot-semantic in their initial slice.
+        - No cross-contamination of semantics is permitted at this tier.
+
+      This seed remains intentionally non-load-bearing semantically: it introduces schema and envelope structure only.
+
+    what: |-
+      Implement the minimal canonical persistence and manifest-schema extensions required before snapshot diff,
+      while remaining compatible with decision capture and future constraint evaluation.
+
+      Success criteria (binding):
+
+        1) Constraint entities exist in canonical state with EP-level attachment.
+        2) Closure (EPT) enumeration can deterministically derive declared constraints.
+        3) Snapshot manifest includes a family-agnostic constraints envelope.
+        4) Canonical state, snapshot commit, and diff remain family-agnostic and not ABB/SBB-locked.
+        5) No evaluation, resolution, enforcement, or policy gating logic is introduced.
+        6) Constraint logic remains isolated from Decision artefacts introduced in separate seed.
+
+      Dependency assumptions (pre-existing):
+
+        - Storage spine exists (SQLite + CAS + migrations discipline).
+        - Snapshot commit exists (manifest written to CAS; ledger append).
+        - Decision artefacts (if present) do not participate in manifest closure.
+
+      ---
+      Normative CORE spine constraint extensibility contract
+
+      The implementation MUST satisfy frozen CORE invariants while remaining forward-compatible.
+
+      A) Frozen CORE requirements (must remain true):
+
+        A.1 Manifest required fields and additive-only evolution
+            - Manifest SHALL contain effective ABB constraints and resolved SBB selections.
+            - Manifest schema may only be extended. Field removals are prohibited.
+
+        A.2 Constraint DSL experimentation MUST NOT alter frozen CORE invariants.
+
+      B) MEDIUM family generalisation requirements:
+
+        B.1 Constraint taxonomy must allow multiple families beyond ABB/SBB.
+        B.2 Each constraint must carry identifiers and classification metadata:
+            constraint_id, family, kind, scope (open sets).
+
+      C) FUTURE stability rules:
+
+        C.1 No FUTURE feature may redefine CORE invariants.
+        C.2 Constraint edits are valid automation triggers under policy control.
+
+      D) Contract guardrails (binding):
+
+        D.1 Family-agnostic canonical representation
+            - Constraints are first-class entities with required `family` field.
+            - Family is an open set; closed enums are prohibited.
+            - ABB/SBB are treated as a family, not as schema structure.
+
+        D.2 Family-agnostic manifest envelope
+            - Manifest MUST contain a `constraints` envelope capable of preserving unknown families.
+            - Unknown families MUST be diffable opaquely by digest.
+
+        D.3 ABB/SBB projection rule
+            - CORE-required ABB/SBB fields MUST be present as projections.
+            - Projection MUST derive from the family-agnostic envelope.
+            - Projection MUST represent empty sets when none exist.
+
+        D.4 Additive-only evolution
+            - All schema and manifest changes MUST be additive.
+            - Existing snapshot commit behaviour remains valid.
+
+        D.5 No evaluation/resolution semantics
+            - No evaluator engine in this seed.
+            - Snapshot commit MUST NOT block due to constraint content.
+
+        D.6 Determinism
+            - Constraint ordering in manifests MUST be deterministic.
+            - Digests MUST use canonical serialization.
+
+        D.7 Isolation from Decision artefacts
+            - Constraint storage and manifest projection MUST NOT read, include, or depend on decision tables.
+            - Decision linking MUST NOT influence declared/effective/resolved constraint sets.
+
+      ---
+      Required schema changes (additive):
+
+        1) constraints
+           - constraint_id TEXT PRIMARY KEY
+           - family TEXT NOT NULL
+           - kind TEXT NOT NULL
+           - scope TEXT NOT NULL
+           - payload_json TEXT NULL
+           - payload_digest TEXT NULL
+           - created_at TEXT NOT NULL
+           - updated_at TEXT NOT NULL
+           - deleted_at TEXT NULL
+
+        2) ep_constraint_refs
+           - ep_id TEXT NOT NULL
+           - constraint_id TEXT NOT NULL
+           - ordinal INTEGER NOT NULL DEFAULT 0
+           - created_at TEXT NOT NULL
+           PRIMARY KEY (ep_id, constraint_id)
+           FOREIGN KEY(ep_id) REFERENCES eps(ep_id)
+           FOREIGN KEY(constraint_id) REFERENCES constraints(constraint_id)
+
+      Required snapshot manifest fields (additive; deterministic):
+
+        - constraints:
+            - schema_version (int)
+            - declared: [ {constraint_id, family, kind, scope, payload_digest} ]
+            - effective: [ {constraint_id, family, kind, scope, payload_digest} ]
+            - resolved: [ {constraint_id, family, kind, scope, resolution_digest?} ]
+            - evidence: [ {constraint_id, evidence_digest} ]
+
+        - effective_abb_constraints: []
+        - resolved_sbb_selections: []
+        - resolution_evidence: []
+
+      Notes (binding):
+
+        - In this slice, declared/effective/resolved MAY be identical.
+        - payload_digest MUST commit canonical payload bytes.
+        - Unknown families MUST be preserved verbatim.
+
+      ---
+      Legacy v3 canonical schema + action layer details (verbatim content; normalization only)
+
+      Canonical schema extensions (SQLite; additive-only):
+
+        The store MUST introduce the following canonical tables (names are binding for v0.1/v0.2 unless already present):
+
+          1) constraints
+             - constraint_id TEXT PRIMARY KEY
+             - family TEXT NOT NULL                        # anti-lock-in: required for all constraints
+             - kind TEXT NOT NULL                          # 'abb' | 'sbb' | 'other' (stringly typed in stub phase)
+             - payload_json TEXT NULL                      # opaque JSON (family-defined schema; not interpreted here)
+             - payload_digest TEXT NULL                    # sha256 of canonical JSON bytes when payload_json present
+             - created_at TEXT NOT NULL
+             - updated_at TEXT NOT NULL
+             - deleted_at TEXT NULL                        # tombstone (optional but recommended)
+
+          2) ep_constraint_refs
+             - ep_id TEXT NOT NULL
+             - constraint_id TEXT NOT NULL
+             - ordinal INTEGER NOT NULL DEFAULT 0          # deterministic ordering surface (0 when unused)
+             - created_at TEXT NOT NULL
+             PRIMARY KEY (ep_id, constraint_id)
+
+             FOREIGN KEY(ep_id) REFERENCES eps(ep_id)
+             FOREIGN KEY(constraint_id) REFERENCES constraints(constraint_id)
+
+          3) constraint_sets (OPTIONAL in v0.1; RECOMMENDED as a stub anchor for MEDIUM)
+             - constraint_set_id TEXT PRIMARY KEY
+             - name TEXT NOT NULL
+             - family_hint TEXT NULL
+             - payload_json TEXT NULL
+             - created_at TEXT NOT NULL
+             - updated_at TEXT NOT NULL
+
+          4) constraint_set_members (OPTIONAL if constraint_sets exists)
+             - constraint_set_id TEXT NOT NULL
+             - constraint_id TEXT NOT NULL
+             - ordinal INTEGER NOT NULL DEFAULT 0
+             PRIMARY KEY (constraint_set_id, constraint_id)
+
+        Notes:
+          - No evaluator is implemented in this seed: payload_json is opaque.
+          - Determinism is enforced by explicit `ordinal` fields or lexicographic ordering fallbacks.
+          - These tables MUST NOT force ABB/SBB-specific columns beyond the generic (family, kind, payload).
+
+
+
+      Canonical ingress and layering (binding):
+
+        - All canonical mutations relating to constraints MUST be expressed as action:commands (Apply).
+        - MCP and CLI MUST call action:commands (and action:queries for reads); they MUST NOT call store APIs directly.
+        - Store-level mutation functions MAY exist, but MUST be treated as internal implementation details
+          and MUST only be invoked from action:commands.
+
+        Required action:commands (minimum; names are normative within the action layer):
+
+          - ConstraintCreate(family, kind, scope?, payload_json?) -> constraint_id
+          - ConstraintUpdate(constraint_id, payload_json?, kind?, scope?) -> ()
+          - ConstraintTombstone(constraint_id) -> ()
+          - ConstraintAttachToEp(ep_id, constraint_id, ordinal?) -> ()
+          - ConstraintDetachFromEp(ep_id, constraint_id) -> ()
+
+        Required action:queries (read-only; may be implemented as store queries but exposed via a canonical query surface):
+
+          - ConstraintGet(constraint_id)
+          - EpListConstraints(ep_id) (ordered deterministically)
+
+        Notes:
+          - These commands are schema/plumbing only in this seed: they MUST NOT evaluate, resolve, or enforce.
+          - Policy/profile hooks MAY gate tombstone/attach/detach, but must default permissive in CORE bootstrap.
+      API surface (Rust store/core; minimal):
+        (Internal-only; non-normative. MCP/CLI MUST NOT wrap these directly.)
+
+        - create_constraint(family, kind, payload_json?) -> constraint_id
+        - get_constraint(constraint_id) -> constraint record
+        - attach_constraint(ep_id, constraint_id, ordinal?) -> ()
+        - detach_constraint(ep_id, constraint_id) -> ()
+        - list_constraints_for_ep(ep_id) -> ordered list
+
+
+    how: |-
+      Scenarios (normative; MUST be implemented as tests):
+
+      Feature: Constraint schema stubs remain family-agnostic and deterministic
+
+        Background:
+          Given a repository with SQLite + CAS store initialised
+          And snapshot commit is implemented
+
+        Scenario: Unknown constraint families are accepted
+          When I create a constraint with family "vendor_ext"
+          Then it is stored verbatim
+          And no enum validation rejects it
+
+        Scenario: Deterministic ordering in manifest
+          Given multiple constraints attached to an EP
+          When I commit snapshot twice without changes
+          Then semantic_manifest_digest is identical
+
+        Scenario: Snapshot commit does not depend on decisions
+          Given decisions exist and are linked to EPs
+          And no constraint changes are made
+          When I commit snapshot twice
+          Then semantic_manifest_digest remains identical
+          And snapshot.diff shows no constraint_changes
+
+        Scenario: Closed enum introduction fails contract tests
+          Given code restricts family to fixed enum
+          When contract tests run
+          Then they fail with "constraint family MUST be open set"
+
+        Scenario: Non-deterministic iteration detected
+          Given constraint iteration uses hash-map order
+          When committing identical state twice
+          Then semantic_manifest_digest differs
+          And DeterminismViolation is raised
+
+      ---
+      Legacy v3 scenarios (verbatim; retained for full behavioural coverage)
+
+      Scenarios (all MUST be implemented as tests; unit/integration; Gherkin is normative):
+
+      Feature: Constraint schema stubs and extensibility contract
+
+        Background:
+          Given a repository with SQLite + CAS store initialised
+          And snapshot commit is already implemented and passing tests
+
+        # --- Schema and persistence stubs ---
+
+        Scenario: Create a constraint entity with an arbitrary family without code changes
+          Given a constraint payload JSON with family "platform" and kind "runtime"
+          When I create a constraint with family "platform" and kind "runtime"
+          Then it is stored in canonical state with family "platform" preserved verbatim
+          And no validation rejects unknown families
+
+        Scenario: Attach multiple constraints to a single EP with stable ordering
+          Given an EP "ep:example:0" exists
+          And two constraints exist "c:1" and "c:2"
+          When I attach "c:1" with ordinal 0 and "c:2" with ordinal 1
+          Then listing EP constraints
+            returns ["c:1", "c:2"] in ordinal order
+          And ordinals are immutable (attempt to reassign fails)
+
+        Scenario: Tombstoning a constraint does not delete historical attachment records
+          Given constraint "c:3" is attached to EP "ep:example:0"
+          When I tombstone constraint "c:3"
+          Then the constraint is excluded from active queries
+          But historical snapshots that referenced "c:3" remain readable
+
+        # --- Manifest envelope requirements ---
+
+        Scenario: Snapshot commit includes a family-agnostic constraints envelope
+          Given root_ettle_id "ettle:root" exists
+          And the EPT includes an EP with attached constraints of families "pattern" and "compliance"
+          When I call snapshot_commit for "ettle:root"
+          Then the manifest contains a top-level "constraints" envelope
+          And the envelope contains entries for both families
+          And each entry includes constraint_id, family, kind, scope, and payload_digest
+          And the ordering of constraints in each list is deterministic
+
+        Scenario: CORE-required ABB/SBB manifest fields remain present as projection
+          Given the current closure includes zero ABB/SBB-family constraints
+          When I call snapshot_commit
+          Then manifest fields effective_abb_constraints, resolved_sbb_selections, and resolution_evidence exist
+          And each of those fields is an empty list
+          And the family-agnostic constraints envelope still exists and is authoritative
+
+        Scenario: Unknown constraint families are preserved without interpretation
+          Given a constraint with family "vendor_ext" and payload containing unknown fields
+          When I call snapshot_commit
+          Then the manifest includes that constraint in the constraints envelope
+          And payload_digest matches a canonical digest of payload_json
+          And no code path attempts to interpret the payload structure
+
+        # --- Negative cases and invariants ---
+
+        Scenario: Attempting to constrain families to an enum is rejected by contract tests
+          Given code changes that introduce a closed enum of constraint families
+          When contract tests are run
+          Then they fail with a message "constraint family MUST be open set"
+
+        Scenario: Manifest field removal is prohibited
+          Given code changes that remove "effective_abb_constraints" or "constraints" from the manifest
+          When snapshot commit tests are run
+          Then they fail with a message "Manifest schema may only be extended"
+
+        Scenario: Non-deterministic constraint ordering is detected
+          Given code changes that iterate constraints using hash-map iteration order
+          When I call snapshot_commit twice with identical canonical state
+          Then semantic_manifest_digest differs
+          And the failure is reported as DeterminismViolation
+
+        Scenario: Snapshot commit does not fail due to constraint content
+          Given a constraint payload that is syntactically malformed for its family
+          When I attach it to an EP and call snapshot_commit
+          Then the commit succeeds
+          And the payload is preserved as opaque bytes with a payload_digest
+
+        # --- Boundary conditions ---
+
+        Scenario: Large constraint payloads are supported as opaque blobs
+          Given a constraint payload of size 1MB
+          When I store it and commit a snapshot
+          Then payload_digest is computed successfully
+          And the manifest size is within configured CAS limits
+
+        Scenario: Constraint attachment list can be empty
+          Given an EP with no attached constraints
+          When I call snapshot_commit
+          Then constraints.declared may be empty
+          And the manifest still contains the constraints envelope and ABB/SBB projection fields
+
+
+        Note: Link ownership
+          - This seed MUST NOT declare a direct parent→child link to ettle:snapshot_diff because that intent is defined in a separate seed file.
+          - The dependency is declared by the snapshot diff seed (which depends on the constraint schema stubs being present).
+          - Importers MAY enforce referential integrity per-seed; avoiding cross-seed links prevents failed imports unless seeds are imported as a set.
+
+
+links:
+- parent: ettle:store
+  parent_ep: ep:store:1
+  child: ettle:constraint_schema_stubs

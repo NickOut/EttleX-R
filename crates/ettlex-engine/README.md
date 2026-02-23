@@ -114,9 +114,61 @@ Error kinds used by engine commands:
 
 - `InvalidInput` - User-provided data is invalid
 - `NotFound` - Referenced entity doesn't exist
+- `AmbiguousSelection` - Multiple candidates found (requires disambiguation)
+- `ConstraintViolation` - Operation violates domain constraints
 - `Concurrency` - Optimistic lock failure
 - `Persistence` - Storage operation failed
 - `Invariant` - Domain invariant violated
+
+## Snapshot Commit via Action Commands
+
+The canonical way to commit a snapshot is via `EngineCommand::SnapshotCommit`:
+
+```rust
+use ettlex_engine::commands::engine_command::{EngineCommand, apply_engine_command};
+use ettlex_engine::commands::snapshot::SnapshotOptions;
+
+let cmd = EngineCommand::SnapshotCommit {
+    leaf_ep_id: "ep:my-leaf:0".to_string(),
+    policy_ref: "policy/default@0".to_string(),
+    profile_ref: "profile/default@0".to_string(),
+    options: SnapshotOptions {
+        expected_head: None,
+        dry_run: false,
+    },
+};
+
+let result = apply_engine_command(cmd, &mut conn, &cas)?;
+```
+
+### Leaf-scoped semantics
+
+- A **leaf EP** is an EP with no `child_ettle_id` (no refinement edge)
+- Determined structurally, not by ordinal position
+- Validation enforced at entry point (returns `ConstraintViolation` if EP has child)
+
+### Legacy root resolution
+
+For backward compatibility, use `snapshot_commit_by_root_legacy()`:
+
+```rust
+use ettlex_engine::commands::snapshot::snapshot_commit_by_root_legacy;
+
+let result = snapshot_commit_by_root_legacy(
+    "ettle:root",
+    "policy/default@0",
+    "profile/default@0",
+    SnapshotOptions { expected_head: None, dry_run: false },
+    &mut conn,
+    &cas,
+)?;
+```
+
+**Resolution rules:**
+
+- Resolves root Ettle to exactly one leaf EP
+- Fails with `AmbiguousSelection` if multiple leaves exist
+- Fails with `NotFound` if no leaves exist
 
 ## Repository Pattern
 

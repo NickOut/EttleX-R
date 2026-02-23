@@ -1,6 +1,7 @@
 // Test suite for snapshot manifest generation
 // Tests basic manifest structure, field population, and schema compliance
 
+use ettlex_core::ops::Store;
 use ettlex_core::snapshot::manifest::generate_manifest;
 
 #[test]
@@ -14,6 +15,7 @@ fn test_generate_manifest_basic() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -38,6 +40,7 @@ fn test_generate_manifest_with_seed_digest() {
         "ettle:root".into(),
         "0001".into(),
         Some("abc123".into()),
+        &Store::new(),
     )
     .unwrap();
 
@@ -55,6 +58,7 @@ fn test_generate_manifest_ep_entries_have_ordinals() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -77,6 +81,7 @@ fn test_generate_manifest_all_eps_normative() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -95,6 +100,7 @@ fn test_generate_manifest_v0_fields_empty() {
         "ettle:root".into(),
         "0001".into(),
         None,
+        &Store::new(),
     )
     .unwrap();
 

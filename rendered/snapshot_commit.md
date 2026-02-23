@@ -1,47 +1,19 @@
-# Leaf Bundle: EttleX Product > Storage Spine (SQLite + CAS + Seed Import) > Snapshot Commit Pipeline (End-to-End)
+# Snapshot Commit Pipeline (End-to-End)
 
-## WHY (Rationale)
+## EP 0
 
-1. Establish the product-level framing for EttleX as a semantic evolution engine.
-   This EP is non-load-bearing for the storage/commit milestones; it exists to keep the tree rooted in a
-   recognisable product-level node for rendering and navigation.
+**Normative**: Yes
 
-2. Provide a durable substrate so semantic state can be anchored, reproduced, and evolved safely.
-
-3. Snapshot commit is only meaningful if canonical state is durable and content-addressed.
-   The storage spine is therefore the immediate prerequisite for snapshot commit and later diff/GC work.
-
-4. Provide immutable semantic anchors by committing canonical state into an append-only ledger.
-   Enable reliable reproducible diffs and downstream TES generation by persisting a manifest in CAS and
-   anchoring it in the snapshot ledger in a single transaction boundary.
+**WHY**: Provide immutable semantic anchors by committing canonical state into an append-only ledger.
+Enable reliable reproducible diffs and downstream TES generation by persisting a manifest in CAS and
+anchoring it in the snapshot ledger in a single transaction boundary.
 
 This is the first point at which the system becomes self-hosting: a stable commit forms a durable
 reference that can be used to reproduce EPT, validate invariants, and generate projections.
 
 Dependency: this Ettle assumes the Storage Spine exists (SQLite schema + CAS + seed import) and is healthy.
 
-## WHAT (Description)
-
-1. Maintain a minimal product framing so leaf Ettles can be rendered in context.
-   This EP does not impose implementation requirements on Phase 1/2 milestones.
-
-2. Establish the platform foundations as refined milestones under this EP:
-
-- Storage spine (SQLite + CAS + seed import)
-- Snapshot commit pipeline (manifest + ledger anchor)
-
-3. This Ettle is a structural anchor for the already-implemented Phase 1 Store Spine milestone.
-   It represents the existence of:
-
-- SQLite schema + migrations discipline (including facet_snapshots/provenance_events stubs)
-- Filesystem CAS with atomic writes
-- cas_blobs index population (non-load-bearing)
-- Seed Format v0 importer
-
-The normative implementation detail for this milestone is defined in the bootstrap markdown Ettle
-“Phase 1 Store Spine (SQLite + CAS + Seed Import)”.
-
-4. Implement snapshot commit as a single, atomic operation:
+**WHAT**: Implement snapshot commit as a single, atomic operation:
 
 compute EPT + digests
 → build snapshot manifest (structured JSON)
@@ -123,20 +95,24 @@ Out of scope (for this seed):
 - Garbage collection / reachability
 - Full CLI UX beyond invoking commit
 
-## HOW (Implementation)
+Manifest content requirements (CORE frozen fields + additive envelope):
+The snapshot manifest MUST contain, at minimum: - schema_version - facet_snapshot_id - realised_ettle_id - ettle_version - created_at # included in manifest bytes; digest is non-deterministic by design - approver - policy_ref - profile_ref - ept # ordered EP ids (the committed EPT) - ep_digests # map ep_id -> digest (for EPs in ept only) - ept_digest # digest of ordered ept structure - constraints # family-agnostic envelope (see below) - coverage # coverage metrics object - exceptions # exception list (may be empty) - manifest_digest # digest over the exact manifest bytes written to CAS - semantic_manifest_digest # digest over a canonicalised copy of the manifest with created_at removed/zeroed
 
-1. No scenarios. This EP is informational only.
+Constraints envelope (anti-lock-in contract): - The manifest MUST contain a top-level `constraints` object that is extensible by family. - The `constraints` object MUST be shaped so that ABB→SBB is represented as ONE family, not the whole schema. - However, to remain compatible with the CORE charter and existing tooling, the `constraints` object MUST also
+expose the CORE frozen ABB/SBB projections as stable fields.
 
-2. Refinement only. Implementation scenarios live in child Ettles.
+Required shape (minimum viable, additive-safe):
+constraints:
+declared_refs: [] # ordered, deterministic list of constraint refs active on the EPT (may be empty)
+families: {} # map family_name -> {active_refs, outcomes, evidence, digest} (may be empty) # Frozen ABB→SBB projections (must exist even if empty):
+applicable_abb: [] # list of ABB constraint ids
+resolved_sbb: [] # list of resolved SBB constraint ids
+resolution_evidence: [] # opaque evidence records (predicate matched, selected ids, etc.)
+constraints_digest: <digest> # digest over canonicalised constraints envelope (NOT including created_at)
 
-3. No new implementation scenarios here. The milestone is already delivered.
-   This EP exists to:
+Determinism rules (binding): - `ept` order MUST be deterministic (by EPT computation rules). - `declared_refs` order MUST be deterministic: - primary: family then kind then id (lexicographic), unless an explicit ordinal is stored. - `families` keys MUST be ordered deterministically in canonicalisation (lexicographic). - Any list inside `families[family].*` MUST be deterministically ordered.
 
-- provide a stable parent refinement node for snapshot commit,
-- preserve the dependency relationship in the refinement tree,
-- and ensure rendered views show correct prerequisites.
-
-4. Implementation approach (normative):
+**HOW**: Implementation approach (normative):
 
 - Deterministic traversal:
   - EPT computation MUST use deterministic ordering primitives (no hash-iteration dependence).
@@ -333,3 +309,93 @@ And the canonical state is reloaded from SQLite
 When snapshot_commit runs again without changes
 Then EPT digest is identical to the prior run
 And EP digests are identical to the prior run
+
+Additional scenarios (constraints envelope + future-proofing):
+
+Scenario: Snapshot manifest always contains constraints envelope fields even when no constraints are attached
+Given an EPT whose EPs have no attached constraints
+When I run snapshot_commit with a selected leaf EP
+Then the manifest contains constraints.declared_refs as an empty list
+And the manifest contains constraints.families as an empty map
+And the manifest contains constraints.applicable_abb as an empty list
+And the manifest contains constraints.resolved_sbb as an empty list
+And the manifest contains constraints.resolution_evidence as an empty list
+
+Scenario: Deterministic ordering of declared_refs is stable across insertion order
+Given EP A and EP B each attach constraints in different insertion orders
+And both constraints are active on the committed EPT
+When I snapshot_commit twice with identical canonical state except insertion order
+Then constraints.declared_refs ordering is identical
+And constraints_digest is identical
+And semantic_manifest_digest is identical
+
+Scenario: Unknown constraint families are preserved as opaque outcomes without breaking snapshot commit
+Given a constraint with family "observability" is attached to an EP
+And no evaluation/resolution engine exists for that family (stub phase)
+When I snapshot_commit
+Then constraints.declared_refs includes that constraint id
+And constraints.families may include an entry for "observability" with an empty outcomes list
+And snapshot commit succeeds without attempting to interpret the family payload
+
+Scenario: Snapshot commit rejects non-deterministic family outcome ordering
+Given a constraints.families entry is produced from a HashMap iteration order
+When I attempt to commit a snapshot
+Then the system detects ordering non-determinism under determinism checks
+And snapshot commit fails with DeterminismViolation (unless waived by policy)
+
+**Child**: Snapshot Diff Engine (manifest-to-manifest diff)
+
+## EP 1
+
+**Normative**: Yes
+
+**WHY**: The snapshot commit pipeline was originally implemented as an internal engine/store API.
+To support MCP as a thin transport over a single command layer, and to prevent split-brain
+behaviour between CLI/engine and MCP/actions paths, the commit operation must be refactored
+to use action:commands as the sole canonical mutation ingress. This EP anchors that refactor
+milestone in the tree.
+
+**WHAT**: Structural anchor for the snapshot commit actions refactor milestone. Represents the
+existence of:
+
+- Command::SnapshotCommit as the sole canonical mutation ingress
+- Leaf-scoped selector (leaf_ep_id) with internal root_ettle_id derivation
+- CLI re-wired to call action:commands rather than engine/store directly
+- Module visibility or lint enforcement preventing direct store/engine calls
+
+The normative implementation detail is defined in the snapshot commit actions refactor seed
+(seed_snapshot_commit_actions_refactor_v3.yaml).
+
+**HOW**: No new implementation scenarios here. This EP exists to:
+
+- provide a stable parent refinement node for ettle:snapshot_commit_actions_refactor,
+- preserve the dependency relationship in the refinement tree,
+- and ensure rendered views show the actions refactor as a child of the commit pipeline.
+
+## EP 2
+
+**Normative**: Yes
+
+**WHY**: The action command layer is only viable as a complete interface if agents and MCP/CLI can
+also observe canonical state and derived projections through stable query surfaces. Read
+tools are the query complement to the command layer: without them, authoring is blind and
+seeds remain the fallback inspection mechanism. This EP anchors the action read tools
+milestone as a distinct child of the commit pipeline.
+
+**WHAT**: Structural anchor for the action read tools milestone. Represents the existence of:
+
+- Deterministic query surfaces for Ettles, EPs, constraints, decisions, snapshots,
+  manifests, EPT projections, and snapshot diff
+- Pagination and filtering support for large-tree scale
+- Decision context queries (non-snapshot-semantic)
+- MCP-ready thin transport wiring over the same action:query surface
+
+The normative implementation detail is defined in the action read tools seed
+(seed_action_read_tools_v3_rewrite.yaml).
+
+**HOW**: No new implementation scenarios here. This EP exists to:
+
+- provide a stable parent refinement node for ettle:action_read_tools,
+- keep read tools as a distinct milestone from the actions refactor (ep:snapshot_commit:1),
+- and ensure rendered views show the full command+query vocabulary as children of the
+  commit pipeline.

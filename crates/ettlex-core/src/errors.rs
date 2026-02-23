@@ -282,6 +282,28 @@ pub enum EttleXError {
     #[error("EP was deleted: {ep_id}")]
     EpDeleted { ep_id: String },
 
+    /// Constraint not found in store
+    #[error("Constraint not found: {constraint_id}")]
+    ConstraintNotFound { constraint_id: String },
+
+    /// Constraint was previously deleted (tombstoned)
+    #[error("Constraint was deleted: {constraint_id}")]
+    ConstraintDeleted { constraint_id: String },
+
+    /// Constraint already attached to EP
+    #[error("Constraint {constraint_id} is already attached to EP {ep_id}")]
+    ConstraintAlreadyAttached {
+        constraint_id: String,
+        ep_id: String,
+    },
+
+    /// Constraint not attached to EP
+    #[error("Constraint {constraint_id} is not attached to EP {ep_id}")]
+    ConstraintNotAttached {
+        constraint_id: String,
+        ep_id: String,
+    },
+
     // ===== Validation Errors =====
     /// Invalid title (empty or whitespace-only)
     #[error("Invalid title: {reason}")]
@@ -491,6 +513,32 @@ impl From<EttleXError> for ExError {
             EttleXError::EpDeleted { ep_id } => ExError::new(ExErrorKind::Deleted)
                 .with_ep_id(ep_id)
                 .with_message("EP was deleted"),
+
+            EttleXError::ConstraintNotFound { constraint_id } => {
+                ExError::new(ExErrorKind::NotFound)
+                    .with_entity_id(constraint_id)
+                    .with_message("Constraint not found")
+            }
+
+            EttleXError::ConstraintDeleted { constraint_id } => ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(constraint_id)
+                .with_message("Constraint was deleted"),
+
+            EttleXError::ConstraintAlreadyAttached {
+                constraint_id,
+                ep_id,
+            } => ExError::new(ExErrorKind::ConstraintViolation)
+                .with_entity_id(constraint_id)
+                .with_ep_id(ep_id)
+                .with_message("Constraint is already attached to EP"),
+
+            EttleXError::ConstraintNotAttached {
+                constraint_id,
+                ep_id,
+            } => ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(constraint_id)
+                .with_ep_id(ep_id)
+                .with_message("Constraint is not attached to EP"),
 
             EttleXError::MappingReferencesDeletedEp { ep_id } => ExError::new(ExErrorKind::Deleted)
                 .with_ep_id(ep_id)

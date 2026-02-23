@@ -31,6 +31,8 @@
 //! - `seed_digest`: Optional seed digest
 
 use crate::errors::Result;
+use crate::ops::constraint_ops;
+use crate::ops::Store;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -64,6 +66,108 @@ pub struct ConstraintsEnvelope {
 
     /// Digest of canonicalized constraints envelope (excluding manifest-level created_at)
     pub constraints_digest: String,
+}
+
+impl ConstraintsEnvelope {
+    /// Create a constraints envelope from EPT constraints
+    ///
+    /// Collects all constraints attached to EPs in the EPT, groups them by family,
+    /// and computes digests. ABB/SBB projections are kept empty for backward compatibility.
+    ///
+    /// # Arguments
+    ///
+    /// * `ept` - Ordered list of EP IDs in the EPT
+    /// * `store` - Store containing constraint data
+    ///
+    /// # Returns
+    ///
+    /// A populated ConstraintsEnvelope with deterministic ordering
+    ///
+    /// # Errors
+    ///
+    /// Returns `EttleXError::Serialization` if JSON serialization fails during digest computation.
+    pub fn from_ept(ept: &[String], store: &Store) -> Result<Self> {
+        use sha2::{Digest, Sha256};
+
+        // Collect all constraint IDs from EPT (maintaining order, avoiding duplicates)
+        let mut seen_constraint_ids = std::collections::BTreeSet::new();
+        let mut all_constraints = Vec::new();
+
+        for ep_id in ept {
+            if let Ok(constraints) = constraint_ops::list_constraints_for_ep(store, ep_id) {
+                for constraint in constraints {
+                    if !constraint.is_deleted()
+                        && seen_constraint_ids.insert(constraint.constraint_id.clone())
+                    {
+                        all_constraints.push(constraint);
+                    }
+                }
+            }
+        }
+
+        // Build declared_refs (sorted by family, kind, id for determinism)
+        let mut declared_refs: Vec<String> = all_constraints
+            .iter()
+            .map(|c| format!("{}:{}:{}", c.family, c.kind, c.constraint_id))
+            .collect();
+        declared_refs.sort();
+
+        // Group constraints by family using BTreeMap for deterministic ordering
+        let mut families: BTreeMap<String, Vec<&crate::model::Constraint>> = BTreeMap::new();
+        for constraint in &all_constraints {
+            families
+                .entry(constraint.family.clone())
+                .or_default()
+                .push(constraint);
+        }
+
+        // Build family-specific data
+        let mut family_constraints_map: BTreeMap<String, FamilyConstraints> = BTreeMap::new();
+        for (family_name, constraints) in families {
+            let mut active_refs: Vec<String> = constraints
+                .iter()
+                .map(|c| format!("{}:{}:{}", c.family, c.kind, c.constraint_id))
+                .collect();
+            active_refs.sort();
+
+            // Compute family digest from active_refs (deterministic)
+            let family_canonical = serde_json::to_string(&active_refs)?;
+            let mut hasher = Sha256::new();
+            hasher.update(family_canonical.as_bytes());
+            let family_digest = hex::encode(hasher.finalize());
+
+            family_constraints_map.insert(
+                family_name,
+                FamilyConstraints {
+                    active_refs,
+                    outcomes: Vec::new(), // Empty in v0
+                    evidence: Vec::new(), // Empty in v0
+                    digest: family_digest,
+                },
+            );
+        }
+
+        // Create envelope without digest first
+        let envelope = ConstraintsEnvelope {
+            declared_refs,
+            families: family_constraints_map,
+            applicable_abb: Vec::new(), // Backward compat only, kept empty
+            resolved_sbb: Vec::new(),   // Backward compat only, kept empty
+            resolution_evidence: Vec::new(),
+            constraints_digest: String::new(),
+        };
+
+        // Compute envelope digest over canonical JSON (excluding the digest field)
+        let canonical = serde_json::to_string(&envelope)?;
+        let mut hasher = Sha256::new();
+        hasher.update(canonical.as_bytes());
+        let digest = hex::encode(hasher.finalize());
+
+        Ok(ConstraintsEnvelope {
+            constraints_digest: digest,
+            ..envelope
+        })
+    }
 }
 
 /// Family-specific constraint data.
@@ -178,6 +282,7 @@ pub struct EpEntry {
 ///
 /// ```no_run
 /// use ettlex_core::snapshot::manifest::generate_manifest;
+/// use ettlex_core::ops::Store;
 ///
 /// let ept = vec!["ep:root:0".to_string(), "ep:root:1".to_string()];
 /// let manifest = generate_manifest(
@@ -187,6 +292,7 @@ pub struct EpEntry {
 ///     "ettle:root".to_string(),
 ///     "0001".to_string(),
 ///     None,
+///     &Store::new(),
 /// ).unwrap();
 /// ```
 pub fn generate_manifest(
@@ -196,6 +302,7 @@ pub fn generate_manifest(
     root_ettle_id: String,
     store_schema_version: String,
     seed_digest: Option<String>,
+    store: &Store,
 ) -> Result<SnapshotManifest> {
     use super::digest::{compute_ept_digest, compute_manifest_digest, compute_semantic_digest};
 
@@ -217,8 +324,8 @@ pub fn generate_manifest(
     // Generate timestamp
     let created_at = chrono::Utc::now().to_rfc3339();
 
-    // Create empty constraints envelope (all fields present but empty in v0)
-    let constraints = create_empty_constraints_envelope()?;
+    // Create constraints envelope from EPT
+    let constraints = ConstraintsEnvelope::from_ept(&ept, store)?;
 
     // Create manifest (without full digest initially)
     let mut manifest = SnapshotManifest {
@@ -243,39 +350,6 @@ pub fn generate_manifest(
     manifest.manifest_digest = compute_manifest_digest(&manifest)?;
 
     Ok(manifest)
-}
-
-/// Create empty constraints envelope with computed digest.
-///
-/// Returns a constraints envelope with all fields empty but present,
-/// ensuring the structure is always available even when no constraints exist.
-///
-/// ## Errors
-///
-/// Returns `EttleXError::Serialization` if digest computation fails.
-fn create_empty_constraints_envelope() -> Result<ConstraintsEnvelope> {
-    use sha2::{Digest, Sha256};
-
-    // Create empty envelope
-    let envelope = ConstraintsEnvelope {
-        declared_refs: Vec::new(),
-        families: BTreeMap::new(),
-        applicable_abb: Vec::new(),
-        resolved_sbb: Vec::new(),
-        resolution_evidence: Vec::new(),
-        constraints_digest: String::new(), // Computed below
-    };
-
-    // Compute digest over canonical JSON (excluding the digest field itself)
-    let canonical = serde_json::to_string(&envelope)?;
-    let mut hasher = Sha256::new();
-    hasher.update(canonical.as_bytes());
-    let digest = hex::encode(hasher.finalize());
-
-    Ok(ConstraintsEnvelope {
-        constraints_digest: digest,
-        ..envelope
-    })
 }
 
 /// Compute EP content digest.

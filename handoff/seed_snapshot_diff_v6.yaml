@@ -3,7 +3,7 @@ project:
   name: ettlex
 ettles:
 - id: ettle:snapshot_diff
-  title: Snapshot Diff Engine (manifest-to-manifest diff)
+  title: Snapshot Diff Engine (manifest-to-manifest diff; decision-isolated)
   eps:
   - id: ep:snapshot_diff:0
     ordinal: 0

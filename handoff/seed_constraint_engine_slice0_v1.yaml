@@ -1,0 +1,170 @@
+schema_version: 0
+project:
+  name: ettlex
+ettles:
+- id: ettle:constraint_engine_slice0
+  title: Constraint Engine Slice 0 — CRUD + Linking + Stub Evaluation Boundary
+  eps:
+  - id: ep:constraint_engine_slice0:0
+    ordinal: 0
+    normative: true
+    why: |-
+      Constraints must be first-class and family-agnostic without forcing ABB/SBB lock-in.
+      Phase 1 must include a real architectural slice of the constraint engine: canonical artefacts and attachments,
+      deterministic applicability derivation over an EPT, and a stable evaluation boundary that can be populated
+      with semantics later.
+      
+      This slice is intentionally non-load-bearing semantically: it produces explicit UNCOMPUTED outcomes, but
+      it MUST be end-to-end observable via snapshot manifests and snapshot diffs.
+    what: |-
+      Implement the minimal constraint engine slice:
+      
+      A) Canonical constraint artefact model (persistence already exists from schema stubs)
+         - constraint_id (stable identifier)
+         - family (string, REQUIRED; anti-lock-in field)
+         - payload (opaque JSON or bytes; treated as opaque at this tier)
+         - payload_digest (deterministic digest of canonical payload bytes)
+         - lifecycle: created_at, updated_at, tombstoned_at? (tombstone supported)
+      
+      B) Canonical attachment model
+         - Constraints attach to EPs via ep_constraint_ref table.
+         - Ordering MUST be deterministic:
+             * Prefer explicit ordinal if present; else order by (ep_id, constraint_id) lexicographically.
+         - Duplicate attachments MUST be rejected.
+      
+      C) Engine boundary (stable contract)
+         - Define a single interface (module boundary) now:
+             constraint_engine::evaluate(ctx) -> ConstraintEvaluation
+         - Inputs (ctx) MUST include:
+             * leaf_ep_id
+             * computed ordered EPT (EP ids + EP digests)
+             * declared attachments reachable/applicable under CORE rules
+             * policy_ref/profile_ref context as available at snapshot time
+         - Output MUST be family-agnostic and stable:
+             * declared_refs: ordered list of (constraint_id, family, payload_digest)
+             * families: map family -> { status: UNCOMPUTED, digest, opaque_section? }
+             * constraints_digest: digest over canonicalised ConstraintEvaluation
+         - Phase 1 behaviour:
+             * families[*].status MUST be UNCOMPUTED
+             * no family-specific parsing/evaluation is performed
+      
+      D) Snapshot integration
+         - snapshot_commit MUST call constraint_engine::evaluate and project the returned envelope into the manifest
+           as specified by seed_snapshot_commit_v4.yaml.
+         - Changes to constraints (CRUD or attachments) MUST be visible in the next committed snapshot manifest.
+      
+      Out of scope (explicitly deferred):
+         - ABB predicate DSL, SBB resolution, evidence, obligations semantics
+         - Any family-specific evaluation beyond UNCOMPUTED marker
+    how: |-
+      Scenarios (all MUST be implemented as tests; Gherkin is normative):
+      
+      Feature: Constraint engine slice 0 provides CRUD, linking, and deterministic stub evaluation
+      
+        Background:
+          Given a repository with SQLite + CAS store initialised
+          And constraint schema stubs are present (seed_constraint_schema_stubs_v3)
+          And snapshot_commit is implemented (seed_snapshot_commit_v4)
+      
+        # --- CRUD: create/update/tombstone ---
+      
+        Scenario: Create constraint (unknown family) succeeds and is stored as opaque
+          When I apply Command::ConstraintCreate{constraint_id="c:1", family="vendor_ext", payload={...}}
+          Then the constraint exists in the store
+          And payload_digest is recorded
+          And no evaluation is performed at create time
+      
+        Scenario: Create constraint rejects missing family
+          When I apply Command::ConstraintCreate{constraint_id="c:2", family="", payload={...}}
+          Then a typed error InvalidConstraintFamily is returned
+      
+        Scenario: Create constraint rejects duplicate id
+          Given constraint "c:1" already exists
+          When I apply Command::ConstraintCreate{constraint_id="c:1", ...}
+          Then a typed error AlreadyExists is returned
+      
+        Scenario: Update constraint changes payload_digest deterministically
+          Given constraint "c:1" exists with payload_digest "d1"
+          When I apply Command::ConstraintUpdate{constraint_id="c:1", payload={...new...}}
+          Then payload_digest is "d2"
+          And "d2" is the digest of canonical payload bytes
+      
+        Scenario: Tombstone constraint prevents future attachment but preserves history
+          Given constraint "c:1" exists
+          When I apply Command::ConstraintTombstone{constraint_id="c:1"}
+          Then the constraint is marked tombstoned
+          And reads still return it with tombstone flag
+          When I apply Command::ConstraintAttachToEp{ep_id, constraint_id="c:1"}
+          Then a typed error ConstraintTombstoned is returned
+      
+        # --- Linking: attach/detach ---
+      
+        Scenario: Attach constraint to EP appears in manifest declared_refs after snapshot commit
+          Given constraint "c:3" exists with family "f:demo"
+          And EP "ep:x" exists
+          When I apply Command::ConstraintAttachToEp{ep_id="ep:x", constraint_id="c:3"}
+          And I commit a snapshot for a leaf whose EPT includes "ep:x"
+          Then manifest.constraints.declared_refs contains "c:3"
+          And manifest.constraints.families["f:demo"].status is UNCOMPUTED
+      
+        Scenario: Attach constraint to EP not in EPT does not affect manifest
+          Given constraint "c:4" exists
+          And EP "ep:outside" exists but is not in the committed EPT
+          When I attach "c:4" to "ep:outside"
+          And I commit a snapshot for a leaf whose EPT excludes "ep:outside"
+          Then manifest.constraints.declared_refs does not contain "c:4"
+      
+        Scenario: Duplicate attachment is rejected
+          Given constraint "c:3" is already attached to EP "ep:x"
+          When I apply Command::ConstraintAttachToEp{ep_id="ep:x", constraint_id="c:3"}
+          Then a typed error DuplicateAttachment is returned
+      
+        Scenario: Detach removes from declared_refs in next snapshot
+          Given "c:3" is attached to "ep:x" and visible in last snapshot manifest
+          When I apply Command::ConstraintDetachFromEp{ep_id="ep:x", constraint_id="c:3"}
+          And I commit a new snapshot
+          Then manifest.constraints.declared_refs does not contain "c:3"
+      
+        # --- Determinism and canonicalisation ---
+      
+        Scenario: Declared_refs ordering is deterministic
+          Given EP "ep:x" has constraints attached "c:10", "c:2", "c:3"
+          When I commit snapshot twice with identical state
+          Then declared_refs ordering is identical in both manifests
+          And ordering matches the deterministic rule (ordinal if present else lexicographic)
+      
+        Scenario: constraints_digest changes iff declared_refs/payload_digest set changes
+          Given manifest A has constraints_digest "k1"
+          When I update an unrelated EP description (no constraints changed)
+          And I commit snapshot B
+          Then snapshot B constraints_digest equals "k1"
+          When I update payload of attached constraint "c:3"
+          And I commit snapshot C
+          Then snapshot C constraints_digest differs from "k1"
+      
+        # --- Negative cases and boundary conditions ---
+      
+        Scenario: Attach rejects unknown constraint id
+          When I apply Command::ConstraintAttachToEp{ep_id="ep:x", constraint_id="c:unknown"}
+          Then a typed error NotFound is returned
+      
+        Scenario: Attach rejects unknown ep id
+          When I apply Command::ConstraintAttachToEp{ep_id="ep:missing", constraint_id="c:3"}
+          Then a typed error NotFound is returned
+      
+        Scenario: Evaluate returns UNCOMPUTED families even for known ABB/SBB placeholder
+          Given a constraint family "abb" is used in payload
+          When I commit a snapshot
+          Then families["abb"].status is UNCOMPUTED
+          And the engine does not attempt ABB parsing
+      
+        Scenario: Large number of constraints does not break evaluation
+          Given 500 constraints are attached across the EPT
+          When I commit a snapshot
+          Then evaluation completes within configured time budget
+          And ordering and digests remain deterministic
+links:
+- parent: ettle:constraint_schema_stubs
+  parent_ep: ep:constraint_schema_stubs:0
+  child: ettle:constraint_engine_slice0
+

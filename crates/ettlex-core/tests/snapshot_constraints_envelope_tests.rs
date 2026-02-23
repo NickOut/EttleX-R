@@ -1,6 +1,7 @@
 // Test suite for snapshot manifest constraints envelope (v4 requirements)
 // Tests that the constraints envelope structure is always present with all required fields
 
+use ettlex_core::ops::Store;
 use ettlex_core::snapshot::manifest::generate_manifest;
 
 #[test]
@@ -17,6 +18,7 @@ fn test_manifest_contains_constraints_envelope_even_when_empty() {
         "ettle:root".to_string(),
         "0001".to_string(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -58,6 +60,7 @@ fn test_deterministic_ordering_of_declared_refs() {
         "ettle:root".to_string(),
         "0001".to_string(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -68,6 +71,7 @@ fn test_deterministic_ordering_of_declared_refs() {
         "ettle:root".to_string(),
         "0001".to_string(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -98,6 +102,7 @@ fn test_constraints_envelope_serialization_is_deterministic() {
         "ettle:root".to_string(),
         "0001".to_string(),
         None,
+        &Store::new(),
     )
     .unwrap();
 
@@ -122,6 +127,7 @@ fn test_constraints_digest_is_computed() {
         "ettle:root".to_string(),
         "0001".to_string(),
         None,
+        &Store::new(),
     )
     .unwrap();
 

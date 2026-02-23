@@ -3,11 +3,13 @@
 //! This crate provides the foundational data structures and operations for EttleX,
 //! including:
 //! - Ettle and EP (Ettle Partition) models with full CRUD semantics
+//! - Constraint models with family-agnostic design
 //! - Deterministic traversal algorithms (RT/EPT)
 //! - Tree validation and invariant enforcement
+//! - Snapshot manifest generation with constraints envelope
 //! - Rendering capabilities for Markdown export
 //!
-//! Phase 0.5 implementation - pure library with no persistence, CLI, or constraints.
+//! Phase 1 implementation - includes core domain models, constraints, and snapshot manifests.
 
 pub mod apply;
 pub mod commands;

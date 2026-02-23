@@ -63,6 +63,15 @@ EttleX Core enforces five normative requirements:
 - Deterministic digest computation (semantic + temporal)
 - Ready for persistence to content-addressable storage
 
+✅ **Constraints** (Phase 1)
+
+- Family-agnostic constraint system with open extensibility
+- EP-level constraint attachment with deterministic ordering
+- Content-addressable payload storage (SHA-256 digest)
+- Tombstone pattern for historical preservation
+- BTreeMap-based family grouping for deterministic serialization
+- Full integration with snapshot manifests
+
 ## Installation
 
 Add to your `Cargo.toml`:
@@ -218,16 +227,32 @@ let state = apply(state, Command::EpDelete { ep_id }, &policy)?;
 
 ### Commands
 
-All Phase 0.5 operations are available as commands:
+All Phase 1 operations are available as commands:
+
+**Ettle Operations:**
 
 - `Command::EttleCreate` - Create new Ettle
 - `Command::EttleUpdate` - Update title/metadata
 - `Command::EttleDelete` - Delete Ettle (tombstone only)
+
+**EP Operations:**
+
 - `Command::EpCreate` - Create new EP
 - `Command::EpUpdate` - Update EP content
 - `Command::EpDelete` - Delete EP (policy-gated)
+
+**Refinement Operations:**
+
 - `Command::RefineLinkChild` - Link child Ettle to parent EP
 - `Command::RefineUnlinkChild` - Unlink child from parent EP
+
+**Constraint Operations:**
+
+- `Command::ConstraintCreate` - Create new constraint with family/kind/scope
+- `Command::ConstraintUpdate` - Update constraint payload
+- `Command::ConstraintTombstone` - Soft-delete constraint
+- `Command::ConstraintAttachToEp` - Attach constraint to EP with ordinal
+- `Command::ConstraintDetachFromEp` - Remove constraint from EP
 
 ### Choosing an API Style
 
@@ -247,6 +272,148 @@ Both APIs are fully supported:
 - Example: `examples/apply_demo.rs`
 
 You can mix both styles in the same codebase.
+
+## Constraints (Phase 1)
+
+EttleX supports a family-agnostic constraint system that allows attaching typed constraints to EPs. Constraints are designed for open extensibility without schema lock-in.
+
+### Core Concepts
+
+**Family-Agnostic Design:**
+
+- No closed enums - arbitrary family names accepted
+- Families: "ABB", "observability", "custom-org", etc.
+- Kind: "Rule", "Metric", "Policy", etc.
+- Scope: "EP", "Ettle", "Global", etc.
+
+**Content-Addressable Storage:**
+
+- Payload stored as JSON (`serde_json::Value`)
+- SHA-256 digest computed automatically
+- Enables deduplication in CAS backends
+
+**EP-Level Attachment:**
+
+- Constraints attach to individual EPs (not Ettles)
+- Ordinal-based ordering for deterministic serialization
+- Multiple constraints per EP supported
+
+**Tombstone Pattern:**
+
+- Soft deletion preserves historical snapshot references
+- `deleted_at` timestamp marks tombstoned constraints
+
+### Example Usage
+
+```rust
+use ettlex_core::{apply, Command, Store, policy::NeverAnchoredPolicy};
+use serde_json::json;
+
+// Create a constraint
+let state = apply(
+    state,
+    Command::ConstraintCreate {
+        constraint_id: "c1".to_string(),
+        family: "ABB".to_string(),
+        kind: "Rule".to_string(),
+        scope: "EP".to_string(),
+        payload_json: json!({"rule": "no-recursive-refs"}),
+    },
+    &NeverAnchoredPolicy,
+)?;
+
+// Attach to an EP
+let state = apply(
+    state,
+    Command::ConstraintAttachToEp {
+        ep_id: ep_id.clone(),
+        constraint_id: "c1".to_string(),
+        ordinal: 0,
+    },
+    &NeverAnchoredPolicy,
+)?;
+
+// Update constraint payload
+let state = apply(
+    state,
+    Command::ConstraintUpdate {
+        constraint_id: "c1".to_string(),
+        payload_json: json!({"rule": "no-recursive-refs", "severity": "error"}),
+    },
+    &NeverAnchoredPolicy,
+)?;
+
+// Tombstone (soft delete)
+let state = apply(
+    state,
+    Command::ConstraintTombstone {
+        constraint_id: "c1".to_string(),
+    },
+    &NeverAnchoredPolicy,
+)?;
+```
+
+### Mutation API
+
+```rust
+use ettlex_core::ops::constraint_ops;
+use serde_json::json;
+
+// Create constraint
+constraint_ops::create_constraint(
+    &mut store,
+    "c1".to_string(),
+    "ABB".to_string(),
+    "Rule".to_string(),
+    "EP".to_string(),
+    json!({"rule": "no-recursive-refs"}),
+)?;
+
+// Attach to EP
+constraint_ops::attach_constraint_to_ep(
+    &mut store,
+    ep_id.clone(),
+    "c1".to_string(),
+    0, // ordinal
+)?;
+
+// List constraints for an EP (ordered by ordinal)
+let constraints = constraint_ops::list_constraints_for_ep(&store, &ep_id)?;
+
+// Detach from EP
+constraint_ops::detach_constraint_from_ep(&mut store, &ep_id, "c1")?;
+```
+
+### Snapshot Manifest Integration
+
+Constraints are automatically included in snapshot manifests via the `ConstraintsEnvelope`:
+
+```rust
+use ettlex_core::snapshot::manifest::{generate_manifest, ConstraintsEnvelope};
+
+// Generate manifest with constraints
+let manifest = generate_manifest(
+    ept,
+    "policy/default@0".to_string(),
+    "profile/default@0".to_string(),
+    root_ettle_id,
+    "0001".to_string(),
+    None,
+    &store,
+)?;
+
+// Constraints envelope structure:
+// - declared_refs: ordered list of all constraint refs
+// - families: BTreeMap<family_name, FamilyConstraints>
+// - applicable_abb/resolved_sbb: backward compatibility (empty in v0)
+// - constraints_digest: SHA-256 of envelope content
+```
+
+**Deterministic Serialization:**
+
+- `declared_refs` sorted by (family, kind, id)
+- `families` uses BTreeMap for deterministic key ordering
+- Ordinals maintain attachment order within each EP
 
 ## API Documentation
 
@@ -274,11 +441,13 @@ ettlex-core/
 ├── model/             # Data structures
 │   ├── ettle.rs       # Ettle: id, title, parent_id, ep_ids, metadata
 │   ├── ep.rs          # EP: id, ordinal, child_ettle_id, why/what/how
+│   ├── constraint.rs  # Constraint: family, kind, scope, payload_json, digest
 │   └── metadata.rs    # Extensible key-value storage
 ├── ops/               # Operations
 │   ├── store.rs       # In-memory HashMap storage
 │   ├── ettle_ops.rs   # create/read/update/delete Ettle
 │   ├── ep_ops.rs      # create/read/update/delete EP
+│   ├── constraint_ops.rs  # create/update/tombstone/attach/detach Constraint
 │   ├── projection.rs  # active_eps() - deterministic EP filtering
 │   └── refinement_ops.rs  # set_parent, link_child, unlink_child
 ├── rules/             # Validation

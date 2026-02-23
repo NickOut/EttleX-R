@@ -31,13 +31,13 @@
 
 use crate::commands::Command;
 use crate::errors::{EttleXError, Result};
-use crate::ops::{ep_ops, ettle_ops, refinement_ops, Store};
+use crate::ops::{constraint_ops, ep_ops, ettle_ops, refinement_ops, Store};
 use crate::policy::AnchorPolicy;
 use crate::rules::validation;
 
 /// Apply a command to a store, returning a new store state
 ///
-/// This is the functional-boundary entry point for all Phase 0.5 operations.
+/// This is the functional-boundary entry point for all EttleX operations (Phase 1).
 /// It takes ownership of the current state, executes the command atomically,
 /// and returns either a new valid state or an error.
 ///
@@ -157,6 +157,54 @@ pub fn apply(mut state: Store, cmd: Command, policy: &dyn AnchorPolicy) -> Resul
             refinement_ops::unlink_child(&mut state, &parent_ep_id)?;
             // Validate tree structure after unlinking
             validation::validate_tree(&state)?;
+            Ok(state)
+        }
+
+        Command::ConstraintCreate {
+            constraint_id,
+            family,
+            kind,
+            scope,
+            payload_json,
+        } => {
+            constraint_ops::create_constraint(
+                &mut state,
+                constraint_id,
+                family,
+                kind,
+                scope,
+                payload_json,
+            )?;
+            Ok(state)
+        }
+
+        Command::ConstraintUpdate {
+            constraint_id,
+            payload_json,
+        } => {
+            constraint_ops::update_constraint(&mut state, &constraint_id, payload_json)?;
+            Ok(state)
+        }
+
+        Command::ConstraintTombstone { constraint_id } => {
+            constraint_ops::tombstone_constraint(&mut state, &constraint_id)?;
+            Ok(state)
+        }
+
+        Command::ConstraintAttachToEp {
+            ep_id,
+            constraint_id,
+            ordinal,
+        } => {
+            constraint_ops::attach_constraint_to_ep(&mut state, ep_id, constraint_id, ordinal)?;
+            Ok(state)
+        }
+
+        Command::ConstraintDetachFromEp {
+            ep_id,
+            constraint_id,
+        } => {
+            constraint_ops::detach_constraint_from_ep(&mut state, &ep_id, &constraint_id)?;
             Ok(state)
         }
     }
@@ -457,5 +505,413 @@ mod tests {
 
         // Original state should still be valid and unchanged
         assert_eq!(state.list_ettles().len(), 0);
+    }
+
+    // ===== Constraint Command Tests =====
+
+    #[test]
+    fn test_apply_constraint_create() {
+        use serde_json::json;
+
+        let state = Store::new();
+        let cmd = Command::ConstraintCreate {
+            constraint_id: "c1".to_string(),
+            family: "ABB".to_string(),
+            kind: "Rule".to_string(),
+            scope: "EP".to_string(),
+            payload_json: json!({"rule": "test"}),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let new_state = apply(state, cmd, &policy).unwrap();
+
+        assert!(new_state.constraints.contains_key("c1"));
+        let constraint = new_state.get_constraint("c1").unwrap();
+        assert_eq!(constraint.family, "ABB");
+    }
+
+    #[test]
+    fn test_apply_constraint_update_success() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({"rule": "old"}),
+        )
+        .unwrap();
+
+        let cmd = Command::ConstraintUpdate {
+            constraint_id: "c1".to_string(),
+            payload_json: json!({"rule": "new"}),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let new_state = apply(state, cmd, &policy).unwrap();
+
+        let constraint = new_state.get_constraint("c1").unwrap();
+        assert_eq!(constraint.payload_json["rule"], "new");
+    }
+
+    #[test]
+    fn test_apply_constraint_update_nonexistent() {
+        use serde_json::json;
+
+        let state = Store::new();
+        let cmd = Command::ConstraintUpdate {
+            constraint_id: "nonexistent".to_string(),
+            payload_json: json!({}),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(EttleXError::ConstraintNotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn test_apply_constraint_update_deleted() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+        constraint_ops::tombstone_constraint(&mut state, "c1").unwrap();
+
+        let cmd = Command::ConstraintUpdate {
+            constraint_id: "c1".to_string(),
+            payload_json: json!({"new": "data"}),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+    }
+
+    #[test]
+    fn test_apply_constraint_tombstone_success() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+
+        let cmd = Command::ConstraintTombstone {
+            constraint_id: "c1".to_string(),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let new_state = apply(state, cmd, &policy).unwrap();
+
+        let constraint = new_state.constraints.get("c1").unwrap();
+        assert!(constraint.is_deleted());
+    }
+
+    #[test]
+    fn test_apply_constraint_tombstone_nonexistent() {
+        let state = Store::new();
+        let cmd = Command::ConstraintTombstone {
+            constraint_id: "nonexistent".to_string(),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(EttleXError::ConstraintNotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn test_apply_constraint_tombstone_already_deleted() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+        constraint_ops::tombstone_constraint(&mut state, "c1").unwrap();
+
+        let cmd = Command::ConstraintTombstone {
+            constraint_id: "c1".to_string(),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+    }
+
+    #[test]
+    fn test_apply_constraint_attach_success() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        let ettle_id =
+            ettle_ops::create_ettle(&mut state, "Test".to_string(), None, None, None, None)
+                .unwrap();
+        let ettle = state.get_ettle(&ettle_id).unwrap();
+        let ep_id = ettle.ep_ids[0].clone();
+
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+
+        let cmd = Command::ConstraintAttachToEp {
+            ep_id: ep_id.clone(),
+            constraint_id: "c1".to_string(),
+            ordinal: 0,
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let new_state = apply(state, cmd, &policy).unwrap();
+
+        assert!(new_state.is_constraint_attached_to_ep(&ep_id, "c1"));
+    }
+
+    #[test]
+    fn test_apply_constraint_attach_nonexistent_constraint() {
+        let mut state = Store::new();
+        let ettle_id =
+            ettle_ops::create_ettle(&mut state, "Test".to_string(), None, None, None, None)
+                .unwrap();
+        let ettle = state.get_ettle(&ettle_id).unwrap();
+        let ep_id = ettle.ep_ids[0].clone();
+
+        let cmd = Command::ConstraintAttachToEp {
+            ep_id,
+            constraint_id: "nonexistent".to_string(),
+            ordinal: 0,
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(EttleXError::ConstraintNotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn test_apply_constraint_attach_deleted_constraint() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        let ettle_id =
+            ettle_ops::create_ettle(&mut state, "Test".to_string(), None, None, None, None)
+                .unwrap();
+        let ettle = state.get_ettle(&ettle_id).unwrap();
+        let ep_id = ettle.ep_ids[0].clone();
+
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+        constraint_ops::tombstone_constraint(&mut state, "c1").unwrap();
+
+        let cmd = Command::ConstraintAttachToEp {
+            ep_id,
+            constraint_id: "c1".to_string(),
+            ordinal: 0,
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+    }
+
+    #[test]
+    fn test_apply_constraint_attach_nonexistent_ep() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+
+        let cmd = Command::ConstraintAttachToEp {
+            ep_id: "nonexistent".to_string(),
+            constraint_id: "c1".to_string(),
+            ordinal: 0,
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(result, Err(EttleXError::EpNotFound { .. })));
+    }
+
+    #[test]
+    fn test_apply_constraint_attach_already_attached() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        let ettle_id =
+            ettle_ops::create_ettle(&mut state, "Test".to_string(), None, None, None, None)
+                .unwrap();
+        let ettle = state.get_ettle(&ettle_id).unwrap();
+        let ep_id = ettle.ep_ids[0].clone();
+
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+        constraint_ops::attach_constraint_to_ep(&mut state, ep_id.clone(), "c1".to_string(), 0)
+            .unwrap();
+
+        let cmd = Command::ConstraintAttachToEp {
+            ep_id,
+            constraint_id: "c1".to_string(),
+            ordinal: 0,
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(EttleXError::ConstraintAlreadyAttached { .. })
+        ));
+    }
+
+    #[test]
+    fn test_apply_constraint_detach_success() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        let ettle_id =
+            ettle_ops::create_ettle(&mut state, "Test".to_string(), None, None, None, None)
+                .unwrap();
+        let ettle = state.get_ettle(&ettle_id).unwrap();
+        let ep_id = ettle.ep_ids[0].clone();
+
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+        constraint_ops::attach_constraint_to_ep(&mut state, ep_id.clone(), "c1".to_string(), 0)
+            .unwrap();
+
+        let cmd = Command::ConstraintDetachFromEp {
+            ep_id: ep_id.clone(),
+            constraint_id: "c1".to_string(),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let new_state = apply(state, cmd, &policy).unwrap();
+
+        assert!(!new_state.is_constraint_attached_to_ep(&ep_id, "c1"));
+    }
+
+    #[test]
+    fn test_apply_constraint_detach_not_attached() {
+        use crate::ops::constraint_ops;
+        use serde_json::json;
+
+        let mut state = Store::new();
+        let ettle_id =
+            ettle_ops::create_ettle(&mut state, "Test".to_string(), None, None, None, None)
+                .unwrap();
+        let ettle = state.get_ettle(&ettle_id).unwrap();
+        let ep_id = ettle.ep_ids[0].clone();
+
+        constraint_ops::create_constraint(
+            &mut state,
+            "c1".to_string(),
+            "ABB".to_string(),
+            "Rule".to_string(),
+            "EP".to_string(),
+            json!({}),
+        )
+        .unwrap();
+
+        let cmd = Command::ConstraintDetachFromEp {
+            ep_id,
+            constraint_id: "c1".to_string(),
+        };
+
+        let policy = NeverAnchoredPolicy;
+        let result = apply(state, cmd, &policy);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(EttleXError::ConstraintNotAttached { .. })
+        ));
     }
 }

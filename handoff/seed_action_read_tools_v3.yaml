@@ -1,0 +1,243 @@
+schema_version: 0
+project:
+  name: ettlex
+ettles:
+- id: ettle:action_read_tools
+  title: Action Read Tools — Canonical Queries for Authoring, Inspection, Diff, and Decision Context
+  eps:
+  - id: ep:action_read_tools:0
+    ordinal: 0
+    normative: true
+    why: |-
+      Apply-only mutation is viable only if the agent (and MCP/CLI) can observe canonical state and derived
+      projections through stable query surfaces. Without read tools, authoring becomes blind and seeds become the
+      fallback.
+      
+      This seed defines the minimal action:query/read surfaces required so that MCP can be generated as a thin
+      transport over a complete command+query vocabulary.
+    what: |-
+      Implement a set of read/query operations (non-mutating) exposed from the same application layer as
+      action commands.
+      
+      Binding rules:
+        - Read tools MUST NOT mutate canonical state.
+        - Read tools MAY read canonical DB state.
+        - Projection computations (EPT, manifest load, diff compute) MUST be deterministic for identical inputs.
+        - MCP (when added) MUST wrap these query surfaces directly (thin transport).
+      
+      Minimum query/tool set:
+      
+      1) State identity / version
+         - state.get_version() -> { state_version, semantic_head_digest? }
+      
+      2) Ettle queries
+         - ettle.get(ettle_id)
+         - ettle.list(options?)
+         - ettle.list_eps(ettle_id)
+      
+         ettle.list(options?) MUST support scale-safe enumeration:
+           - options MAY include: prefix_filter?, title_contains?, limit?, cursor?
+           - The implementation MUST enforce a default limit if limit is omitted.
+           - The implementation MUST support cursor-based pagination (opaque cursor preferred).
+           - Ordering MUST be deterministic (stable sort key: ettle_id ascending, unless overridden by an explicit sort option).
+      
+      3) EP queries
+         - ep.get(ep_id)
+         - ep.list_children(ep_id)
+         - ep.list_parents(ep_id)
+      
+         ep.list_parents(ep_id) MUST reflect the refinement invariants:
+           - Under the one-parent constraint, an EP MUST have at most one parent in the refinement graph.
+           - If data corruption or legacy state produces multiple parents, the query MUST NOT silently pick one:
+               * it MUST return a typed error RefinementIntegrityViolation and include the conflicting parent ids.
+      
+      4) Constraint queries
+         - constraint.get(constraint_id)
+         - constraint.list_by_family(family)
+         - ep.list_constraints(ep_id)
+      
+
+      4.1) Decision queries (governance; non-snapshot-semantic)
+         - decision.get(decision_id)
+         - decision.list(options?)
+         - decision.list_by_target(target_kind, target_id, include_tombstoned?)
+         - ep.list_decisions(ep_id, include_ancestors?, status_filter?)
+         - ettle.list_decisions(ettle_id, include_eps?, include_ancestors?)
+         - ept.compute_decision_context(leaf_ep_id, status_filter?)
+
+         Decision query invariants:
+           - Decision queries MUST NOT affect snapshot semantics.
+           - Decision queries MUST NOT mutate canonical state.
+           - Ancestor enumeration MUST respect refinement invariants.
+           - Deterministic ordering rules MUST be enforced.
+
+      5) Snapshot/manifest queries
+         - snapshot.get(snapshot_id)
+         - snapshot.list(ettle_id? leaf_ep_id?)
+         - manifest.get_by_snapshot(snapshot_id) -> bytes + digests
+         - manifest.get_by_digest(manifest_digest) -> bytes
+      
+      6) Projection queries
+         - ept.compute(leaf_ep_id) -> ordered EP ids + digests (or a stable projection)
+         - snapshot.diff(a_ref, b_ref) -> { structured_diff_json, human_summary }
+           (read-only; MUST operate on manifest bytes; MUST NOT read canonical state for semantic comparison)
+    how: |-
+      Scenarios (all MUST be implemented as tests; Gherkin is normative):
+      
+      Feature: Action read tools provide deterministic inspection surfaces
+      
+        Background:
+          Given a repository with SQLite + CAS store initialised
+          And at least one Ettle exists with EPs and links
+          And at least one snapshot has been committed
+      
+        # --- Non-mutation invariant ---
+      
+        Scenario: Read tools never mutate canonical state
+          Given state_version is V1
+          When I call all read tools once
+          Then state_version remains V1
+          And no ledger rows are appended
+          And no CAS blobs are written
+      
+        # --- Ettle/EP queries ---
+      
+        Scenario: ettle.get returns complete metadata and EP membership
+          When I call ettle.get(ettle_id)
+          Then the response includes id, title, and metadata
+          And the response includes the list of EP ids belonging to the Ettle
+      
+        Scenario: ettle.list enforces a default limit
+          Given there are more than 200 Ettles in the store
+          When I call ettle.list() with no options
+          Then at most the default limit of results is returned
+          And a cursor is returned if additional results exist
+          And the returned ordering is deterministic
+      
+        Scenario: ettle.list supports cursor-based pagination deterministically
+          Given there are more than 500 Ettles in the store
+          When I call ettle.list(limit=100)
+          Then I receive page_1 with 100 Ettles and a cursor_1
+          When I call ettle.list(limit=100, cursor=cursor_1)
+          Then I receive page_2 with 100 Ettles and a cursor_2
+          And page_1 and page_2 contain no duplicates
+          And concatenating pages yields the same ordering as a single full enumeration would (conceptually)
+          And repeating the same calls returns identical pages (deterministic)
+      
+        Scenario: ettle.list supports filtering without breaking determinism
+          Given there exist Ettles with ids starting with "ettle:a:" and "ettle:b:"
+          When I call ettle.list(prefix_filter="ettle:a:", limit=100)
+          Then all returned Ettles have ids starting with "ettle:a:"
+          And ordering is deterministic
+      
+        Scenario: ep.list_children returns deterministic ordering
+          Given an EP has multiple children
+          When I call ep.list_children twice
+          Then the returned child list is identical
+          And ordering matches the canonical ordering rule for refine links
+      
+        Scenario: ep.list_parents returns the single parent under the refinement invariant
+          Given a child EP is linked under exactly one parent EP
+          When I call ep.list_parents(child_ep)
+          Then exactly one parent EP id is returned
+          And the result is deterministic
+      
+        Scenario: ep.list_parents rejects multiple-parent corruption
+          Given a child EP is linked under two parent EPs due to corrupted or legacy state
+          When I call ep.list_parents(child_ep)
+          Then a typed error RefinementIntegrityViolation is returned
+          And the error includes both parent EP ids
+          And the query does not silently choose one
+      
+        # --- Constraint queries ---
+      
+        Scenario: constraint.list_by_family returns only non-tombstoned by default
+          Given constraints exist in family "f:demo" including tombstoned ones
+          When I call constraint.list_by_family("f:demo") without options
+          Then tombstoned constraints are excluded
+          When I call with include_tombstoned=true
+          Then tombstoned constraints are included with tombstone flags
+      
+        Scenario: ep.list_constraints is deterministic and ordered
+          Given multiple constraints are attached to an EP
+          When I call ep.list_constraints twice
+          Then the results are identical and ordered deterministically
+      
+        # --- Manifest and snapshot queries ---
+      
+        Scenario: manifest.get_by_snapshot returns recorded digests and bytes
+          When I call manifest.get_by_snapshot(snapshot_id)
+          Then I receive manifest bytes
+          And I receive manifest_digest and semantic_manifest_digest
+          And semantic_manifest_digest matches digest computed with created_at excluded
+      
+        Scenario: manifest.get_by_digest rejects unknown digest
+          When I call manifest.get_by_digest("nope")
+          Then a typed error NotFound is returned
+      
+        # --- EPT compute query ---
+      
+        Scenario: ept.compute returns deterministic EPT
+          When I call ept.compute(leaf_ep_id) twice
+          Then the ordered EP list is identical
+          And the returned ept_digest is identical
+      
+        Scenario: ept.compute fails fast on ambiguity
+          Given the refinement graph is ambiguous
+          When I call ept.compute(leaf_ep_id)
+          Then a typed error EptAmbiguous is returned
+      
+        # --- Diff query binding ---
+      
+        Scenario: snapshot.diff operates only on manifest bytes
+          Given I have snapshot A and snapshot B
+          When I call snapshot.diff(snapshot_id(A), snapshot_id(B))
+          Then the implementation resolves both to manifest bytes
+          And diff output is produced without reading canonical DB state for semantic comparison
+      
+        Scenario: snapshot.diff rejects missing manifest
+          Given snapshot A references a missing CAS manifest blob
+          When I call snapshot.diff(A,B)
+          Then a typed error StorageError is returned
+      
+        Scenario: snapshot.diff output is deterministic
+          When I call snapshot.diff(A,B) twice with identical manifest bytes
+          Then structured diff bytes are identical
+      
+
+
+        # --- Decision queries (non-snapshot-semantic) ---
+
+        Scenario: decision.list is deterministic
+          Given multiple decisions exist
+          When I call decision.list() twice
+          Then both results are byte-identical after canonical serialization
+
+        Scenario: ep.list_decisions includes ancestor decisions when requested
+          Given a refinement chain ep:root -> ep:leaf exists
+          And decision "d:1" is linked to ep:root
+          When I call ep.list_decisions(ep:leaf, include_ancestors=true)
+          Then decision "d:1" is returned
+
+        Scenario: ept.compute_decision_context returns deterministic structure
+          Given a leaf EP with decisions across its EPT
+          When I call ept.compute_decision_context(leaf_ep_id) twice
+          Then the returned structure is identical
+
+        Scenario: Decision queries do not alter snapshot semantics
+          Given a committed snapshot S1
+          And decision state changes but no EP or constraint changes occur
+          When I call snapshot.diff(S1,S1)
+          Then diff classification remains "identical"
+
+        # --- Boundary conditions ---
+      
+        Scenario: Read queries scale to large trees
+          Given an Ettle contains 10,000 EPs
+          When I call ettle.list_eps and ep.list_children repeatedly
+          Then each call completes within configured time budget
+          And memory usage remains within configured limits
+links:
+  - parent: ettle:snapshot_commit
+    parent_ep: ep:snapshot_commit:2
+    child: ettle:action_read_tools

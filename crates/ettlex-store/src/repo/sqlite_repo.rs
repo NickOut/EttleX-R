@@ -5,7 +5,7 @@
 #![allow(clippy::result_large_err)]
 
 use crate::errors::{from_rusqlite, Result};
-use ettlex_core::model::{Ep, Ettle};
+use ettlex_core::model::{Constraint, Ep, EpConstraintRef, Ettle};
 use rusqlite::{Connection, OptionalExtension, Transaction};
 
 /// SQLite repository for Ettles and EPs
@@ -212,6 +212,250 @@ impl SqliteRepo {
             .map_err(from_rusqlite)?;
 
         Ok(result)
+    }
+
+    /// Persist a Constraint to the database
+    ///
+    /// Takes a Constraint from the Store and saves it to the constraints table
+    pub fn persist_constraint(conn: &Connection, constraint: &Constraint) -> Result<()> {
+        let deleted_at_ms = constraint.deleted_at.map(|dt| dt.timestamp_millis());
+
+        conn.execute(
+            "INSERT INTO constraints (constraint_id, family, kind, scope, payload_json, payload_digest, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(constraint_id) DO UPDATE SET
+                family = excluded.family,
+                kind = excluded.kind,
+                scope = excluded.scope,
+                payload_json = excluded.payload_json,
+                payload_digest = excluded.payload_digest,
+                updated_at = excluded.updated_at,
+                deleted_at = excluded.deleted_at",
+            rusqlite::params![
+                constraint.constraint_id,
+                constraint.family,
+                constraint.kind,
+                constraint.scope,
+                constraint.payload_json.to_string(),
+                constraint.payload_digest,
+                constraint.created_at.timestamp_millis(),
+                constraint.updated_at.timestamp_millis(),
+                deleted_at_ms,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+
+        Ok(())
+    }
+
+    /// Persist a Constraint within a transaction
+    pub fn persist_constraint_tx(tx: &Transaction, constraint: &Constraint) -> Result<()> {
+        let deleted_at_ms = constraint.deleted_at.map(|dt| dt.timestamp_millis());
+
+        tx.execute(
+            "INSERT INTO constraints (constraint_id, family, kind, scope, payload_json, payload_digest, created_at, updated_at, deleted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(constraint_id) DO UPDATE SET
+                family = excluded.family,
+                kind = excluded.kind,
+                scope = excluded.scope,
+                payload_json = excluded.payload_json,
+                payload_digest = excluded.payload_digest,
+                updated_at = excluded.updated_at,
+                deleted_at = excluded.deleted_at",
+            rusqlite::params![
+                constraint.constraint_id,
+                constraint.family,
+                constraint.kind,
+                constraint.scope,
+                constraint.payload_json.to_string(),
+                constraint.payload_digest,
+                constraint.created_at.timestamp_millis(),
+                constraint.updated_at.timestamp_millis(),
+                deleted_at_ms,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+
+        Ok(())
+    }
+
+    /// Get a Constraint by ID
+    pub fn get_constraint(conn: &Connection, constraint_id: &str) -> Result<Option<Constraint>> {
+        let result = conn
+            .query_row(
+                "SELECT constraint_id, family, kind, scope, payload_json, payload_digest, created_at, updated_at, deleted_at
+                 FROM constraints
+                 WHERE constraint_id = ?1",
+                [constraint_id],
+                |row| {
+                    let constraint_id: String = row.get(0)?;
+                    let family: String = row.get(1)?;
+                    let kind: String = row.get(2)?;
+                    let scope: String = row.get(3)?;
+                    let payload_json_str: String = row.get(4)?;
+                    let payload_digest: String = row.get(5)?;
+                    let created_at_ms: i64 = row.get(6)?;
+                    let updated_at_ms: i64 = row.get(7)?;
+                    let deleted_at_ms: Option<i64> = row.get(8)?;
+
+                    let payload_json: serde_json::Value =
+                        serde_json::from_str(&payload_json_str).unwrap_or(serde_json::json!({}));
+
+                    let mut constraint = Constraint::new(
+                        constraint_id,
+                        family,
+                        kind,
+                        scope,
+                        payload_json,
+                    );
+
+                    // Override computed digest with stored one (for historical records)
+                    constraint.payload_digest = payload_digest;
+
+                    // Set timestamps from DB
+                    constraint.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                        .unwrap_or_else(chrono::Utc::now);
+                    constraint.updated_at = chrono::DateTime::from_timestamp_millis(updated_at_ms)
+                        .unwrap_or_else(chrono::Utc::now);
+                    constraint.deleted_at =
+                        deleted_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                    Ok(constraint)
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+
+        Ok(result)
+    }
+
+    /// List all Constraints
+    pub fn list_constraints(conn: &Connection) -> Result<Vec<Constraint>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT constraint_id, family, kind, scope, payload_json, payload_digest, created_at, updated_at, deleted_at
+                 FROM constraints
+                 ORDER BY constraint_id",
+            )
+            .map_err(from_rusqlite)?;
+
+        let constraints = stmt
+            .query_map([], |row| {
+                let constraint_id: String = row.get(0)?;
+                let family: String = row.get(1)?;
+                let kind: String = row.get(2)?;
+                let scope: String = row.get(3)?;
+                let payload_json_str: String = row.get(4)?;
+                let payload_digest: String = row.get(5)?;
+                let created_at_ms: i64 = row.get(6)?;
+                let updated_at_ms: i64 = row.get(7)?;
+                let deleted_at_ms: Option<i64> = row.get(8)?;
+
+                let payload_json: serde_json::Value =
+                    serde_json::from_str(&payload_json_str).unwrap_or(serde_json::json!({}));
+
+                let mut constraint =
+                    Constraint::new(constraint_id, family, kind, scope, payload_json);
+
+                constraint.payload_digest = payload_digest;
+                constraint.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                constraint.updated_at = chrono::DateTime::from_timestamp_millis(updated_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                constraint.deleted_at =
+                    deleted_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                Ok(constraint)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(constraints)
+    }
+
+    /// Persist an EP-Constraint attachment record
+    pub fn persist_ep_constraint_ref(
+        conn: &Connection,
+        ref_record: &EpConstraintRef,
+    ) -> Result<()> {
+        conn.execute(
+            "INSERT INTO ep_constraint_refs (ep_id, constraint_id, ordinal, created_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(ep_id, constraint_id) DO UPDATE SET
+                ordinal = excluded.ordinal",
+            rusqlite::params![
+                ref_record.ep_id,
+                ref_record.constraint_id,
+                ref_record.ordinal,
+                ref_record.created_at.timestamp_millis(),
+            ],
+        )
+        .map_err(from_rusqlite)?;
+
+        Ok(())
+    }
+
+    /// List EP-Constraint attachment records for a specific EP
+    pub fn list_ep_constraint_refs(conn: &Connection, ep_id: &str) -> Result<Vec<EpConstraintRef>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT ep_id, constraint_id, ordinal, created_at
+                 FROM ep_constraint_refs
+                 WHERE ep_id = ?1
+                 ORDER BY ordinal",
+            )
+            .map_err(from_rusqlite)?;
+
+        let refs = stmt
+            .query_map([ep_id], |row| {
+                let ep_id: String = row.get(0)?;
+                let constraint_id: String = row.get(1)?;
+                let ordinal: i32 = row.get(2)?;
+                let created_at_ms: i64 = row.get(3)?;
+
+                let mut ref_record = EpConstraintRef::new(ep_id, constraint_id, ordinal);
+                ref_record.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+
+                Ok(ref_record)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(refs)
+    }
+
+    /// List all EP-Constraint attachment records
+    pub fn list_all_ep_constraint_refs(conn: &Connection) -> Result<Vec<EpConstraintRef>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT ep_id, constraint_id, ordinal, created_at
+                 FROM ep_constraint_refs
+                 ORDER BY ep_id, ordinal",
+            )
+            .map_err(from_rusqlite)?;
+
+        let refs = stmt
+            .query_map([], |row| {
+                let ep_id: String = row.get(0)?;
+                let constraint_id: String = row.get(1)?;
+                let ordinal: i32 = row.get(2)?;
+                let created_at_ms: i64 = row.get(3)?;
+
+                let mut ref_record = EpConstraintRef::new(ep_id, constraint_id, ordinal);
+                ref_record.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+
+                Ok(ref_record)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(refs)
     }
 }
 
