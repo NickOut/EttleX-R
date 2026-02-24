@@ -31,7 +31,7 @@
 
 use crate::commands::Command;
 use crate::errors::{EttleXError, Result};
-use crate::ops::{constraint_ops, ep_ops, ettle_ops, refinement_ops, Store};
+use crate::ops::{constraint_ops, decision_ops, ep_ops, ettle_ops, refinement_ops, Store};
 use crate::policy::AnchorPolicy;
 use crate::rules::validation;
 
@@ -205,6 +205,113 @@ pub fn apply(mut state: Store, cmd: Command, policy: &dyn AnchorPolicy) -> Resul
             constraint_id,
         } => {
             constraint_ops::detach_constraint_from_ep(&mut state, &ep_id, &constraint_id)?;
+            Ok(state)
+        }
+
+        Command::DecisionCreate {
+            decision_id,
+            title,
+            status,
+            decision_text,
+            rationale,
+            alternatives_text,
+            consequences_text,
+            evidence_kind,
+            evidence_excerpt,
+            evidence_capture_content,
+            evidence_file_path,
+        } => {
+            decision_ops::create_decision(
+                &mut state,
+                decision_id,
+                title,
+                status,
+                decision_text,
+                rationale,
+                alternatives_text,
+                consequences_text,
+                evidence_kind,
+                evidence_excerpt,
+                evidence_capture_content,
+                evidence_file_path,
+            )?;
+            Ok(state)
+        }
+
+        Command::DecisionUpdate {
+            decision_id,
+            title,
+            status,
+            decision_text,
+            rationale,
+            alternatives_text,
+            consequences_text,
+            evidence_kind,
+            evidence_excerpt,
+            evidence_capture_content,
+            evidence_file_path,
+        } => {
+            decision_ops::update_decision(
+                &mut state,
+                &decision_id,
+                title,
+                status,
+                decision_text,
+                rationale,
+                alternatives_text,
+                consequences_text,
+                evidence_kind,
+                evidence_excerpt,
+                evidence_capture_content,
+                evidence_file_path,
+            )?;
+            Ok(state)
+        }
+
+        Command::DecisionTombstone { decision_id } => {
+            decision_ops::tombstone_decision(&mut state, &decision_id)?;
+            Ok(state)
+        }
+
+        Command::DecisionLink {
+            decision_id,
+            target_kind,
+            target_id,
+            relation_kind,
+            ordinal,
+        } => {
+            decision_ops::attach_decision_to_target(
+                &mut state,
+                &decision_id,
+                target_kind,
+                target_id,
+                relation_kind,
+                ordinal,
+            )?;
+            Ok(state)
+        }
+
+        Command::DecisionUnlink {
+            decision_id,
+            target_kind,
+            target_id,
+            relation_kind,
+        } => {
+            decision_ops::detach_decision_from_target(
+                &mut state,
+                &decision_id,
+                &target_kind,
+                &target_id,
+                &relation_kind,
+            )?;
+            Ok(state)
+        }
+
+        Command::DecisionSupersede {
+            old_decision_id,
+            new_decision_id,
+        } => {
+            decision_ops::supersede_decision(&mut state, &old_decision_id, &new_decision_id)?;
             Ok(state)
         }
     }

@@ -18,6 +18,7 @@ pub mod logging_facility;
 pub mod model;
 pub mod ops;
 pub mod policy;
+pub mod queries;
 pub mod render;
 pub mod rules;
 pub mod snapshot;

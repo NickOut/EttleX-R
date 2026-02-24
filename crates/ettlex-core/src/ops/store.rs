@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use crate::errors::{EttleXError, Result};
-use crate::model::{Constraint, Ep, EpConstraintRef, Ettle};
+use crate::model::{
+    Constraint, Decision, DecisionEvidenceItem, DecisionLink, Ep, EpConstraintRef, Ettle,
+};
 
 /// In-memory store for Ettles, EPs, and Constraints
 ///
@@ -18,6 +20,12 @@ pub struct Store {
     pub(crate) constraints: HashMap<String, Constraint>,
     /// Map of (EP ID, Constraint ID) to EP-Constraint attachment record
     pub(crate) ep_constraint_refs: HashMap<(String, String), EpConstraintRef>,
+    /// Map of Decision ID to Decision
+    pub(crate) decisions: HashMap<String, Decision>,
+    /// Map of Evidence Capture ID to DecisionEvidenceItem
+    pub(crate) decision_evidence_items: HashMap<String, DecisionEvidenceItem>,
+    /// Map of (Decision ID, Target Kind, Target ID, Relation Kind) to DecisionLink
+    pub(crate) decision_links: HashMap<(String, String, String, String), DecisionLink>,
 }
 
 impl Store {
@@ -28,6 +36,9 @@ impl Store {
             eps: HashMap::new(),
             constraints: HashMap::new(),
             ep_constraint_refs: HashMap::new(),
+            decisions: HashMap::new(),
+            decision_evidence_items: HashMap::new(),
+            decision_links: HashMap::new(),
         }
     }
 
@@ -270,6 +281,173 @@ impl Store {
         self.constraints
             .values()
             .filter(|c| !c.is_deleted())
+            .collect()
+    }
+
+    // ===== Decision Methods =====
+
+    /// Get a Decision by ID
+    ///
+    /// Returns the Decision if found and not tombstoned, otherwise returns an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DecisionNotFound` if the decision doesn't exist,
+    /// or `DecisionDeleted` if it was tombstoned.
+    pub fn get_decision(&self, id: &str) -> Result<&Decision> {
+        let decision = self
+            .decisions
+            .get(id)
+            .ok_or_else(|| EttleXError::DecisionNotFound {
+                decision_id: id.to_string(),
+            })?;
+
+        if decision.is_tombstoned() {
+            return Err(EttleXError::DecisionDeleted {
+                decision_id: id.to_string(),
+            });
+        }
+
+        Ok(decision)
+    }
+
+    /// Get a mutable reference to a Decision by ID
+    ///
+    /// Returns the Decision if found and not tombstoned, otherwise returns an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DecisionNotFound` if the decision doesn't exist,
+    /// or `DecisionDeleted` if it was tombstoned.
+    pub fn get_decision_mut(&mut self, id: &str) -> Result<&mut Decision> {
+        let decision = self
+            .decisions
+            .get_mut(id)
+            .ok_or_else(|| EttleXError::DecisionNotFound {
+                decision_id: id.to_string(),
+            })?;
+
+        if decision.is_tombstoned() {
+            return Err(EttleXError::DecisionDeleted {
+                decision_id: id.to_string(),
+            });
+        }
+
+        Ok(decision)
+    }
+
+    /// Insert a Decision into the store
+    ///
+    /// This is an internal method used by CRUD operations.
+    pub fn insert_decision(&mut self, decision: Decision) {
+        self.decisions
+            .insert(decision.decision_id.clone(), decision);
+    }
+
+    /// Get a DecisionEvidenceItem by ID
+    ///
+    /// # Errors
+    ///
+    /// Returns `NotFound` if the evidence item doesn't exist.
+    pub fn get_evidence_item(&self, id: &str) -> Result<&DecisionEvidenceItem> {
+        self.decision_evidence_items
+            .get(id)
+            .ok_or_else(|| EttleXError::Internal {
+                message: format!("Evidence item not found: {}", id),
+            })
+    }
+
+    /// Insert a DecisionEvidenceItem into the store
+    ///
+    /// This is an internal method used by decision operations.
+    pub fn insert_evidence_item(&mut self, item: DecisionEvidenceItem) {
+        self.decision_evidence_items
+            .insert(item.evidence_capture_id.clone(), item);
+    }
+
+    /// Insert a DecisionLink into the store
+    ///
+    /// This is an internal method used by decision link operations.
+    pub fn insert_decision_link(&mut self, link: DecisionLink) {
+        let key = (
+            link.decision_id.clone(),
+            link.target_kind.clone(),
+            link.target_id.clone(),
+            link.relation_kind.clone(),
+        );
+        self.decision_links.insert(key, link);
+    }
+
+    /// Remove a DecisionLink from the store
+    ///
+    /// This is an internal method used by decision unlink operations.
+    pub fn remove_decision_link(
+        &mut self,
+        decision_id: &str,
+        target_kind: &str,
+        target_id: &str,
+        relation_kind: &str,
+    ) {
+        let key = (
+            decision_id.to_string(),
+            target_kind.to_string(),
+            target_id.to_string(),
+            relation_kind.to_string(),
+        );
+        self.decision_links.remove(&key);
+    }
+
+    /// Check if a decision link exists
+    pub fn is_decision_linked(
+        &self,
+        decision_id: &str,
+        target_kind: &str,
+        target_id: &str,
+        relation_kind: &str,
+    ) -> bool {
+        let key = (
+            decision_id.to_string(),
+            target_kind.to_string(),
+            target_id.to_string(),
+            relation_kind.to_string(),
+        );
+        self.decision_links.contains_key(&key)
+    }
+
+    /// List all DecisionLinks for a given target
+    pub fn list_decision_links_for_target(
+        &self,
+        target_kind: &str,
+        target_id: &str,
+    ) -> Vec<&DecisionLink> {
+        self.decision_links
+            .values()
+            .filter(|link| link.target_kind == target_kind && link.target_id == target_id)
+            .collect()
+    }
+
+    /// Get a specific DecisionLink by its composite key
+    pub fn get_decision_link(
+        &self,
+        decision_id: &str,
+        target_kind: &str,
+        target_id: &str,
+        relation_kind: &str,
+    ) -> Option<&DecisionLink> {
+        let key = (
+            decision_id.to_string(),
+            target_kind.to_string(),
+            target_id.to_string(),
+            relation_kind.to_string(),
+        );
+        self.decision_links.get(&key)
+    }
+
+    /// List all non-tombstoned Decisions
+    pub fn list_decisions(&self) -> Vec<&Decision> {
+        self.decisions
+            .values()
+            .filter(|d| !d.is_tombstoned())
             .collect()
     }
 }

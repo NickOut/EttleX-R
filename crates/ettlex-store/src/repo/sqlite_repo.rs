@@ -5,7 +5,9 @@
 #![allow(clippy::result_large_err)]
 
 use crate::errors::{from_rusqlite, Result};
-use ettlex_core::model::{Constraint, Ep, EpConstraintRef, Ettle};
+use ettlex_core::model::{
+    Constraint, Decision, DecisionEvidenceItem, DecisionLink, Ep, EpConstraintRef, Ettle,
+};
 use rusqlite::{Connection, OptionalExtension, Transaction};
 
 /// SQLite repository for Ettles and EPs
@@ -456,6 +458,367 @@ impl SqliteRepo {
             .map_err(from_rusqlite)?;
 
         Ok(refs)
+    }
+
+    /// Persist a Decision to the database
+    ///
+    /// Takes a Decision from the Store and saves it to the decisions table
+    pub fn persist_decision(conn: &Connection, decision: &Decision) -> Result<()> {
+        let tombstoned_at_ms = decision.tombstoned_at.map(|dt| dt.timestamp_millis());
+
+        conn.execute(
+            "INSERT INTO decisions (decision_id, title, status, decision_text, rationale, alternatives_text, consequences_text, evidence_kind, evidence_excerpt, evidence_capture_id, evidence_file_path, evidence_hash, created_at, updated_at, tombstoned_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             ON CONFLICT(decision_id) DO UPDATE SET
+                title = excluded.title,
+                status = excluded.status,
+                decision_text = excluded.decision_text,
+                rationale = excluded.rationale,
+                alternatives_text = excluded.alternatives_text,
+                consequences_text = excluded.consequences_text,
+                evidence_kind = excluded.evidence_kind,
+                evidence_excerpt = excluded.evidence_excerpt,
+                evidence_capture_id = excluded.evidence_capture_id,
+                evidence_file_path = excluded.evidence_file_path,
+                evidence_hash = excluded.evidence_hash,
+                updated_at = excluded.updated_at,
+                tombstoned_at = excluded.tombstoned_at",
+            rusqlite::params![
+                decision.decision_id,
+                decision.title,
+                decision.status,
+                decision.decision_text,
+                decision.rationale,
+                decision.alternatives_text,
+                decision.consequences_text,
+                decision.evidence_kind,
+                decision.evidence_excerpt,
+                decision.evidence_capture_id,
+                decision.evidence_file_path,
+                decision.evidence_hash,
+                decision.created_at.timestamp_millis(),
+                decision.updated_at.timestamp_millis(),
+                tombstoned_at_ms,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+
+        Ok(())
+    }
+
+    /// Persist a Decision within a transaction
+    pub fn persist_decision_tx(tx: &Transaction, decision: &Decision) -> Result<()> {
+        let tombstoned_at_ms = decision.tombstoned_at.map(|dt| dt.timestamp_millis());
+
+        tx.execute(
+            "INSERT INTO decisions (decision_id, title, status, decision_text, rationale, alternatives_text, consequences_text, evidence_kind, evidence_excerpt, evidence_capture_id, evidence_file_path, evidence_hash, created_at, updated_at, tombstoned_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             ON CONFLICT(decision_id) DO UPDATE SET
+                title = excluded.title,
+                status = excluded.status,
+                decision_text = excluded.decision_text,
+                rationale = excluded.rationale,
+                alternatives_text = excluded.alternatives_text,
+                consequences_text = excluded.consequences_text,
+                evidence_kind = excluded.evidence_kind,
+                evidence_excerpt = excluded.evidence_excerpt,
+                evidence_capture_id = excluded.evidence_capture_id,
+                evidence_file_path = excluded.evidence_file_path,
+                evidence_hash = excluded.evidence_hash,
+                updated_at = excluded.updated_at,
+                tombstoned_at = excluded.tombstoned_at",
+            rusqlite::params![
+                decision.decision_id,
+                decision.title,
+                decision.status,
+                decision.decision_text,
+                decision.rationale,
+                decision.alternatives_text,
+                decision.consequences_text,
+                decision.evidence_kind,
+                decision.evidence_excerpt,
+                decision.evidence_capture_id,
+                decision.evidence_file_path,
+                decision.evidence_hash,
+                decision.created_at.timestamp_millis(),
+                decision.updated_at.timestamp_millis(),
+                tombstoned_at_ms,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+
+        Ok(())
+    }
+
+    /// Persist a Decision Evidence Item to the database
+    pub fn persist_evidence_item(conn: &Connection, item: &DecisionEvidenceItem) -> Result<()> {
+        conn.execute(
+            "INSERT INTO decision_evidence_items (evidence_capture_id, source, content, content_hash, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(evidence_capture_id) DO UPDATE SET
+                source = excluded.source,
+                content = excluded.content,
+                content_hash = excluded.content_hash",
+            rusqlite::params![
+                item.evidence_capture_id,
+                item.source,
+                item.content,
+                item.content_hash,
+                item.created_at.timestamp_millis(),
+            ],
+        )
+        .map_err(from_rusqlite)?;
+
+        Ok(())
+    }
+
+    /// Persist a Decision Link to the database
+    pub fn persist_decision_link(conn: &Connection, link: &DecisionLink) -> Result<()> {
+        let tombstoned_at_ms = link.tombstoned_at.map(|dt| dt.timestamp_millis());
+
+        conn.execute(
+            "INSERT INTO decision_links (decision_id, target_kind, target_id, relation_kind, ordinal, created_at, tombstoned_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(decision_id, target_kind, target_id, relation_kind) DO UPDATE SET
+                ordinal = excluded.ordinal,
+                tombstoned_at = excluded.tombstoned_at",
+            rusqlite::params![
+                link.decision_id,
+                link.target_kind,
+                link.target_id,
+                link.relation_kind,
+                link.ordinal,
+                link.created_at.timestamp_millis(),
+                tombstoned_at_ms,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+
+        Ok(())
+    }
+
+    /// Get a Decision by ID
+    pub fn get_decision(conn: &Connection, decision_id: &str) -> Result<Option<Decision>> {
+        let result = conn
+            .query_row(
+                "SELECT decision_id, title, status, decision_text, rationale, alternatives_text, consequences_text, evidence_kind, evidence_excerpt, evidence_capture_id, evidence_file_path, evidence_hash, created_at, updated_at, tombstoned_at
+                 FROM decisions
+                 WHERE decision_id = ?1",
+                [decision_id],
+                |row| {
+                    let decision_id: String = row.get(0)?;
+                    let title: String = row.get(1)?;
+                    let status: String = row.get(2)?;
+                    let decision_text: String = row.get(3)?;
+                    let rationale: String = row.get(4)?;
+                    let alternatives_text: Option<String> = row.get(5)?;
+                    let consequences_text: Option<String> = row.get(6)?;
+                    let evidence_kind: String = row.get(7)?;
+                    let evidence_excerpt: Option<String> = row.get(8)?;
+                    let evidence_capture_id: Option<String> = row.get(9)?;
+                    let evidence_file_path: Option<String> = row.get(10)?;
+                    let evidence_hash: String = row.get(11)?;
+                    let created_at_ms: i64 = row.get(12)?;
+                    let updated_at_ms: i64 = row.get(13)?;
+                    let tombstoned_at_ms: Option<i64> = row.get(14)?;
+
+                    let mut decision = Decision::new(
+                        decision_id,
+                        title,
+                        status,
+                        decision_text,
+                        rationale,
+                        alternatives_text,
+                        consequences_text,
+                        evidence_kind,
+                        evidence_excerpt,
+                        evidence_capture_id,
+                        evidence_file_path,
+                    );
+
+                    decision.evidence_hash = evidence_hash;
+                    decision.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                        .unwrap_or_else(chrono::Utc::now);
+                    decision.updated_at = chrono::DateTime::from_timestamp_millis(updated_at_ms)
+                        .unwrap_or_else(chrono::Utc::now);
+                    decision.tombstoned_at =
+                        tombstoned_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                    Ok(decision)
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+
+        Ok(result)
+    }
+
+    /// List all Decisions
+    pub fn list_decisions(conn: &Connection) -> Result<Vec<Decision>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT decision_id, title, status, decision_text, rationale, alternatives_text, consequences_text, evidence_kind, evidence_excerpt, evidence_capture_id, evidence_file_path, evidence_hash, created_at, updated_at, tombstoned_at
+                 FROM decisions
+                 ORDER BY created_at, decision_id",
+            )
+            .map_err(from_rusqlite)?;
+
+        let decisions = stmt
+            .query_map([], |row| {
+                let decision_id: String = row.get(0)?;
+                let title: String = row.get(1)?;
+                let status: String = row.get(2)?;
+                let decision_text: String = row.get(3)?;
+                let rationale: String = row.get(4)?;
+                let alternatives_text: Option<String> = row.get(5)?;
+                let consequences_text: Option<String> = row.get(6)?;
+                let evidence_kind: String = row.get(7)?;
+                let evidence_excerpt: Option<String> = row.get(8)?;
+                let evidence_capture_id: Option<String> = row.get(9)?;
+                let evidence_file_path: Option<String> = row.get(10)?;
+                let evidence_hash: String = row.get(11)?;
+                let created_at_ms: i64 = row.get(12)?;
+                let updated_at_ms: i64 = row.get(13)?;
+                let tombstoned_at_ms: Option<i64> = row.get(14)?;
+
+                let mut decision = Decision::new(
+                    decision_id,
+                    title,
+                    status,
+                    decision_text,
+                    rationale,
+                    alternatives_text,
+                    consequences_text,
+                    evidence_kind,
+                    evidence_excerpt,
+                    evidence_capture_id,
+                    evidence_file_path,
+                );
+
+                decision.evidence_hash = evidence_hash;
+                decision.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                decision.updated_at = chrono::DateTime::from_timestamp_millis(updated_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                decision.tombstoned_at =
+                    tombstoned_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                Ok(decision)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(decisions)
+    }
+
+    /// List Decision Links for a specific target
+    pub fn list_decision_links(
+        conn: &Connection,
+        target_kind: &str,
+        target_id: &str,
+    ) -> Result<Vec<DecisionLink>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT decision_id, target_kind, target_id, relation_kind, ordinal, created_at, tombstoned_at
+                 FROM decision_links
+                 WHERE target_kind = ?1 AND target_id = ?2
+                 ORDER BY ordinal, relation_kind, decision_id",
+            )
+            .map_err(from_rusqlite)?;
+
+        let links = stmt
+            .query_map([target_kind, target_id], |row| {
+                let decision_id: String = row.get(0)?;
+                let target_kind: String = row.get(1)?;
+                let target_id: String = row.get(2)?;
+                let relation_kind: String = row.get(3)?;
+                let ordinal: i32 = row.get(4)?;
+                let created_at_ms: i64 = row.get(5)?;
+                let tombstoned_at_ms: Option<i64> = row.get(6)?;
+
+                let mut link =
+                    DecisionLink::new(decision_id, target_kind, target_id, relation_kind, ordinal);
+                link.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                link.tombstoned_at =
+                    tombstoned_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                Ok(link)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(links)
+    }
+
+    /// List all Decision Links
+    pub fn list_all_decision_links(conn: &Connection) -> Result<Vec<DecisionLink>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT decision_id, target_kind, target_id, relation_kind, ordinal, created_at, tombstoned_at
+                 FROM decision_links
+                 ORDER BY decision_id, target_kind, target_id, relation_kind",
+            )
+            .map_err(from_rusqlite)?;
+
+        let links = stmt
+            .query_map([], |row| {
+                let decision_id: String = row.get(0)?;
+                let target_kind: String = row.get(1)?;
+                let target_id: String = row.get(2)?;
+                let relation_kind: String = row.get(3)?;
+                let ordinal: i32 = row.get(4)?;
+                let created_at_ms: i64 = row.get(5)?;
+                let tombstoned_at_ms: Option<i64> = row.get(6)?;
+
+                let mut link =
+                    DecisionLink::new(decision_id, target_kind, target_id, relation_kind, ordinal);
+                link.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                link.tombstoned_at =
+                    tombstoned_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                Ok(link)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(links)
+    }
+
+    /// List all Decision Evidence Items
+    pub fn list_all_evidence_items(conn: &Connection) -> Result<Vec<DecisionEvidenceItem>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT evidence_capture_id, source, content, content_hash, created_at
+                 FROM decision_evidence_items
+                 ORDER BY evidence_capture_id",
+            )
+            .map_err(from_rusqlite)?;
+
+        let items = stmt
+            .query_map([], |row| {
+                let evidence_capture_id: String = row.get(0)?;
+                let source: String = row.get(1)?;
+                let content: String = row.get(2)?;
+                let content_hash: String = row.get(3)?;
+                let created_at_ms: i64 = row.get(4)?;
+
+                let mut item = DecisionEvidenceItem::new(evidence_capture_id, source, content);
+                item.content_hash = content_hash;
+                item.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+
+                Ok(item)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(items)
     }
 }
 

@@ -94,6 +94,62 @@ pub enum Command {
         ep_id: String,
         constraint_id: String,
     },
+
+    /// Create a new decision with evidence
+    DecisionCreate {
+        decision_id: Option<String>,
+        title: String,
+        status: Option<String>,
+        decision_text: String,
+        rationale: String,
+        alternatives_text: Option<String>,
+        consequences_text: Option<String>,
+        evidence_kind: String,
+        evidence_excerpt: Option<String>,
+        evidence_capture_content: Option<String>,
+        evidence_file_path: Option<String>,
+    },
+
+    /// Update a decision's fields
+    DecisionUpdate {
+        decision_id: String,
+        title: Option<String>,
+        status: Option<String>,
+        decision_text: Option<String>,
+        rationale: Option<String>,
+        alternatives_text: Option<Option<String>>,
+        consequences_text: Option<Option<String>>,
+        evidence_kind: Option<String>,
+        evidence_excerpt: Option<Option<String>>,
+        evidence_capture_content: Option<String>,
+        evidence_file_path: Option<Option<String>>,
+    },
+
+    /// Tombstone a decision (soft delete)
+    DecisionTombstone { decision_id: String },
+
+    /// Link a decision to a target (EP/Ettle/Constraint/Decision)
+    DecisionLink {
+        decision_id: String,
+        target_kind: String,
+        target_id: String,
+        relation_kind: String,
+        ordinal: i32,
+    },
+
+    /// Unlink a decision from a target
+    DecisionUnlink {
+        decision_id: String,
+        target_kind: String,
+        target_id: String,
+        relation_kind: String,
+    },
+
+    /// Mark one decision as superseding another
+    DecisionSupersede {
+        old_decision_id: String,
+        new_decision_id: String,
+    },
 }
 
 #[cfg(test)]

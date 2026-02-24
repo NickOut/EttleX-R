@@ -218,6 +218,24 @@ pub fn load_tree(conn: &Connection) -> Result<Store> {
         store.insert_ep_constraint_ref(ref_record);
     }
 
+    // Load all Decisions (deterministic order: sorted by created_at, decision_id)
+    let decisions = SqliteRepo::list_decisions(conn)?;
+    for decision in decisions {
+        store.insert_decision(decision);
+    }
+
+    // Load all Decision Evidence Items (deterministic order: sorted by evidence_capture_id)
+    let evidence_items = SqliteRepo::list_all_evidence_items(conn)?;
+    for item in evidence_items {
+        store.insert_evidence_item(item);
+    }
+
+    // Load all Decision Links (deterministic order: sorted by decision_id, target_kind, target_id, relation_kind)
+    let decision_links = SqliteRepo::list_all_decision_links(conn)?;
+    for link in decision_links {
+        store.insert_decision_link(link);
+    }
+
     // Reconstruct ep_ids lists for each Ettle
     // Group EPs by ettle_id using BTreeMap for deterministic iteration
     let mut ettle_eps: BTreeMap<String, Vec<String>> = BTreeMap::new();

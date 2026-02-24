@@ -1,4 +1,5 @@
 pub mod constraint_ops;
+pub mod decision_ops;
 pub mod ep_ops;
 pub mod ettle_ops;
 pub mod projection;

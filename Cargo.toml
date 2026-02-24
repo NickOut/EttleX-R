@@ -44,6 +44,7 @@ uuid = { version = "1.0", features = ["v4", "v7", "serde"] } # UUID generation
 chrono = { version = "0.4", features = ["serde"] } # Date and time handling
 sha2 = "0.10" # SHA256 hashing
 hex = "0.4" # Hex encoding
+base64 = "0.22" # Base64 encoding
 time = "0.3" # Alternative to chrono
 tracing = "0.1" # Structured logging (modern standard)
 tracing-subscriber = "0.3" # Tracing backend

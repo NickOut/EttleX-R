@@ -37,6 +37,14 @@ pub enum ExErrorKind {
     CannotDelete,
     StrandsChild,
 
+    // Decision Errors
+    InvalidDecision,
+    InvalidEvidence,
+    InvalidEvidencePath,
+    DecisionTombstoned,
+    DuplicateLink,
+    InvalidTargetKind,
+
     // Integration/IO (future)
     Io,
     Serialization,
@@ -75,6 +83,12 @@ impl ExErrorKind {
             ExErrorKind::DeterminismViolation => "ERR_DETERMINISM_VIOLATION",
             ExErrorKind::CannotDelete => "ERR_CANNOT_DELETE",
             ExErrorKind::StrandsChild => "ERR_STRANDS_CHILD",
+            ExErrorKind::InvalidDecision => "ERR_INVALID_DECISION",
+            ExErrorKind::InvalidEvidence => "ERR_INVALID_EVIDENCE",
+            ExErrorKind::InvalidEvidencePath => "ERR_INVALID_EVIDENCE_PATH",
+            ExErrorKind::DecisionTombstoned => "ERR_DECISION_TOMBSTONED",
+            ExErrorKind::DuplicateLink => "ERR_DUPLICATE_LINK",
+            ExErrorKind::InvalidTargetKind => "ERR_INVALID_TARGET_KIND",
             ExErrorKind::Io => "ERR_IO",
             ExErrorKind::Serialization => "ERR_SERIALIZATION",
             ExErrorKind::Persistence => "ERR_PERSISTENCE",
@@ -303,6 +317,57 @@ pub enum EttleXError {
         constraint_id: String,
         ep_id: String,
     },
+
+    // ===== Decision Errors =====
+    /// Decision not found in store
+    #[error("Decision not found: {decision_id}")]
+    DecisionNotFound { decision_id: String },
+
+    /// Decision was previously deleted (tombstoned)
+    #[error("Decision was deleted: {decision_id}")]
+    DecisionDeleted { decision_id: String },
+
+    /// Invalid decision (validation failure)
+    #[error("Invalid decision: {reason}")]
+    InvalidDecision { reason: String },
+
+    /// Invalid evidence (validation failure)
+    #[error("Invalid evidence: {reason}")]
+    InvalidEvidence { reason: String },
+
+    /// Invalid evidence path (must be relative, not absolute)
+    #[error("Invalid evidence path: {reason}")]
+    InvalidEvidencePath { reason: String },
+
+    /// Decision is tombstoned and cannot be linked
+    #[error("Decision {decision_id} is tombstoned and cannot be linked")]
+    DecisionTombstoned { decision_id: String },
+
+    /// Decision link not found
+    #[error("Decision link not found: decision={decision_id}, target={target_kind}:{target_id}, relation={relation_kind}")]
+    DecisionLinkNotFound {
+        decision_id: String,
+        target_kind: String,
+        target_id: String,
+        relation_kind: String,
+    },
+
+    /// Duplicate decision link
+    #[error("Duplicate decision link: decision={decision_id}, target={target_kind}:{target_id}, relation={relation_kind}")]
+    DuplicateDecisionLink {
+        decision_id: String,
+        target_kind: String,
+        target_id: String,
+        relation_kind: String,
+    },
+
+    /// Invalid target kind for decision link
+    #[error("Invalid target kind: {target_kind}")]
+    InvalidTargetKind { target_kind: String },
+
+    /// Entity already exists (duplicate ID)
+    #[error("Entity already exists: {entity_id}")]
+    AlreadyExists { entity_id: String },
 
     // ===== Validation Errors =====
     /// Invalid title (empty or whitespace-only)
@@ -780,6 +845,67 @@ impl From<EttleXError> for ExError {
             EttleXError::ApplyAtomicityBreach { message } => ExError::new(ExErrorKind::Internal)
                 .with_op("apply")
                 .with_message(format!("Apply atomicity breach: {}", message)),
+
+            // Decision Errors
+            EttleXError::DecisionNotFound { decision_id } => ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(decision_id)
+                .with_message("Decision not found"),
+
+            EttleXError::DecisionDeleted { decision_id } => ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(decision_id)
+                .with_message("Decision was deleted"),
+
+            EttleXError::InvalidDecision { reason } => ExError::new(ExErrorKind::InvalidDecision)
+                .with_message(format!("Invalid decision: {}", reason)),
+
+            EttleXError::InvalidEvidence { reason } => ExError::new(ExErrorKind::InvalidEvidence)
+                .with_message(format!("Invalid evidence: {}", reason)),
+
+            EttleXError::InvalidEvidencePath { reason } => {
+                ExError::new(ExErrorKind::InvalidEvidencePath)
+                    .with_message(format!("Invalid evidence path: {}", reason))
+            }
+
+            EttleXError::DecisionTombstoned { decision_id } => {
+                ExError::new(ExErrorKind::DecisionTombstoned)
+                    .with_entity_id(decision_id)
+                    .with_message("Decision is tombstoned and cannot be linked")
+            }
+
+            EttleXError::DecisionLinkNotFound {
+                decision_id,
+                target_kind,
+                target_id,
+                relation_kind,
+            } => ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(decision_id)
+                .with_message(format!(
+                    "Decision link not found: target={}:{}, relation={}",
+                    target_kind, target_id, relation_kind
+                )),
+
+            EttleXError::DuplicateDecisionLink {
+                decision_id,
+                target_kind,
+                target_id,
+                relation_kind,
+            } => ExError::new(ExErrorKind::DuplicateLink)
+                .with_entity_id(decision_id)
+                .with_message(format!(
+                    "Duplicate decision link: target={}:{}, relation={}",
+                    target_kind, target_id, relation_kind
+                )),
+
+            EttleXError::InvalidTargetKind { target_kind } => {
+                ExError::new(ExErrorKind::InvalidTargetKind)
+                    .with_message(format!("Invalid target kind: {}", target_kind))
+            }
+
+            EttleXError::AlreadyExists { entity_id } => {
+                ExError::new(ExErrorKind::ConstraintViolation)
+                    .with_entity_id(entity_id)
+                    .with_message("Entity already exists")
+            }
         }
     }
 }
