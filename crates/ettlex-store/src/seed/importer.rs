@@ -79,6 +79,21 @@ pub fn import_seed(path: &Path, conn: &mut Connection) -> Result<String> {
                     if !existing.ep_ids.contains(&ep_id) {
                         existing.ep_ids.push(ep_id.clone());
                     }
+                    // Backfill content_digest for pre-fix rows that have NULL
+                    let needs_digest: bool = tx
+                        .query_row(
+                            "SELECT content_digest IS NULL FROM eps WHERE id = ?1",
+                            [&ep_id],
+                            |row| row.get(0),
+                        )
+                        .unwrap_or(false);
+                    if needs_digest {
+                        tx.execute(
+                            "UPDATE eps SET content_digest = ?1 WHERE id = ?2",
+                            rusqlite::params![ep.content_digest, ep_id],
+                        )
+                        .map_err(crate::errors::from_rusqlite)?;
+                    }
                     store.insert_ep(ep);
                 }
             }

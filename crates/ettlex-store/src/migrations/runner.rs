@@ -22,6 +22,53 @@ pub fn apply_migrations(conn: &mut Connection) -> Result<()> {
         apply_migration(conn, migration.id, migration.sql)?;
     }
 
+    // Backfill content_digest for any EPs written before the digest column was populated
+    backfill_ep_content_digests(conn)?;
+
+    Ok(())
+}
+
+/// Backfill content_digest for EP rows that have NULL (written before the fix).
+///
+/// Reads content_inline JSON, extracts why/what/how, computes SHA-256, and writes
+/// the digest back. This is a no-op for rows that already have a digest.
+fn backfill_ep_content_digests(conn: &Connection) -> Result<()> {
+    use sha2::{Digest, Sha256};
+
+    // Collect rows that need backfilling
+    let mut stmt = conn
+        .prepare("SELECT id, content_inline FROM eps WHERE content_digest IS NULL")
+        .map_err(from_rusqlite)?;
+    let rows: Vec<(String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(from_rusqlite)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(from_rusqlite)?;
+    drop(stmt);
+
+    for (ep_id, content_inline) in rows {
+        let v: serde_json::Value =
+            serde_json::from_str(&content_inline).unwrap_or(serde_json::json!({}));
+        let why = v["why"].as_str().unwrap_or("").to_string();
+        let what = v["what"].as_str().unwrap_or("").to_string();
+        let how = v["how"].as_str().unwrap_or("").to_string();
+
+        let mut map = std::collections::BTreeMap::new();
+        map.insert("how", how.as_str());
+        map.insert("what", what.as_str());
+        map.insert("why", why.as_str());
+        let json = serde_json::to_string(&map).expect("BTreeMap serialization is infallible");
+        let mut hasher = Sha256::new();
+        hasher.update(json.as_bytes());
+        let digest = hex::encode(hasher.finalize());
+
+        conn.execute(
+            "UPDATE eps SET content_digest = ?1 WHERE id = ?2 AND content_digest IS NULL",
+            rusqlite::params![digest, ep_id],
+        )
+        .map_err(from_rusqlite)?;
+    }
+
     Ok(())
 }
 
