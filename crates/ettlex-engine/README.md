@@ -147,6 +147,26 @@ let result = apply_engine_command(cmd, &mut conn, &cas)?;
 - Determined structurally, not by ordinal position
 - Validation enforced at entry point (returns `ConstraintViolation` if EP has child)
 
+### dry_run mode
+
+Setting `dry_run: true` on `SnapshotOptions` performs a non-mutating simulation of the full
+policy pipeline. The engine computes the EPT and manifest but performs no database writes and
+no approval-request routing.
+
+The result always contains a populated `constraint_resolution` field (`Option<DryRunConstraintResolution>`)
+describing what the constraint resolution _would have_ produced:
+
+| Profile state                                   | Result status                                                             |
+| ----------------------------------------------- | ------------------------------------------------------------------------- |
+| No constraints                                  | `Resolved`, `selected_profile_ref = None`, `candidates = []`              |
+| 1 constraint                                    | `Resolved`, `selected_profile_ref = Some(...)`, `candidates = [id]`       |
+| N constraints, `ChooseDeterministic`            | `Resolved`, `selected_profile_ref = Some(lex-first)`, `candidates` sorted |
+| N constraints, `RouteForApproval` or `FailFast` | `RoutedForApproval`, `selected_profile_ref = None`, `candidates` sorted   |
+| `predicate_evaluation_enabled = false`          | `Uncomputed`, no selection, empty candidates                              |
+
+`constraint_resolution` is always `None` in non-dry-run (`Committed`) results.
+`approval_token` is never present in dry-run results.
+
 ### Legacy root resolution
 
 For backward compatibility, use `snapshot_commit_by_root_legacy()`:

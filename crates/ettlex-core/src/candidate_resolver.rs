@@ -87,6 +87,69 @@ pub fn resolve_candidates(
     }
 }
 
+/// Status of a dry-run constraint resolution.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DryRunConstraintStatus {
+    /// Profile has predicate evaluation disabled; resolution was not attempted.
+    Uncomputed,
+    /// Resolution completed (or no constraints exist).
+    Resolved,
+    /// Multiple candidates and policy would route for approval.
+    RoutedForApproval,
+}
+
+/// Result of a dry-run constraint resolution — computed without side effects.
+#[derive(Debug, Clone)]
+pub struct DryRunConstraintResolution {
+    /// Resolution status.
+    pub status: DryRunConstraintStatus,
+    /// Winning candidate ID when `status == Resolved` and at least one candidate exists.
+    pub selected_profile_ref: Option<String>,
+    /// All candidate IDs sorted lexicographically; empty for `Uncomputed`.
+    pub candidates: Vec<String>,
+}
+
+/// Compute what constraint resolution *would* produce without any side effects.
+///
+/// Does NOT call `ApprovalRouter`, does NOT write anything.
+/// Use this in `dry_run` mode to populate `SnapshotCommitResult::constraint_resolution`.
+pub fn compute_dry_run_resolution(
+    candidates: &[CandidateEntry],
+    policy: &AmbiguityPolicy,
+) -> DryRunConstraintResolution {
+    match candidates.len() {
+        0 => DryRunConstraintResolution {
+            status: DryRunConstraintStatus::Resolved,
+            selected_profile_ref: None,
+            candidates: vec![],
+        },
+        1 => DryRunConstraintResolution {
+            status: DryRunConstraintStatus::Resolved,
+            selected_profile_ref: Some(candidates[0].candidate_id.clone()),
+            candidates: vec![candidates[0].candidate_id.clone()],
+        },
+        _ => {
+            let mut sorted: Vec<String> =
+                candidates.iter().map(|c| c.candidate_id.clone()).collect();
+            sorted.sort();
+            match policy {
+                AmbiguityPolicy::ChooseDeterministic => DryRunConstraintResolution {
+                    status: DryRunConstraintStatus::Resolved,
+                    selected_profile_ref: Some(sorted[0].clone()),
+                    candidates: sorted,
+                },
+                AmbiguityPolicy::RouteForApproval | AmbiguityPolicy::FailFast => {
+                    DryRunConstraintResolution {
+                        status: DryRunConstraintStatus::RoutedForApproval,
+                        selected_profile_ref: None,
+                        candidates: sorted,
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

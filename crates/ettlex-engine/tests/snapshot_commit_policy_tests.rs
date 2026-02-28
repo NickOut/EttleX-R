@@ -3,6 +3,7 @@
 //! All 22 Gherkin scenarios from the Ettle spec are tested here.
 
 use ettlex_core::approval_router::NoopApprovalRouter;
+use ettlex_core::candidate_resolver::DryRunConstraintStatus;
 use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy::{DenyAllCommitPolicyHook, NoopCommitPolicyHook};
 use ettlex_engine::commands::engine_command::{
@@ -39,6 +40,21 @@ fn seed_leaf_ep(conn: &Connection) {
 
 fn seed_profile(conn: &Connection, profile_ref: &str, ambiguity_policy: &str) {
     let payload = format!(r#"{{"ambiguity_policy": "{}"}}"#, ambiguity_policy);
+    conn.execute(
+        "INSERT INTO profiles (profile_ref, payload_json, is_default, created_at) VALUES (?1, ?2, 0, 0)",
+        rusqlite::params![profile_ref, payload],
+    ).unwrap();
+}
+
+fn seed_profile_with_disabled_evaluation(
+    conn: &Connection,
+    profile_ref: &str,
+    ambiguity_policy: &str,
+) {
+    let payload = format!(
+        r#"{{"ambiguity_policy": "{}", "predicate_evaluation_enabled": false}}"#,
+        ambiguity_policy
+    );
     conn.execute(
         "INSERT INTO profiles (profile_ref, payload_json, is_default, created_at) VALUES (?1, ?2, 0, 0)",
         rusqlite::params![profile_ref, payload],
@@ -721,6 +737,14 @@ fn test_dry_run_no_writes() {
         !r.semantic_manifest_digest.is_empty(),
         "dry_run: semantic digest must be computed"
     );
+    // No constraints → constraint_resolution present with Resolved status, no selection
+    let cr = r
+        .constraint_resolution
+        .as_ref()
+        .expect("constraint_resolution must be present");
+    assert_eq!(cr.status, DryRunConstraintStatus::Resolved);
+    assert!(cr.selected_profile_ref.is_none());
+    assert!(cr.candidates.is_empty());
     assert_eq!(snapshot_count(&conn), 0);
     assert_eq!(approval_count(&conn), 0);
 }
@@ -757,13 +781,23 @@ fn test_dry_run_no_routing() {
         &router,
     );
 
-    // dry_run suppresses routing — returns Committed with empty fields
+    // dry_run suppresses routing — returns Committed with empty fields and constraint_resolution
     assert!(result.is_ok());
     let EngineCommandResult::SnapshotCommit(r) = result.unwrap() else {
         panic!()
     };
     assert!(r.snapshot_id.is_empty());
     assert!(r.head_after.is_empty());
+    // 2 constraints + route_for_approval → status=RoutedForApproval, no token
+    let cr = r
+        .constraint_resolution
+        .as_ref()
+        .expect("constraint_resolution must be present");
+    assert_eq!(cr.status, DryRunConstraintStatus::RoutedForApproval);
+    assert!(cr.selected_profile_ref.is_none());
+    let mut expected = vec!["constraint:a".to_string(), "constraint:b".to_string()];
+    expected.sort();
+    assert_eq!(cr.candidates, expected);
     assert_eq!(snapshot_count(&conn), 0);
     assert_eq!(approval_count(&conn), 0);
 }
@@ -981,4 +1015,94 @@ fn test_approval_request_deterministic_excl_created_at() {
         digest1, digest2,
         "Semantic request digest must be identical for identical inputs"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 23: dry_run computes constraint_resolution via predicate evaluator
+//              but performs no writes (1 constraint → Resolved)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_dry_run_computes_resolved_constraint_resolution() {
+    let (_tmp, mut conn, cas) = setup_db();
+    seed_leaf_ep(&conn);
+    seed_profile(&conn, "profile/ff@0", "fail_fast");
+    seed_constraint(&conn, "constraint:p", "ep:root:0", 0);
+
+    let result = apply_engine_command(
+        EngineCommand::SnapshotCommit {
+            leaf_ep_id: "ep:root:0".to_string(),
+            policy_ref: "policy/default@0".to_string(),
+            profile_ref: Some("profile/ff@0".to_string()),
+            options: SnapshotOptions {
+                expected_head: None,
+                dry_run: true,
+            },
+        },
+        &mut conn,
+        &cas,
+        &NoopCommitPolicyHook,
+        &NoopApprovalRouter,
+    );
+
+    assert!(result.is_ok());
+    let EngineCommandResult::SnapshotCommit(r) = result.unwrap() else {
+        panic!()
+    };
+    assert!(r.snapshot_id.is_empty(), "dry_run: no snapshot_id");
+    assert!(r.head_after.is_empty(), "dry_run: no head_after");
+    // 1 constraint → Resolved with selected_profile_ref = constraint id
+    let cr = r
+        .constraint_resolution
+        .as_ref()
+        .expect("constraint_resolution must be present");
+    assert_eq!(cr.status, DryRunConstraintStatus::Resolved);
+    assert_eq!(cr.selected_profile_ref.as_deref(), Some("constraint:p"));
+    assert_eq!(cr.candidates, vec!["constraint:p".to_string()]);
+    assert_eq!(snapshot_count(&conn), 0);
+    assert_eq!(approval_count(&conn), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 25: dry_run yields Uncomputed when predicate evaluation is disabled
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_dry_run_yields_uncomputed_when_predicate_evaluation_disabled() {
+    let (_tmp, mut conn, cas) = setup_db();
+    seed_leaf_ep(&conn);
+    seed_profile_with_disabled_evaluation(&conn, "profile/no-eval@0", "fail_fast");
+
+    let result = apply_engine_command(
+        EngineCommand::SnapshotCommit {
+            leaf_ep_id: "ep:root:0".to_string(),
+            policy_ref: "policy/default@0".to_string(),
+            profile_ref: Some("profile/no-eval@0".to_string()),
+            options: SnapshotOptions {
+                expected_head: None,
+                dry_run: true,
+            },
+        },
+        &mut conn,
+        &cas,
+        &NoopCommitPolicyHook,
+        &NoopApprovalRouter,
+    );
+
+    assert!(result.is_ok());
+    let EngineCommandResult::SnapshotCommit(r) = result.unwrap() else {
+        panic!()
+    };
+    assert!(r.snapshot_id.is_empty(), "dry_run: no snapshot_id");
+    assert!(r.head_after.is_empty(), "dry_run: no head_after");
+    // predicate_evaluation_enabled=false → Uncomputed
+    let cr = r
+        .constraint_resolution
+        .as_ref()
+        .expect("constraint_resolution must be present");
+    assert_eq!(cr.status, DryRunConstraintStatus::Uncomputed);
+    assert!(cr.selected_profile_ref.is_none());
+    assert!(cr.candidates.is_empty());
+    assert_eq!(snapshot_count(&conn), 0);
+    assert_eq!(approval_count(&conn), 0);
 }

@@ -14,7 +14,8 @@
 
 use ettlex_core::approval_router::ApprovalRouter;
 use ettlex_core::candidate_resolver::{
-    resolve_candidates, AmbiguityPolicy, CandidateEntry, ResolveResult,
+    compute_dry_run_resolution, resolve_candidates, AmbiguityPolicy, CandidateEntry,
+    DryRunConstraintResolution, DryRunConstraintStatus, ResolveResult,
 };
 use ettlex_core::errors::{ExError, ExErrorKind};
 use ettlex_core::policy::CommitPolicyHook;
@@ -50,6 +51,9 @@ pub struct SnapshotCommitResult {
     /// Head after this commit = manifest_digest of the newly committed manifest.
     /// Empty string in dry-run mode.
     pub head_after: String,
+    /// Populated only in dry_run mode; `None` for real commits.
+    /// Describes what constraint resolution *would have* produced.
+    pub constraint_resolution: Option<DryRunConstraintResolution>,
 }
 
 /// Result returned when a commit is routed for approval.
@@ -129,13 +133,16 @@ fn validate_leaf_ep(store: &ettlex_core::ops::store::Store, ep_id: &str) -> Resu
     Ok(())
 }
 
-/// Resolve the profile's ambiguity_policy from the profiles table.
+/// Resolved profile settings used during snapshot commit.
+struct ResolvedProfile {
+    ambiguity_policy: AmbiguityPolicy,
+    predicate_evaluation_enabled: bool,
+}
+
+/// Resolve the profile's settings from the profiles table.
 /// If profile_ref is None, uses "profile/default@0" as fallback (no error if missing).
 /// If an explicit profile_ref is given but not found, returns ProfileNotFound.
-fn resolve_ambiguity_policy(
-    conn: &Connection,
-    profile_ref: Option<&str>,
-) -> Result<AmbiguityPolicy> {
+fn resolve_profile(conn: &Connection, profile_ref: Option<&str>) -> Result<ResolvedProfile> {
     let effective_ref = profile_ref.unwrap_or("profile/default@0");
 
     match ettlex_store::profile::load_profile_payload(conn, effective_ref)? {
@@ -143,18 +150,28 @@ fn resolve_ambiguity_policy(
             // Explicit ref given but not found → error
             if profile_ref.is_some() {
                 return Err(ExError::new(ExErrorKind::ProfileNotFound)
-                    .with_op("resolve_ambiguity_policy")
+                    .with_op("resolve_profile")
                     .with_message(format!("Profile not found: {}", effective_ref)));
             }
-            // No explicit ref and no default → use FailFast
-            Ok(AmbiguityPolicy::FailFast)
+            // No explicit ref and no default → use FailFast with evaluation enabled
+            Ok(ResolvedProfile {
+                ambiguity_policy: AmbiguityPolicy::FailFast,
+                predicate_evaluation_enabled: true,
+            })
         }
         Some(payload) => {
             let policy_str = payload
                 .get("ambiguity_policy")
                 .and_then(|v| v.as_str())
                 .unwrap_or("fail_fast");
-            Ok(AmbiguityPolicy::parse(policy_str))
+            let eval_enabled = payload
+                .get("predicate_evaluation_enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            Ok(ResolvedProfile {
+                ambiguity_policy: AmbiguityPolicy::parse(policy_str),
+                predicate_evaluation_enabled: eval_enabled,
+            })
         }
     }
 }
@@ -249,8 +266,8 @@ pub fn snapshot_commit_by_leaf(
     let ep = store.get_ep(leaf_ep_id).map_err(ExError::from)?;
     let root_ettle_id = find_ancestor_root(&store, &ep.ettle_id);
 
-    // Step 4: Profile resolution → ambiguity_policy
-    let ambiguity_policy = resolve_ambiguity_policy(conn, profile_ref)?;
+    // Step 4: Profile resolution → ambiguity_policy + predicate_evaluation_enabled
+    let profile = resolve_profile(conn, profile_ref)?;
 
     // Step 5: EPT computation (EptAmbiguous and DeterminismViolation are NOT waivable)
     let ept = compute_ept(&store, &root_ettle_id, None).map_err(|e| {
@@ -265,33 +282,73 @@ pub fn snapshot_commit_by_leaf(
         }
     })?;
 
-    // Step 6: Constraint candidate resolution (skipped in dry_run — no routing allowed)
-    if !options.dry_run {
-        let constraint_refs = store.list_ep_constraint_refs(leaf_ep_id);
-        let candidates: Vec<CandidateEntry> = constraint_refs
-            .iter()
-            .map(|r| CandidateEntry {
-                candidate_id: r.constraint_id.clone(),
-                priority: r.ordinal as i64,
+    // Step 6: Constraint candidate resolution
+    // dry_run: invoke in non-mutating mode to compute would-be result (no routing, no writes)
+    // normal: invoke with router (may create approval request)
+    let constraint_refs = store.list_ep_constraint_refs(leaf_ep_id);
+    let candidates: Vec<CandidateEntry> = constraint_refs
+        .iter()
+        .map(|r| CandidateEntry {
+            candidate_id: r.constraint_id.clone(),
+            priority: r.ordinal as i64,
+        })
+        .collect();
+
+    if options.dry_run {
+        // Step 7: dry_run short-circuit — compute manifest and return without writes
+        let store_schema_version = get_store_schema_version(conn)?;
+        let seed_digest = get_seed_digest(conn)?;
+
+        let manifest = generate_manifest(
+            ept,
+            policy_ref.to_string(),
+            effective_profile_ref.to_string(),
+            root_ettle_id.clone(),
+            store_schema_version,
+            seed_digest,
+            &store,
+        )?;
+
+        let dry_run_resolution = if profile.predicate_evaluation_enabled {
+            Some(compute_dry_run_resolution(
+                &candidates,
+                &profile.ambiguity_policy,
+            ))
+        } else {
+            Some(DryRunConstraintResolution {
+                status: DryRunConstraintStatus::Uncomputed,
+                selected_profile_ref: None,
+                candidates: vec![],
             })
-            .collect();
+        };
 
-        let resolve_result = resolve_candidates(&candidates, &ambiguity_policy, approval_router)?;
-
-        if let ResolveResult::PendingApproval(token) = resolve_result {
-            let candidate_ids: Vec<String> =
-                candidates.iter().map(|c| c.candidate_id.clone()).collect();
-            return Ok(SnapshotCommitOutcome::RoutedForApproval(
-                RoutedForApprovalResult {
-                    approval_token: token,
-                    reason_code: "AmbiguousSelection".to_string(),
-                    candidate_set: candidate_ids,
-                },
-            ));
-        }
+        return Ok(SnapshotCommitOutcome::Committed(SnapshotCommitResult {
+            snapshot_id: String::new(),
+            manifest_digest: manifest.manifest_digest.clone(),
+            semantic_manifest_digest: manifest.semantic_manifest_digest.clone(),
+            was_duplicate: false,
+            head_after: String::new(),
+            constraint_resolution: dry_run_resolution,
+        }));
     }
 
-    // Step 7: dry_run short-circuit
+    // Normal (non-dry-run) constraint resolution with routing
+    let resolve_result =
+        resolve_candidates(&candidates, &profile.ambiguity_policy, approval_router)?;
+
+    if let ResolveResult::PendingApproval(token) = resolve_result {
+        let candidate_ids: Vec<String> =
+            candidates.iter().map(|c| c.candidate_id.clone()).collect();
+        return Ok(SnapshotCommitOutcome::RoutedForApproval(
+            RoutedForApprovalResult {
+                approval_token: token,
+                reason_code: "AmbiguousSelection".to_string(),
+                candidate_set: candidate_ids,
+            },
+        ));
+    }
+
+    // Step 7 (normal): Compute manifest
     let store_schema_version = get_store_schema_version(conn)?;
     let seed_digest = get_seed_digest(conn)?;
 
@@ -304,16 +361,6 @@ pub fn snapshot_commit_by_leaf(
         seed_digest,
         &store,
     )?;
-
-    if options.dry_run {
-        return Ok(SnapshotCommitOutcome::Committed(SnapshotCommitResult {
-            snapshot_id: String::new(),
-            manifest_digest: manifest.manifest_digest.clone(),
-            semantic_manifest_digest: manifest.semantic_manifest_digest.clone(),
-            was_duplicate: false,
-            head_after: String::new(),
-        }));
-    }
 
     // Step 8: Persist (HeadMismatch surfaces from store layer)
     let persist_options = ettlex_store::snapshot::persist::SnapshotOptions {
@@ -329,6 +376,7 @@ pub fn snapshot_commit_by_leaf(
         manifest_digest: persist_result.manifest_digest,
         semantic_manifest_digest: persist_result.semantic_manifest_digest,
         was_duplicate: persist_result.was_duplicate,
+        constraint_resolution: None,
     }))
 }
 
