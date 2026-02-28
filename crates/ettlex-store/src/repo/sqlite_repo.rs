@@ -95,7 +95,7 @@ impl SqliteRepo {
                 ep.ordinal,
                 if ep.normative { 1 } else { 0 },
                 ep.child_ettle_id,
-                None::<String>, // content_digest (will use CAS in future)
+                Some(ep.content_digest.clone()), // content_digest
                 content_inline,
                 if ep.deleted { 1 } else { 0 },
                 ep.created_at.timestamp(),
@@ -130,7 +130,7 @@ impl SqliteRepo {
                 ep.ordinal,
                 if ep.normative { 1 } else { 0 },
                 ep.child_ettle_id,
-                None::<String>,
+                Some(ep.content_digest.clone()), // content_digest
                 content_inline,
                 if ep.deleted { 1 } else { 0 },
                 ep.created_at.timestamp(),

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// Ettle Partition (EP) - represents a refinement relationship or statement
 ///
@@ -35,6 +36,9 @@ pub struct Ep {
     /// HOW: Implementation or operational details
     pub how: String,
 
+    /// SHA-256 hex digest of canonical WHY+WHAT+HOW JSON (alphabetical keys)
+    pub content_digest: String,
+
     /// Timestamp when this EP was created
     pub created_at: DateTime<Utc>,
 
@@ -66,6 +70,7 @@ impl Ep {
         how: String,
     ) -> Self {
         let now = Utc::now();
+        let content_digest = Self::compute_content_digest(&why, &what, &how);
         Self {
             id,
             ettle_id,
@@ -75,10 +80,22 @@ impl Ep {
             why,
             what,
             how,
+            content_digest,
             created_at: now,
             updated_at: now,
             deleted: false,
         }
+    }
+
+    fn compute_content_digest(why: &str, what: &str, how: &str) -> String {
+        let mut map = std::collections::BTreeMap::new();
+        map.insert("how", how);
+        map.insert("what", what);
+        map.insert("why", why);
+        let json = serde_json::to_string(&map).expect("BTreeMap serialization is infallible");
+        let mut hasher = Sha256::new();
+        hasher.update(json.as_bytes());
+        hex::encode(hasher.finalize())
     }
 
     /// Check if this EP is a leaf (has no child)
@@ -100,6 +117,72 @@ impl Ep {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_ep_content_digest_is_64_chars() {
+        let ep = Ep::new(
+            "ep-1".to_string(),
+            "ettle-1".to_string(),
+            0,
+            true,
+            "Why text".to_string(),
+            "What text".to_string(),
+            "How text".to_string(),
+        );
+        assert_eq!(ep.content_digest.len(), 64, "SHA-256 hex must be 64 chars");
+    }
+
+    #[test]
+    fn test_ep_content_digest_is_deterministic() {
+        let ep1 = Ep::new(
+            "ep-id-1".to_string(),
+            "ettle-1".to_string(),
+            0,
+            true,
+            "Same why".to_string(),
+            "Same what".to_string(),
+            "Same how".to_string(),
+        );
+        let ep2 = Ep::new(
+            "ep-id-2".to_string(), // different id
+            "ettle-2".to_string(), // different ettle
+            1,
+            false,
+            "Same why".to_string(),
+            "Same what".to_string(),
+            "Same how".to_string(),
+        );
+        assert_eq!(
+            ep1.content_digest, ep2.content_digest,
+            "Same content → same digest regardless of id/ettle"
+        );
+    }
+
+    #[test]
+    fn test_ep_content_digest_changes_with_content() {
+        let ep1 = Ep::new(
+            "ep-1".to_string(),
+            "ettle-1".to_string(),
+            0,
+            true,
+            "Why A".to_string(),
+            "What A".to_string(),
+            "How A".to_string(),
+        );
+        let ep2 = Ep::new(
+            "ep-1".to_string(),
+            "ettle-1".to_string(),
+            0,
+            true,
+            "Why B".to_string(),
+            "What B".to_string(),
+            "How B".to_string(),
+        );
+        assert_ne!(
+            ep1.content_digest, ep2.content_digest,
+            "Different content → different digest"
+        );
+    }
 
     #[test]
     fn test_new_ep() {
