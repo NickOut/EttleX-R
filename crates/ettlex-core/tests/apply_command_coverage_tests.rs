@@ -12,7 +12,7 @@
 
 use ettlex_core::{
     apply,
-    ops::{ep_ops, ettle_ops, refinement_ops},
+    ops::{decision_ops, ep_ops, ettle_ops, refinement_ops},
     policy::NeverAnchoredPolicy,
     Command, EttleXError, Metadata, Store,
 };
@@ -351,4 +351,224 @@ fn test_command_error_refine_link_child_already_has_parent() {
         result,
         Err(EttleXError::ChildAlreadyHasParent { .. })
     ));
+}
+
+// ---------------------------------------------------------------------------
+// Decision command coverage
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_command_decision_create_via_apply() {
+    let state = Store::new();
+    let policy = NeverAnchoredPolicy;
+
+    let new_state = apply(
+        state,
+        Command::DecisionCreate {
+            decision_id: Some("decision:001".to_string()),
+            title: "Adopt event sourcing".to_string(),
+            status: Some("proposed".to_string()),
+            decision_text: "We adopt event sourcing for all state changes.".to_string(),
+            rationale: "Enables auditability and replay.".to_string(),
+            alternatives_text: None,
+            consequences_text: None,
+            evidence_kind: "none".to_string(),
+            evidence_excerpt: None,
+            evidence_capture_content: None,
+            evidence_file_path: None,
+        },
+        &policy,
+    )
+    .unwrap();
+
+    let decision = new_state.get_decision("decision:001").unwrap();
+    assert_eq!(decision.title, "Adopt event sourcing");
+}
+
+#[test]
+fn test_command_decision_update_via_apply() {
+    let mut state = Store::new();
+    let policy = NeverAnchoredPolicy;
+
+    decision_ops::create_decision(
+        &mut state,
+        Some("decision:upd".to_string()),
+        "Original".to_string(),
+        None,
+        "Body.".to_string(),
+        "Rationale.".to_string(),
+        None,
+        None,
+        "none".to_string(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let new_state = apply(
+        state,
+        Command::DecisionUpdate {
+            decision_id: "decision:upd".to_string(),
+            title: Some("Updated".to_string()),
+            status: None,
+            decision_text: None,
+            rationale: None,
+            alternatives_text: None,
+            consequences_text: None,
+            evidence_kind: None,
+            evidence_excerpt: None,
+            evidence_capture_content: None,
+            evidence_file_path: None,
+        },
+        &policy,
+    )
+    .unwrap();
+
+    let decision = new_state.get_decision("decision:upd").unwrap();
+    assert_eq!(decision.title, "Updated");
+}
+
+#[test]
+fn test_command_decision_tombstone_via_apply() {
+    let mut state = Store::new();
+    let policy = NeverAnchoredPolicy;
+
+    decision_ops::create_decision(
+        &mut state,
+        Some("decision:tomb2".to_string()),
+        "To be tombstoned".to_string(),
+        None,
+        "Body.".to_string(),
+        "Rationale.".to_string(),
+        None,
+        None,
+        "none".to_string(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let new_state = apply(
+        state,
+        Command::DecisionTombstone {
+            decision_id: "decision:tomb2".to_string(),
+        },
+        &policy,
+    )
+    .unwrap();
+
+    // After tombstone, get_decision should fail
+    assert!(new_state.get_decision("decision:tomb2").is_err());
+}
+
+#[test]
+fn test_command_decision_link_and_unlink_via_apply() {
+    let mut state = Store::new();
+    let policy = NeverAnchoredPolicy;
+
+    let ettle_id =
+        ettle_ops::create_ettle(&mut state, "Root".to_string(), None, None, None, None).unwrap();
+    let ep_id = state.get_ettle(&ettle_id).unwrap().ep_ids[0].clone();
+
+    decision_ops::create_decision(
+        &mut state,
+        Some("decision:lnk2".to_string()),
+        "Link test".to_string(),
+        None,
+        "Body.".to_string(),
+        "Rationale.".to_string(),
+        None,
+        None,
+        "none".to_string(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let new_state = apply(
+        state,
+        Command::DecisionLink {
+            decision_id: "decision:lnk2".to_string(),
+            target_kind: "ep".to_string(),
+            target_id: ep_id.clone(),
+            relation_kind: "grounds".to_string(),
+            ordinal: 0,
+        },
+        &policy,
+    )
+    .unwrap();
+
+    let linked = new_state.get_decision_link("decision:lnk2", "ep", &ep_id, "grounds");
+    assert!(linked.is_some());
+
+    let unlinked_state = apply(
+        new_state,
+        Command::DecisionUnlink {
+            decision_id: "decision:lnk2".to_string(),
+            target_kind: "ep".to_string(),
+            target_id: ep_id.clone(),
+            relation_kind: "grounds".to_string(),
+        },
+        &policy,
+    )
+    .unwrap();
+
+    let still_linked = unlinked_state.get_decision_link("decision:lnk2", "ep", &ep_id, "grounds");
+    assert!(still_linked.is_none());
+}
+
+#[test]
+fn test_command_decision_supersede_via_apply() {
+    let mut state = Store::new();
+    let policy = NeverAnchoredPolicy;
+
+    decision_ops::create_decision(
+        &mut state,
+        Some("decision:old2".to_string()),
+        "Old decision".to_string(),
+        None,
+        "Body.".to_string(),
+        "Rationale.".to_string(),
+        None,
+        None,
+        "none".to_string(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    decision_ops::create_decision(
+        &mut state,
+        Some("decision:new2".to_string()),
+        "New decision".to_string(),
+        None,
+        "Body.".to_string(),
+        "Rationale.".to_string(),
+        None,
+        None,
+        "none".to_string(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let new_state = apply(
+        state,
+        Command::DecisionSupersede {
+            old_decision_id: "decision:old2".to_string(),
+            new_decision_id: "decision:new2".to_string(),
+        },
+        &policy,
+    )
+    .unwrap();
+
+    // supersede_decision creates link: (old_id) --supersedes--> (new_id)
+    let link =
+        new_state.get_decision_link("decision:old2", "decision", "decision:new2", "supersedes");
+    assert!(link.is_some());
 }

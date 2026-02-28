@@ -16,6 +16,7 @@
 
 #![allow(clippy::result_large_err)]
 
+use ettlex_core::errors::ExError;
 use ettlex_core::ops::decision_ops;
 use ettlex_core::{log_op_end, log_op_error, log_op_start};
 use ettlex_store::errors::Result;
@@ -306,8 +307,11 @@ fn decision_tombstone_impl(decision_id: String, conn: &Connection) -> Result<()>
     // Apply command
     decision_ops::tombstone_decision(&mut store, &decision_id)?;
 
-    // Persist decision
-    let decision = store.get_decision(&decision_id)?;
+    // Persist decision — use get_decision_including_deleted because the decision
+    // is now tombstoned and get_decision would return DecisionDeleted.
+    let decision = store
+        .get_decision_including_deleted(&decision_id)
+        .map_err(ExError::from)?;
     SqliteRepo::persist_decision(conn, decision)?;
 
     Ok(())

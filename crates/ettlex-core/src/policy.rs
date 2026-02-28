@@ -125,6 +125,45 @@ impl AnchorPolicy for SelectedAnchoredPolicy {
     }
 }
 
+/// Commit policy hook: allow or deny a snapshot commit before any writes.
+pub trait CommitPolicyHook: Send + Sync {
+    /// Check whether the commit is allowed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ExErrorKind::PolicyDenied` if the commit is denied by policy.
+    #[allow(clippy::result_large_err)]
+    fn check(
+        &self,
+        policy_ref: &str,
+        profile_ref: &str,
+        leaf_ep_id: &str,
+    ) -> std::result::Result<(), crate::errors::ExError>;
+}
+
+/// Always allows (noop - for CLI default and tests that don't test policy denial).
+pub struct NoopCommitPolicyHook;
+
+impl CommitPolicyHook for NoopCommitPolicyHook {
+    #[allow(clippy::result_large_err)]
+    fn check(&self, _: &str, _: &str, _: &str) -> std::result::Result<(), crate::errors::ExError> {
+        Ok(())
+    }
+}
+
+/// Always denies (for tests that verify PolicyDenied stops all writes).
+pub struct DenyAllCommitPolicyHook;
+
+impl CommitPolicyHook for DenyAllCommitPolicyHook {
+    #[allow(clippy::result_large_err)]
+    fn check(&self, _: &str, _: &str, _: &str) -> std::result::Result<(), crate::errors::ExError> {
+        Err(
+            crate::errors::ExError::new(crate::errors::ExErrorKind::PolicyDenied)
+                .with_message("DenyAll policy hook"),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +202,25 @@ mod tests {
         assert!(policy.is_anchored_ettle("ettle-v1"));
         assert!(!policy.is_anchored_ettle("ettle-draft"));
         assert!(!policy.is_anchored_ep("any-ep"));
+    }
+
+    #[test]
+    fn test_commit_policy_hook_noop_allows() {
+        let hook = NoopCommitPolicyHook;
+        let result = hook.check("policy/default@0", "profile/default@0", "ep:root:0");
+        assert!(result.is_ok(), "NoopCommitPolicyHook should always allow");
+    }
+
+    #[test]
+    fn test_commit_policy_hook_deny_all_denies() {
+        use crate::errors::ExErrorKind;
+        let hook = DenyAllCommitPolicyHook;
+        let result = hook.check("policy/default@0", "profile/default@0", "ep:root:0");
+        assert!(
+            result.is_err(),
+            "DenyAllCommitPolicyHook should always deny"
+        );
+        assert_eq!(result.unwrap_err().kind(), ExErrorKind::PolicyDenied);
     }
 
     #[test]

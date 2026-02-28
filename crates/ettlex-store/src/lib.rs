@@ -10,6 +10,7 @@ pub mod cas;
 pub mod db;
 pub mod errors;
 pub mod migrations;
+pub mod profile;
 pub mod repo;
 pub mod seed;
 pub mod snapshot;

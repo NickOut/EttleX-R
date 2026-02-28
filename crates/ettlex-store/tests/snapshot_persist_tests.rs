@@ -193,7 +193,7 @@ fn test_commit_snapshot_expected_head_success() {
         &cas,
         manifest2,
         SnapshotOptions {
-            expected_head: Some(result1.snapshot_id.clone()),
+            expected_head: Some(result1.manifest_digest.clone()),
             dry_run: false,
         },
     )
@@ -228,10 +228,10 @@ fn test_commit_snapshot_expected_head_mismatch() {
         },
     );
 
-    // Should fail with concurrency error
+    // Should fail with head mismatch error
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert_eq!(err.kind(), ettlex_core::ExErrorKind::Concurrency);
+    assert_eq!(err.kind(), ettlex_core::ExErrorKind::HeadMismatch);
 }
 
 #[test]

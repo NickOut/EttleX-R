@@ -12,6 +12,8 @@
 //! Phase 1 implementation - includes core domain models, constraints, and snapshot manifests.
 
 pub mod apply;
+pub mod approval_router;
+pub mod candidate_resolver;
 pub mod commands;
 pub mod errors;
 pub mod logging_facility;
@@ -30,4 +32,4 @@ pub use commands::Command;
 pub use errors::{EttleXError, ExError, ExErrorKind, Result};
 pub use model::{Ep, Ettle, Metadata};
 pub use ops::Store;
-pub use policy::AnchorPolicy;
+pub use policy::{AnchorPolicy, CommitPolicyHook, DenyAllCommitPolicyHook, NoopCommitPolicyHook};

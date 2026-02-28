@@ -45,6 +45,21 @@ pub enum ExErrorKind {
     DuplicateLink,
     InvalidTargetKind,
 
+    // Profile Errors
+    ProfileNotFound,
+    ProfileDefaultMissing,
+
+    // Approval Errors
+    ApprovalNotFound,
+    ApprovalRoutingUnavailable,
+
+    // Commit policy
+    HeadMismatch,
+    NotALeaf,
+    PolicyDenied,
+    RootEttleAmbiguous,
+    EptAmbiguous,
+
     // Integration/IO (future)
     Io,
     Serialization,
@@ -89,6 +104,15 @@ impl ExErrorKind {
             ExErrorKind::DecisionTombstoned => "ERR_DECISION_TOMBSTONED",
             ExErrorKind::DuplicateLink => "ERR_DUPLICATE_LINK",
             ExErrorKind::InvalidTargetKind => "ERR_INVALID_TARGET_KIND",
+            ExErrorKind::ProfileNotFound => "ERR_PROFILE_NOT_FOUND",
+            ExErrorKind::ProfileDefaultMissing => "ERR_PROFILE_DEFAULT_MISSING",
+            ExErrorKind::ApprovalNotFound => "ERR_APPROVAL_NOT_FOUND",
+            ExErrorKind::ApprovalRoutingUnavailable => "ERR_APPROVAL_ROUTING_UNAVAILABLE",
+            ExErrorKind::HeadMismatch => "ERR_HEAD_MISMATCH",
+            ExErrorKind::NotALeaf => "ERR_NOT_A_LEAF",
+            ExErrorKind::PolicyDenied => "ERR_POLICY_DENIED",
+            ExErrorKind::RootEttleAmbiguous => "ERR_ROOT_ETTLE_AMBIGUOUS",
+            ExErrorKind::EptAmbiguous => "ERR_EPT_AMBIGUOUS",
             ExErrorKind::Io => "ERR_IO",
             ExErrorKind::Serialization => "ERR_SERIALIZATION",
             ExErrorKind::Persistence => "ERR_PERSISTENCE",
@@ -915,6 +939,30 @@ impl From<serde_json::Error> for EttleXError {
     fn from(err: serde_json::Error) -> Self {
         EttleXError::Serialization {
             message: err.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_commit_policy_error_kind_codes() {
+        let cases = [
+            (ExErrorKind::HeadMismatch, "ERR_HEAD_MISMATCH"),
+            (ExErrorKind::NotALeaf, "ERR_NOT_A_LEAF"),
+            (ExErrorKind::PolicyDenied, "ERR_POLICY_DENIED"),
+            (ExErrorKind::RootEttleAmbiguous, "ERR_ROOT_ETTLE_AMBIGUOUS"),
+            (ExErrorKind::EptAmbiguous, "ERR_EPT_AMBIGUOUS"),
+            (ExErrorKind::ProfileNotFound, "ERR_PROFILE_NOT_FOUND"),
+            (
+                ExErrorKind::ApprovalRoutingUnavailable,
+                "ERR_APPROVAL_ROUTING_UNAVAILABLE",
+            ),
+        ];
+        for (kind, expected_code) in cases {
+            assert_eq!(kind.code(), expected_code, "Wrong code for {:?}", kind);
         }
     }
 }

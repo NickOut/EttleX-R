@@ -21,24 +21,14 @@ fn setup_test_repo() -> (TempDir, Connection, FsStore, String) {
 
     let cas = FsStore::new(cas_path);
 
-    // Insert test data directly using SQL (order matters for foreign keys)
+    // Insert test data: flat tree (root ettle with single leaf EP)
     conn.execute_batch(
         r#"
-        -- Insert root ettle
         INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
         VALUES ('ettle:root', 'Root Ettle', NULL, 0, 0, 0, '{}');
 
-        -- Insert child ettle first (needed for FK)
-        INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-        VALUES ('ettle:child', 'Child Ettle', 'ettle:root', 0, 0, 0, '{}');
-
-        -- Insert root EP (with child mapping)
         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_digest, content_inline, deleted, created_at, updated_at)
-        VALUES ('ep:root:0', 'ettle:root', 0, 1, 'ettle:child', NULL, 'Root content', 0, 0, 0);
-
-        -- Insert child EP
-        INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_digest, content_inline, deleted, created_at, updated_at)
-        VALUES ('ep:child:0', 'ettle:child', 0, 1, NULL, NULL, 'Child content', 0, 0, 0);
+        VALUES ('ep:root:0', 'ettle:root', 0, 1, NULL, NULL, 'Root leaf content', 0, 0, 0);
         "#,
     )
     .unwrap();

@@ -25,9 +25,9 @@ fn test_apply_migrations_on_empty_db() {
         result.err()
     );
 
-    // And: All 9 expected tables exist (including sqlite_sequence from AUTOINCREMENT)
+    // And: All 14 expected tables exist (including sqlite_sequence from AUTOINCREMENT)
     let tables = get_table_names(&conn);
-    assert_eq!(tables.len(), 9, "Should have exactly 9 tables");
+    assert_eq!(tables.len(), 14, "Should have exactly 14 tables");
 
     let expected_tables = vec![
         "schema_version",
@@ -36,9 +36,14 @@ fn test_apply_migrations_on_empty_db() {
         "snapshots",
         "provenance_events",
         "cas_blobs",
-        "constraints",        // Added in migration 003
-        "ep_constraint_refs", // Added in migration 003
-        "sqlite_sequence",    // Auto-created by SQLite for AUTOINCREMENT columns
+        "constraints",             // Added in migration 003
+        "ep_constraint_refs",      // Added in migration 003
+        "decisions",               // Added in migration 004
+        "decision_evidence_items", // Added in migration 004
+        "decision_links",          // Added in migration 004
+        "profiles",                // Added in migration 005
+        "approval_requests",       // Added in migration 006
+        "sqlite_sequence",         // Auto-created by SQLite for AUTOINCREMENT columns
     ];
 
     for expected_table in &expected_tables {
@@ -67,7 +72,7 @@ fn test_migration_gap_fails() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 3, "Should have exactly 3 migrations applied");
+    assert_eq!(version_count, 6, "Should have exactly 6 migrations applied");
 }
 
 #[test]
@@ -89,7 +94,7 @@ fn test_migration_idempotency() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 3, "Should still have exactly 3 migrations");
+    assert_eq!(version_count, 6, "Should still have exactly 6 migrations");
 }
 
 #[test]

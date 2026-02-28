@@ -1,0 +1,349 @@
+schema_version: 0
+project:
+  name: ettlex
+
+ettles:
+  - id: ettle:snapshot_commit_policy
+    title: Snapshot Commit Policy & Fail-Fast Ambiguity (Phase 1)
+    eps:
+      - id: ep:snapshot_commit_policy:0
+        ordinal: 0
+        normative: true
+        why: |-
+          Snapshot commit is a canonical mutation that creates durable semantic anchors. If the commit selector is
+          ambiguous, if EPT is ambiguous, if determinism is violated, or if constraint candidate selection is ambiguous,
+          commit MUST NOT proceed silently.
+
+          The CORE plan requires fail-fast on ambiguity unless explicitly routed under profile (route_for_approval).
+          route_for_approval is implemented as a durable approval request + approval_token so later workflow systems
+          can approve/deny and resume.
+
+          This leaf defines the policy/profile gating behaviour around snapshot commit, ensuring:
+            - correct fail-fast defaults
+            - explicit routing behaviour for waivable ambiguities
+            - strict “no writes on routed/failed” invariants
+            - compatibility with created_at-in-manifest decision (manifest_digest may be non-deterministic;
+              semantic_manifest_digest is used as comparison key)
+
+        what: |-
+          Implement snapshot commit governance rules in the action command layer (Command::SnapshotCommit),
+          focusing on fail-fast behaviour and route_for_approval.
+
+          Dependencies (MUST exist or be stubbed behind interfaces as described):
+            - snapshot commit pipeline exists (ettle:snapshot_commit end-to-end)
+            - profile resolution exists (ettle:profiles_core)
+            - approval routing primitives exist (ettle:profiles_actions)
+            - constraint predicate evaluator exists (ettle:constraint_predicates)
+            - a policy hook exists (may be minimal/opaque in Phase 1 but MUST be testable)
+
+          1) Inputs (normative)
+             - leaf_ep_id (primary selector; required)
+             - policy_ref (optional string; deterministic defaulting may apply)
+             - profile_ref (optional string; deterministic defaulting per Profiles Core)
+             - options:
+                 * expected_head (optional)
+                 * dry_run (bool)
+                 * other existing commit options
+
+            Expected head gating (normative; optimistic concurrency):
+              - During snapshot_commit, the system MUST resolve the commit target realised_ettle_id prior to durable writes.
+                (The realised_ettle_id is the lineage key that the commit will append to.)
+              - Head definition (binding): Head = the manifest_digest of the latest committed snapshot for a given realised_ettle_id.
+                If no prior snapshot exists for the realised_ettle_id, Head is None.
+              - If options.expected_head is provided:
+                  * The system MUST read head_before (as defined above) at the start of the commit.
+                  * If head_before is None, the commit MUST fail with HeadMismatch.
+                  * If head_before is Some(H) and expected_head != H, the commit MUST fail with HeadMismatch.
+                  * On HeadMismatch, no durable writes of any kind may occur (no ledger rows, no facet snapshots, no approvals).
+              - If options.expected_head is not provided:
+                  * No head gating is performed.
+              - On successful commit, head_after MUST equal the manifest_digest of the newly committed manifest.
+
+
+          2) Policy hook (Phase 1 minimum, normative)
+             - Before any commit work that performs durable writes, the system MUST evaluate an allow/deny hook:
+                 policy_check(policy_ref, profile_ref, leaf_ep_id, context?) -> allow|deny
+             - If denied:
+                 * return typed error PolicyDenied
+                 * perform NO manifest CAS writes and NO facet_snapshots ledger append
+                 * perform NO approval routing (PolicyDenied is a hard stop)
+
+          3) Selector validity and structural gating (normative)
+             - If leaf_ep_id does not exist: return NotFound and perform no writes.
+             - If leaf_ep_id exists but is not a leaf under the refinement model: return NotALeaf and perform no writes.
+             - If legacy root selector path exists:
+                 * if it resolves to multiple leaves: RootEttleAmbiguous (NOT waivable) and no writes
+                 * if it resolves to zero leaves: RootEttleInvalid and no writes
+
+          4) EPT gating and determinism (normative)
+             - EPT computation MUST be performed deterministically.
+             - If EPT is ambiguous: return EptAmbiguous (NOT waivable) and no writes.
+             - If determinism violation is detected in EPT ordering or traversal: return DeterminismViolation (NOT waivable) and no writes.
+
+          5) Constraint resolution gating (normative)
+             - Snapshot commit MUST obtain constraint_resolution via the predicate evaluator (or equivalent), even if the result is empty.
+             - If predicate evaluator produces:
+                 a) NoMatch or Selected: commit may proceed
+                 b) AmbiguousSelection:
+                      - if profile.ambiguity_policy = fail_fast:
+                          return AmbiguousSelection error (no writes; no approval request)
+                      - if profile.ambiguity_policy = choose_deterministic:
+                          commit proceeds using the chosen candidate; the chosen candidate MUST be recorded in manifest.constraint_resolution
+                      - if profile.ambiguity_policy = route_for_approval:
+                          * MUST call ApprovalRouter.route_approval_request with kind=snapshot_commit (preferred) OR constraint_ambiguity,
+                            but reason_code MUST be AmbiguousSelection
+                          * MUST return RoutedForApproval{approval_token, reason_code, candidate_set}
+                          * MUST perform NO manifest CAS write and NO ledger append (facet_snapshots)
+                          * MUST be testable via Query::ApprovalGet(approval_token)
+                      - if route_for_approval but router unavailable: return ApprovalRoutingUnavailable and no writes
+
+          6) Waivable vs non-waivable ambiguity set (normative)
+             - Waivable (may route_for_approval):
+                 * constraint candidate ambiguity (AmbiguousSelection)
+             - NOT waivable (MUST fail fast regardless of profile):
+                 * RootEttleAmbiguous
+                 * EptAmbiguous
+                 * DeterminismViolation
+
+          7) dry_run semantics (normative)
+             - dry_run=true MUST perform no durable writes regardless of ambiguity or success.
+             - dry_run=true MUST NOT create approval requests (because it is not a real workflow step).
+             - dry_run may return computed data (e.g., would-be digests), but MUST document which fields are stable.
+
+          8) Transaction / write invariants (normative)
+             - On any failure (typed error), there MUST be:
+                 * no facet_snapshots row appended
+                 * no manifest CAS write considered committed output of the operation
+                 * no cas_blobs upsert related to manifest
+             - On RoutedForApproval, the ONLY permitted durable writes are:
+                 * approval request persistence (CAS + approval_requests index/provenance)
+               and there MUST be:
+                 * no facet_snapshots row appended
+                 * no manifest CAS write
+                 * no cas_blobs upsert for manifest
+
+          9) Created_at and semantic digests (normative)
+             - The manifest bytes include created_at.
+             - Therefore, manifest_digest may vary between otherwise identical commits.
+             - The system MUST compute semantic_manifest_digest excluding created_at and MUST record it.
+             - semantic_manifest_digest MUST be used for comparisons and determinism checks where appropriate
+               (e.g., test harness comparing two manifests for semantic equivalence).
+
+          10) Output types (normative)
+             - Success: SnapshotCommitted{snapshot_id, manifest_digest, semantic_manifest_digest, head_after, ...}
+             - head_after (binding): MUST equal the manifest_digest of the newly committed manifest (the new Head of the realised_ettle_id lineage).
+                For clarity: the command MAY compute and use head_before for expected_head gating, but only head_after is required to be returned.
+              
+             - Routed: RoutedForApproval{approval_token, reason_code, candidate_set}
+             - Failure: typed errors:
+                 NotFound, NotALeaf, RootEttleAmbiguous, RootEttleInvalid,
+                 EptAmbiguous, DeterminismViolation,
+                 AmbiguousSelection, ApprovalRoutingUnavailable,
+                 PolicyDenied, HeadMismatch, ProfileNotFound, ...
+
+        how: |-
+          Scenarios (all MUST be implemented as tests; Gherkin is normative):
+
+          Feature: Snapshot commit policy gating and fail-fast behaviour
+
+            Background:
+              Given snapshot commit pipeline exists (ettle:snapshot_commit)
+              And profile resolution exists (ettle:profiles_core)
+              And approval routing primitives exist (ettle:profiles_actions)
+              And constraint predicate evaluator exists (ettle:constraint_predicates)
+              And Command::SnapshotCommit is the canonical ingress
+              And CAS and SQLite are healthy
+
+            # --- Policy deny ---
+
+            Scenario: PolicyDenied prevents any writes and does not route
+              Given policy_check denies for leaf_ep_id <leaf>
+              When I call Command::SnapshotCommit{leaf_ep_id=<leaf>, policy_ref, profile_ref}
+              Then error PolicyDenied is returned
+              And no facet_snapshots row is appended
+              And no manifest CAS blob is written
+              And no cas_blobs manifest row is created
+              And no approval request is created
+
+            # --- Selector errors ---
+
+            Scenario: NotFound EP fails fast
+              When I call Command::SnapshotCommit{leaf_ep_id="ep:missing"}
+              Then error NotFound is returned
+              And no facet_snapshots row is appended
+              And no manifest CAS blob is written
+              And no approval request is created
+
+            Scenario: Non-leaf EP fails fast
+              Given EP exists but is not a leaf
+              When I call Command::SnapshotCommit{leaf_ep_id=that EP}
+              Then error NotALeaf is returned
+              And no writes occur
+
+            # --- Profile resolution gating ---
+
+            Scenario: Unknown profile_ref fails before any commit work
+              Given profile_ref "profile/missing@0" does not exist
+              When I call Command::SnapshotCommit{leaf_ep_id, profile_ref="profile/missing@0"}
+              Then error ProfileNotFound is returned
+              And no approval request is created
+              And no writes occur
+
+            Scenario: Missing profile_ref uses deterministic default
+              Given profile/default@0 exists
+              And repo config default_profile_ref is not set
+              When I call Command::SnapshotCommit{leaf_ep_id, profile_ref=null}
+              Then the resolved profile_ref is "profile/default@0"
+
+            # --- EPT ambiguity and determinism are not waivable ---
+
+            Scenario: EptAmbiguous fails fast even under route_for_approval
+              Given profile ambiguity_policy is route_for_approval
+              And EPT computation yields ambiguity for this leaf
+              When I call Command::SnapshotCommit{leaf_ep_id}
+              Then error EptAmbiguous is returned
+              And no approval request is created
+              And no writes occur
+
+            Scenario: DeterminismViolation fails fast even under route_for_approval
+              Given profile ambiguity_policy is route_for_approval
+              And EPT computation detects ordering instability
+              When I call Command::SnapshotCommit{leaf_ep_id}
+              Then error DeterminismViolation is returned
+              And no approval request is created
+              And no writes occur
+
+            # --- Constraint ambiguity governed by profile ---
+
+            Scenario: Constraint ambiguity fails fast under profile fail_fast
+              Given profile ambiguity_policy is fail_fast
+              And constraint predicate evaluation yields AmbiguousSelection with candidates [A,B]
+              When I call Command::SnapshotCommit{leaf_ep_id, profile_ref}
+              Then error AmbiguousSelection is returned
+              And no approval request is created
+              And no facet_snapshots row is appended
+              And no manifest CAS blob is written
+
+            Scenario: Constraint ambiguity chooses deterministically under choose_deterministic
+              Given profile ambiguity_policy is choose_deterministic
+              And constraint predicate evaluation yields eligible tie between candidates [B,A]
+              When I call Command::SnapshotCommit{leaf_ep_id, profile_ref}
+              Then snapshot commit proceeds using selected candidate "A"
+              And snapshot commit succeeds
+              And exactly one facet_snapshots row is appended
+              And the manifest constraint_resolution records selected candidate "A"
+
+            Scenario: Constraint ambiguity routes for approval under profile route_for_approval
+              Given profile ambiguity_policy is route_for_approval
+              And profile approval_routing.required is true
+              And an approval router is configured
+              And constraint predicate evaluation yields AmbiguousSelection with candidates [A,B]
+              When I call Command::SnapshotCommit{leaf_ep_id, profile_ref}
+              Then result is RoutedForApproval
+              And approval_token is not null
+              And Query::ApprovalGet(approval_token) succeeds
+              And no facet_snapshots row is appended
+              And no manifest CAS blob is written
+
+            Scenario: Constraint ambiguity cannot route if router unavailable
+              Given profile ambiguity_policy is route_for_approval
+              And profile approval_routing.required is true
+              And no approval router is configured
+              And constraint predicate evaluation yields AmbiguousSelection
+              When I call Command::SnapshotCommit{leaf_ep_id, profile_ref}
+              Then error ApprovalRoutingUnavailable is returned
+              And no approval request is created
+              And no writes occur
+
+            # --- Head mismatch gating ---
+
+          Scenario: expected_head mismatch fails fast
+            Given expected_head = H
+            And head(realised_ettle_id) is not H
+            When I call Command::SnapshotCommit{leaf_ep_id, options.expected_head=H}
+            Then error HeadMismatch is returned
+            And no durable writes occur
+          
+          Scenario: expected_head match allows commit and advances head
+            Given expected_head = H
+            And head(realised_ettle_id) equals H
+            And constraint predicate evaluation yields Selected candidate "A"
+            And policy hook returns allow
+            When I call Command::SnapshotCommit{leaf_ep_id, options.expected_head=H}
+            Then SnapshotCommitted is returned
+            And the returned head_after equals the returned manifest_digest
+            And head(realised_ettle_id) becomes head_after
+          
+          Scenario: expected_head is rejected when there is no prior head
+            Given head(realised_ettle_id) is None
+            And expected_head = H
+            When I call Command::SnapshotCommit{leaf_ep_id, options.expected_head=H}
+            Then error HeadMismatch is returned
+            And no durable writes occur
+          
+          Scenario: first commit may proceed when expected_head is not provided and there is no prior head
+            Given head(realised_ettle_id) is None
+            And constraint predicate evaluation yields Selected candidate "A"
+            And policy hook returns allow
+            When I call Command::SnapshotCommit{leaf_ep_id}
+            Then SnapshotCommitted is returned
+            And the returned head_after equals the returned manifest_digest
+            And head(realised_ettle_id) becomes head_after
+          
+          Scenario: concurrent commits with the same expected_head allow only one winner
+            Given head(realised_ettle_id) equals H
+            And two clients both call Command::SnapshotCommit{leaf_ep_id, options.expected_head=H} concurrently
+            When one commit completes successfully
+            Then the other commit MUST return HeadMismatch
+            And no durable writes occur for the failing commit
+
+            # --- dry_run semantics ---
+
+            Scenario: dry_run does not write even on success path
+              Given constraint predicate evaluation yields Selected candidate "A"
+              When I call Command::SnapshotCommit{leaf_ep_id, options.dry_run=true}
+              Then the command returns computed information (implementation-defined)
+              And no facet_snapshots row is appended
+              And no manifest CAS blob is written
+              And no approval request is created
+
+            Scenario: dry_run does not route even when ambiguity exists
+              Given profile ambiguity_policy is route_for_approval
+              And constraint predicate evaluation yields AmbiguousSelection with candidates [A,B]
+              When I call Command::SnapshotCommit{leaf_ep_id, options.dry_run=true}
+              Then the command returns a computed response (implementation-defined)
+              And no approval request is created
+              And no writes occur
+
+            # --- Created_at and semantic digest behaviour ---
+
+            Scenario: Two successful commits at different times can have different manifest_digest but same semantic_manifest_digest
+              Given identical semantic inputs (EPT, EP digests, constraint resolution, policy_ref/profile_ref)
+              When I run Command::SnapshotCommit twice at different created_at timestamps
+              Then both commits succeed
+              And manifest_digest differs
+              And semantic_manifest_digest is identical
+
+            Scenario: semantic_manifest_digest differs when semantic inputs change
+              Given two commits differ only in constraint_resolution selected candidate
+              When I compare semantic_manifest_digest
+              Then they differ
+
+            # --- Boundary / invariants ---
+
+            Scenario: RoutedForApproval never appends ledger and never writes manifest
+              Given profile ambiguity_policy is route_for_approval
+              And constraint predicate evaluation yields AmbiguousSelection
+              When I call Command::SnapshotCommit{leaf_ep_id}
+              Then result is RoutedForApproval
+              And facet_snapshots row count is unchanged
+              And manifest CAS blob count is unchanged (excluding unrelated blobs)
+
+            Scenario: Approval request content is deterministic excluding created_at
+              Given profile ambiguity_policy is route_for_approval
+              And constraint predicate evaluation yields AmbiguousSelection candidates [A,B]
+              When I call Command::SnapshotCommit twice with identical semantic inputs
+              Then both calls return RoutedForApproval with tokens T1 and T2
+              And Query::ApprovalGet(T1).semantic_request_digest == Query::ApprovalGet(T2).semantic_request_digest
+
+links:

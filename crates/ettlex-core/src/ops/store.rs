@@ -336,6 +336,22 @@ impl Store {
         Ok(decision)
     }
 
+    /// Get a Decision by ID, including tombstoned decisions.
+    ///
+    /// Unlike `get_decision`, this method returns the decision regardless of
+    /// tombstone status. Used internally for persistence after tombstone operations.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DecisionNotFound` if the decision doesn't exist at all.
+    pub fn get_decision_including_deleted(&self, id: &str) -> Result<&Decision> {
+        self.decisions
+            .get(id)
+            .ok_or_else(|| EttleXError::DecisionNotFound {
+                decision_id: id.to_string(),
+            })
+    }
+
     /// Insert a Decision into the store
     ///
     /// This is an internal method used by CRUD operations.

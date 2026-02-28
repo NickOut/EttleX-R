@@ -58,3 +58,51 @@ pub fn io_error(operation: &str, err: std::io::Error) -> ExError {
         .with_op(operation.to_string())
         .with_message(err.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_migration_error_kind() {
+        let e = migration_error("001_initial", "syntax error");
+        assert_eq!(e.kind(), ExErrorKind::Persistence);
+    }
+
+    #[test]
+    fn test_checksum_mismatch_kind() {
+        let e = checksum_mismatch("001_initial", "abc", "def");
+        assert_eq!(e.kind(), ExErrorKind::ConstraintViolation);
+    }
+
+    #[test]
+    fn test_cas_collision_kind() {
+        let e = cas_collision("sha256:deadbeef");
+        assert_eq!(e.kind(), ExErrorKind::ConstraintViolation);
+    }
+
+    #[test]
+    fn test_cas_missing_kind() {
+        let e = cas_missing("sha256:deadbeef");
+        assert_eq!(e.kind(), ExErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_seed_validation_kind() {
+        let e = seed_validation("missing field");
+        assert_eq!(e.kind(), ExErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_from_rusqlite_kind() {
+        let e = from_rusqlite(rusqlite::Error::InvalidQuery);
+        assert_eq!(e.kind(), ExErrorKind::Persistence);
+    }
+
+    #[test]
+    fn test_io_error_kind() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let e = io_error("read_file", io_err);
+        assert_eq!(e.kind(), ExErrorKind::Io);
+    }
+}

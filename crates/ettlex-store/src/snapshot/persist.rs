@@ -195,14 +195,14 @@ fn query_by_semantic_digest(
     Ok(result)
 }
 
-/// Query for the current head snapshot for a given root ettle.
+/// Query for the current head snapshot (manifest_digest + snapshot_id) for a given root ettle.
 ///
-/// Returns the most recent snapshot ID for the specified root ettle.
-fn query_current_head(tx: &Transaction, root_ettle_id: &str) -> Result<Option<String>> {
+/// Head is defined as the most recent committed snapshot.
+fn query_current_head(tx: &Transaction, root_ettle_id: &str) -> Result<Option<(String, String)>> {
     let mut stmt = tx
         .prepare(
             r#"
-            SELECT snapshot_id
+            SELECT manifest_digest, snapshot_id
             FROM snapshots
             WHERE root_ettle_id = ?1
             ORDER BY created_at DESC
@@ -216,7 +216,7 @@ fn query_current_head(tx: &Transaction, root_ettle_id: &str) -> Result<Option<St
         })?;
 
     let result = stmt
-        .query_row([root_ettle_id], |row| row.get(0))
+        .query_row([root_ettle_id], |row| Ok((row.get(0)?, row.get(1)?)))
         .optional()
         .map_err(|e| {
             ExError::new(ExErrorKind::Persistence)
@@ -279,22 +279,28 @@ pub fn commit_snapshot(
             .with_message(format!("Failed to start transaction: {}", e))
     })?;
 
-    // 1. Validate expected head if provided
+    // 1. Validate expected head if provided; resolve parent snapshot_id for FK
     let parent_snapshot_id = if let Some(expected) = &options.expected_head {
         let current = query_current_head(&tx, &manifest.root_ettle_id)?;
-        if current.as_ref() != Some(expected) {
-            return Err(ExError::new(ExErrorKind::Concurrency)
-                .with_op("commit_snapshot")
-                .with_entity_id(manifest.root_ettle_id.clone())
-                .with_message(format!(
-                    "Expected head '{}' but current is '{:?}'",
-                    expected, current
-                )));
+        match current {
+            Some((ref manifest_digest, ref snapshot_id)) if manifest_digest == expected => {
+                // Head matches — use snapshot_id (UUID) as FK for parent_snapshot_id
+                Some(snapshot_id.clone())
+            }
+            other => {
+                let current_digest = other.as_ref().map(|(d, _)| d.as_str());
+                return Err(ExError::new(ExErrorKind::HeadMismatch)
+                    .with_op("commit_snapshot")
+                    .with_entity_id(manifest.root_ettle_id.clone())
+                    .with_message(format!(
+                        "Expected head '{}' but current is '{:?}'",
+                        expected, current_digest
+                    )));
+            }
         }
-        Some(expected.clone())
     } else {
-        // No expected head, but check if there's an existing head to link as parent
-        query_current_head(&tx, &manifest.root_ettle_id)?
+        // No expected head, but link to existing head as parent if any
+        query_current_head(&tx, &manifest.root_ettle_id)?.map(|(_, sid)| sid)
     };
 
     // 2. Check idempotency (semantic digest already exists?)
