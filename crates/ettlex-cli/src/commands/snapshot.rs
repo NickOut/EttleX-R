@@ -7,7 +7,7 @@ use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
 use ettlex_engine::commands::snapshot::{
-    snapshot_commit_by_root_legacy, SnapshotCommitOutcome, SnapshotOptions,
+    resolve_root_to_leaf_ep, SnapshotCommitOutcome, SnapshotOptions,
 };
 use ettlex_store::cas::FsStore;
 
@@ -69,6 +69,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
     let options = SnapshotOptions {
         expected_head: None,
         dry_run: args.dry_run,
+        allow_dedup: false,
     };
 
     let outcome = if let Some(leaf_ep_id) = args.leaf {
@@ -92,16 +93,26 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else if let Some(root_ettle_id) = args.root {
-        snapshot_commit_by_root_legacy(
-            &root_ettle_id,
-            &args.policy,
-            args.profile.as_deref(),
+        // Resolve root → leaf, then delegate to apply_engine_command (canonical path)
+        let leaf_ep_id = resolve_root_to_leaf_ep(&mut conn, &root_ettle_id)?;
+        let cmd = EngineCommand::SnapshotCommit {
+            leaf_ep_id,
+            policy_ref: args.policy,
+            profile_ref: args.profile,
             options,
+        };
+        match apply_engine_command(
+            cmd,
             &mut conn,
             &cas,
             &NoopCommitPolicyHook,
             &NoopApprovalRouter,
-        )?
+        )? {
+            EngineCommandResult::SnapshotCommit(r) => SnapshotCommitOutcome::Committed(r),
+            EngineCommandResult::SnapshotCommitRouted(r) => {
+                SnapshotCommitOutcome::RoutedForApproval(r)
+            }
+        }
     } else {
         unreachable!()
     };

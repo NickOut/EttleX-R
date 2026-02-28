@@ -29,11 +29,13 @@ fn seed_simple_tree(conn: &Connection) {
     "#).unwrap();
 }
 
+// S9: Semantic manifest digest is identical across the legacy and action-command paths
 #[test]
 fn test_snapshot_output_deterministic_across_paths() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_simple_tree(&conn);
 
+    // Legacy path (append-only: no dedup)
     let old_result = snapshot_commit(
         "ettle:root",
         "policy/default@0",
@@ -41,12 +43,14 @@ fn test_snapshot_output_deterministic_across_paths() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
     )
     .unwrap();
 
+    // Action-command path (allow_dedup=true: deduplicates against the row just written)
     let cmd = EngineCommand::SnapshotCommit {
         leaf_ep_id: "ep:root:0".to_string(),
         policy_ref: "policy/default@0".to_string(),
@@ -54,6 +58,7 @@ fn test_snapshot_output_deterministic_across_paths() {
         options: SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: true,
         },
     };
 
@@ -70,14 +75,15 @@ fn test_snapshot_output_deterministic_across_paths() {
 
     assert_eq!(
         old_result.semantic_manifest_digest, new_result.semantic_manifest_digest,
-        "Semantic manifest digest should be identical"
+        "Semantic manifest digest should be identical across paths"
     );
     assert!(
         old_result.was_duplicate || new_result.was_duplicate,
-        "Second commit should be duplicate"
+        "Second commit with allow_dedup should be duplicate"
     );
 }
 
+// S10: created_at non-determinism is preserved — append-only default creates two rows
 #[test]
 fn test_created_at_non_determinism_preserved() {
     let (_tmp, mut conn, cas) = setup_db();
@@ -90,6 +96,7 @@ fn test_created_at_non_determinism_preserved() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -105,18 +112,30 @@ fn test_created_at_non_determinism_preserved() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
     )
     .unwrap();
 
+    // Semantic digest is identical (same content)
     assert_eq!(
-        result1.semantic_manifest_digest,
-        result2.semantic_manifest_digest
+        result1.semantic_manifest_digest, result2.semantic_manifest_digest,
+        "Semantic digest must be equal (same content)"
     );
-    assert_eq!(result1.snapshot_id, result2.snapshot_id);
-    assert!(result2.was_duplicate);
+    // Append-only: two distinct rows — snapshot_ids differ
+    assert_ne!(
+        result1.snapshot_id, result2.snapshot_id,
+        "Append-only default must produce distinct snapshot_ids"
+    );
+    assert!(!result1.was_duplicate);
+    assert!(!result2.was_duplicate);
+
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM snapshots", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 2, "Append-only default must produce 2 rows");
 }
 
 #[test]
@@ -138,6 +157,7 @@ fn test_no_extra_mutation_during_commit() {
         options: SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
     };
 

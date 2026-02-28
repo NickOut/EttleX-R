@@ -91,6 +91,7 @@ fn commit_leaf(conn: &mut Connection, cas: &FsStore) -> EngineCommandResult {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         conn,
@@ -118,6 +119,7 @@ fn test_policy_denied_no_writes_no_routing() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -148,6 +150,7 @@ fn test_not_found_ep_fails_fast() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -188,6 +191,7 @@ fn test_not_a_leaf_fails_fast() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -218,6 +222,7 @@ fn test_unknown_profile_ref_fails() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -251,6 +256,7 @@ fn test_missing_profile_ref_uses_default() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -296,6 +302,7 @@ fn test_ept_ambiguous_not_waivable() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -344,6 +351,7 @@ fn test_constraint_ambiguity_fail_fast() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -379,6 +387,7 @@ fn test_constraint_ambiguity_choose_deterministic() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -421,6 +430,7 @@ fn test_constraint_ambiguity_routed() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -466,6 +476,7 @@ fn test_constraint_ambiguity_router_unavailable() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -505,6 +516,7 @@ fn test_expected_head_mismatch() {
             options: SnapshotOptions {
                 expected_head: Some("wrong-head-digest".to_string()),
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -545,6 +557,7 @@ fn test_expected_head_match_advances_head() {
             options: SnapshotOptions {
                 expected_head: Some(head_after_first.clone()),
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -579,6 +592,7 @@ fn test_expected_head_rejected_no_prior() {
             options: SnapshotOptions {
                 expected_head: Some("some-expected-head".to_string()),
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -609,6 +623,7 @@ fn test_first_commit_no_expected_head() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -652,6 +667,7 @@ fn test_concurrent_head_race() {
             options: SnapshotOptions {
                 expected_head: Some(head_h.clone()),
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -683,6 +699,7 @@ fn test_concurrent_head_race() {
                 options: SnapshotOptions {
                     expected_head: Some(head_h.clone()),
                     dry_run: false,
+                    allow_dedup: false,
                 },
             },
             &mut conn,
@@ -716,6 +733,7 @@ fn test_dry_run_no_writes() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: true,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -773,6 +791,7 @@ fn test_dry_run_no_routing() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: true,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -819,12 +838,30 @@ fn test_created_at_manifest_digest_differs_semantic_same() {
 
     std::thread::sleep(std::time::Duration::from_millis(10));
 
-    let result2 = match commit_leaf(&mut conn, &cas) {
+    // Second commit with allow_dedup=true: same semantic content → duplicate
+    let result2 = match apply_engine_command(
+        EngineCommand::SnapshotCommit {
+            leaf_ep_id: "ep:root:0".to_string(),
+            policy_ref: "policy/default@0".to_string(),
+            profile_ref: None,
+            options: SnapshotOptions {
+                expected_head: None,
+                dry_run: false,
+                allow_dedup: true,
+            },
+        },
+        &mut conn,
+        &cas,
+        &NoopCommitPolicyHook,
+        &NoopApprovalRouter,
+    )
+    .unwrap()
+    {
         EngineCommandResult::SnapshotCommit(r) => r,
         _ => panic!(),
     };
 
-    // Both commits succeed (second is idempotent duplicate)
+    // Both commits succeed (second is idempotent duplicate with allow_dedup=true)
     assert!(result2.was_duplicate);
     // Semantic digest is the same (same inputs)
     assert_eq!(
@@ -853,6 +890,7 @@ fn test_semantic_digest_differs_on_different_inputs() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -875,6 +913,7 @@ fn test_semantic_digest_differs_on_different_inputs() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -918,6 +957,7 @@ fn test_routed_no_ledger_no_manifest() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -962,6 +1002,7 @@ fn test_approval_request_deterministic_excl_created_at() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -989,6 +1030,7 @@ fn test_approval_request_deterministic_excl_created_at() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: false,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -1037,6 +1079,7 @@ fn test_dry_run_computes_resolved_constraint_resolution() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: true,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -1081,6 +1124,7 @@ fn test_dry_run_yields_uncomputed_when_predicate_evaluation_disabled() {
             options: SnapshotOptions {
                 expected_head: None,
                 dry_run: true,
+                allow_dedup: false,
             },
         },
         &mut conn,
@@ -1105,4 +1149,67 @@ fn test_dry_run_yields_uncomputed_when_predicate_evaluation_disabled() {
     assert!(cr.candidates.is_empty());
     assert_eq!(snapshot_count(&conn), 0);
     assert_eq!(approval_count(&conn), 0);
+}
+
+// ---------------------------------------------------------------------------
+// S13: CAS IO error → Persistence typed error (unix only)
+// ---------------------------------------------------------------------------
+
+#[test]
+#[cfg(unix)]
+fn test_snapshot_commit_cas_failure_surfaces_persistence_error() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let cas_dir = temp_dir.path().join("cas");
+
+    // Create CAS dir, apply migrations, seed leaf EP
+    fs::create_dir_all(&cas_dir).unwrap();
+    let mut conn = Connection::open(&db_path).unwrap();
+    ettlex_store::migrations::apply_migrations(&mut conn).unwrap();
+    conn.execute_batch(r#"
+        INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
+        VALUES ('ettle:root', 'Root', NULL, 0, 0, 0, '{}');
+        INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
+        VALUES ('ep:root:0', 'ettle:root', 0, 1, NULL, 'leaf content', 0, 0, 0);
+    "#).unwrap();
+
+    // Make CAS dir read-only to force write failure
+    fs::set_permissions(&cas_dir, fs::Permissions::from_mode(0o444)).unwrap();
+    let cas = FsStore::new(&cas_dir);
+
+    let result = apply_engine_command(
+        EngineCommand::SnapshotCommit {
+            leaf_ep_id: "ep:root:0".to_string(),
+            policy_ref: "policy/default@0".to_string(),
+            profile_ref: None,
+            options: SnapshotOptions {
+                expected_head: None,
+                dry_run: false,
+                allow_dedup: false,
+            },
+        },
+        &mut conn,
+        &cas,
+        &NoopCommitPolicyHook,
+        &NoopApprovalRouter,
+    );
+
+    // Restore permissions before assertions (so TempDir can clean up)
+    fs::set_permissions(&cas_dir, fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(result.is_err(), "Expected failure when CAS is read-only");
+    assert_eq!(
+        result.unwrap_err().kind(),
+        ExErrorKind::Persistence,
+        "Expected Persistence error kind"
+    );
+
+    // Transactional safety: no rows committed to ledger
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM snapshots", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 0, "No snapshots should be committed on CAS failure");
 }

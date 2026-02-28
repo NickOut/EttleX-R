@@ -82,6 +82,7 @@ fn test_commit_snapshot_happy_path() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
     )
     .unwrap();
@@ -114,7 +115,7 @@ fn test_commit_snapshot_idempotent() {
     let (_temp_dir, mut conn, cas) = setup_test_env();
     let manifest = create_test_manifest();
 
-    // Commit twice
+    // Commit twice with allow_dedup=true
     let result1 = commit_snapshot(
         &mut conn,
         &cas,
@@ -122,6 +123,7 @@ fn test_commit_snapshot_idempotent() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: true,
         },
     )
     .unwrap();
@@ -142,6 +144,7 @@ fn test_commit_snapshot_idempotent() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: true,
         },
     )
     .unwrap();
@@ -170,6 +173,7 @@ fn test_commit_snapshot_expected_head_success() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
     )
     .unwrap();
@@ -195,6 +199,7 @@ fn test_commit_snapshot_expected_head_success() {
         SnapshotOptions {
             expected_head: Some(result1.manifest_digest.clone()),
             dry_run: false,
+            allow_dedup: false,
         },
     )
     .unwrap();
@@ -225,6 +230,7 @@ fn test_commit_snapshot_expected_head_mismatch() {
         SnapshotOptions {
             expected_head: Some("nonexistent-snapshot-id".into()),
             dry_run: false,
+            allow_dedup: false,
         },
     );
 
@@ -246,6 +252,7 @@ fn test_commit_snapshot_dry_run() {
         SnapshotOptions {
             expected_head: None,
             dry_run: true,
+            allow_dedup: false,
         },
     )
     .unwrap();
@@ -280,6 +287,7 @@ fn test_commit_snapshot_atomic() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
     )
     .unwrap();

@@ -1,10 +1,16 @@
 //! Tests: Legacy root resolution for snapshot commit
+//!
+//! Since `snapshot_commit_by_root_legacy` is pub(crate), these tests exercise
+//! root resolution via the public `resolve_root_to_leaf_ep` function and the
+//! `apply_engine_command` path.
 
 use ettlex_core::approval_router::NoopApprovalRouter;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy::NoopCommitPolicyHook;
-use ettlex_engine::commands::snapshot::{
-    snapshot_commit_by_root_legacy, SnapshotCommitOutcome, SnapshotOptions,
+use ettlex_engine::commands::engine_command::{
+    apply_engine_command, EngineCommand, EngineCommandResult,
 };
+use ettlex_engine::commands::snapshot::{resolve_root_to_leaf_ep, SnapshotOptions};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use tempfile::TempDir;
@@ -19,6 +25,7 @@ fn setup_db() -> (TempDir, Connection, FsStore) {
     (temp_dir, conn, cas)
 }
 
+// S6: Legacy root resolves to one leaf → commit succeeds via apply_engine_command
 #[test]
 fn test_legacy_root_resolves_when_exactly_one_leaf() {
     let (_tmp, mut conn, cas) = setup_db();
@@ -30,13 +37,21 @@ fn test_legacy_root_resolves_when_exactly_one_leaf() {
         VALUES ('ep:root:0', 'ettle:root', 0, 1, NULL, NULL, 'Leaf EP', 0, 0, 0);
     "#).unwrap();
 
-    let result = snapshot_commit_by_root_legacy(
-        "ettle:root",
-        "policy/default@0",
-        None,
-        SnapshotOptions {
-            expected_head: None,
-            dry_run: false,
+    // Resolve root → leaf
+    let leaf_ep_id = resolve_root_to_leaf_ep(&mut conn, "ettle:root")
+        .expect("Should resolve root to exactly one leaf");
+
+    // Commit via canonical path
+    let result = apply_engine_command(
+        EngineCommand::SnapshotCommit {
+            leaf_ep_id,
+            policy_ref: "policy/default@0".to_string(),
+            profile_ref: None,
+            options: SnapshotOptions {
+                expected_head: None,
+                dry_run: false,
+                allow_dedup: false,
+            },
         },
         &mut conn,
         &cas,
@@ -49,15 +64,16 @@ fn test_legacy_root_resolves_when_exactly_one_leaf() {
         "Expected legacy root resolution to succeed: {:?}",
         result.err()
     );
-    let SnapshotCommitOutcome::Committed(r) = result.unwrap() else {
+    let EngineCommandResult::SnapshotCommit(r) = result.unwrap() else {
         panic!("Expected Committed")
     };
     assert!(!r.snapshot_id.is_empty());
 }
 
+// S7: RootEttleAmbiguous includes structured candidate leaf EP ids
 #[test]
 fn test_legacy_root_fails_when_multiple_leaves() {
-    let (_tmp, mut conn, cas) = setup_db();
+    let (_tmp, mut conn, _cas) = setup_db();
 
     conn.execute_batch(r#"
         INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
@@ -68,36 +84,37 @@ fn test_legacy_root_fails_when_multiple_leaves() {
         VALUES ('ep:root:1', 'ettle:root', 1, 1, NULL, NULL, 'Leaf EP 1', 0, 0, 0);
     "#).unwrap();
 
-    let result = snapshot_commit_by_root_legacy(
-        "ettle:root",
-        "policy/default@0",
-        None,
-        SnapshotOptions {
-            expected_head: None,
-            dry_run: false,
-        },
-        &mut conn,
-        &cas,
-        &NoopCommitPolicyHook,
-        &NoopApprovalRouter,
-    );
+    let result = resolve_root_to_leaf_ep(&mut conn, "ettle:root");
 
     assert!(result.is_err(), "Expected failure with multiple leaves");
-    // Updated: error is RootEttleAmbiguous (not AmbiguousSelection)
+    let err = result.unwrap_err();
     assert_eq!(
-        result.unwrap_err().kind(),
-        ettlex_core::errors::ExErrorKind::RootEttleAmbiguous
+        err.kind(),
+        ExErrorKind::RootEttleAmbiguous,
+        "Expected RootEttleAmbiguous, got: {:?}",
+        err.kind()
     );
 
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM snapshots", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(count, 0);
+    // S7: structured candidates field contains both leaf EP ids
+    let candidates = err
+        .candidates()
+        .expect("candidates must be populated for RootEttleAmbiguous");
+    assert!(
+        candidates.contains(&"ep:root:0".to_string()),
+        "candidates should include ep:root:0, got: {:?}",
+        candidates
+    );
+    assert!(
+        candidates.contains(&"ep:root:1".to_string()),
+        "candidates should include ep:root:1, got: {:?}",
+        candidates
+    );
 }
 
+// S8: No leaves → RootEttleInvalid (not NotFound)
 #[test]
 fn test_legacy_root_fails_when_no_leaves() {
-    let (_tmp, mut conn, cas) = setup_db();
+    let (_tmp, mut conn, _cas) = setup_db();
 
     conn.execute_batch(r#"
         INSERT INTO ettles VALUES ('ettle:root', 'Root', NULL, 0, 0, 0, '{}');
@@ -106,23 +123,14 @@ fn test_legacy_root_fails_when_no_leaves() {
         VALUES ('ep:root:0', 'ettle:root', 0, 1, 'ettle:child', 'Non-leaf EP', 0, 0, 0);
     "#).unwrap();
 
-    let result = snapshot_commit_by_root_legacy(
-        "ettle:root",
-        "policy/default@0",
-        None,
-        SnapshotOptions {
-            expected_head: None,
-            dry_run: false,
-        },
-        &mut conn,
-        &cas,
-        &NoopCommitPolicyHook,
-        &NoopApprovalRouter,
-    );
+    let result = resolve_root_to_leaf_ep(&mut conn, "ettle:root");
 
     assert!(result.is_err(), "Expected failure with no leaves");
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM snapshots", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(count, 0);
+    let err = result.unwrap_err();
+    assert_eq!(
+        err.kind(),
+        ExErrorKind::RootEttleInvalid,
+        "Expected RootEttleInvalid, got: {:?}",
+        err.kind()
+    );
 }

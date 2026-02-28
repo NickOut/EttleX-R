@@ -35,6 +35,9 @@ pub struct SnapshotOptions {
     pub expected_head: Option<String>,
     /// If true, compute manifest but don't persist and don't route.
     pub dry_run: bool,
+    /// If true, return existing snapshot when semantic digest matches (idempotent).
+    /// Default false = append-only (each commit creates a new row).
+    pub allow_dedup: bool,
 }
 
 /// Result of a successfully committed snapshot.
@@ -222,6 +225,10 @@ fn get_seed_digest(conn: &Connection) -> Result<Option<String>> {
     Ok(digest)
 }
 
+// INTERNAL: snapshot_commit_by_leaf and snapshot_commit_by_root_legacy are pub(crate).
+// The ONLY supported production ingress is apply_engine_command() in engine_command.rs.
+// Direct calls from outside this crate are prohibited by module visibility.
+
 /// Commit a snapshot for a leaf EP — CANONICAL entry point.
 ///
 /// Runs the full policy pipeline (policy check → leaf validation → profile
@@ -231,13 +238,13 @@ fn get_seed_digest(conn: &Connection) -> Result<Option<String>> {
 /// - `leaf_ep_id`: Leaf EP identifier (must exist and have no child_ettle_id)
 /// - `policy_ref`: Policy identifier recorded in manifest
 /// - `profile_ref`: Optional profile ref; if None, defaults to "profile/default@0"
-/// - `options`: expected_head / dry_run
+/// - `options`: expected_head / dry_run / allow_dedup
 /// - `conn`: Database connection
 /// - `cas`: CAS store
 /// - `policy_hook`: Allow/deny hook evaluated before any writes
 /// - `approval_router`: Approval workflow router (used for route_for_approval)
 #[allow(clippy::too_many_arguments)]
-pub fn snapshot_commit_by_leaf(
+pub(crate) fn snapshot_commit_by_leaf(
     leaf_ep_id: &str,
     policy_ref: &str,
     profile_ref: Option<&str>,
@@ -366,6 +373,7 @@ pub fn snapshot_commit_by_leaf(
     let persist_options = ettlex_store::snapshot::persist::SnapshotOptions {
         expected_head: options.expected_head,
         dry_run: false,
+        allow_dedup: options.allow_dedup,
     };
 
     let persist_result = persist_commit_snapshot(conn, cas, manifest, persist_options)?;
@@ -382,7 +390,7 @@ pub fn snapshot_commit_by_leaf(
 
 /// Legacy root-based commit (resolves root to exactly one leaf, then commits).
 #[allow(clippy::too_many_arguments)]
-pub fn snapshot_commit_by_root_legacy(
+pub(crate) fn snapshot_commit_by_root_legacy(
     root_ettle_id: &str,
     policy_ref: &str,
     profile_ref: Option<&str>,
@@ -411,6 +419,24 @@ pub fn snapshot_commit_by_root_legacy(
     )
 }
 
+/// Resolve a root Ettle ID to exactly one leaf EP ID.
+///
+/// Public entry point for root-resolution without committing. Used by the CLI
+/// `--root` flag and any caller that needs to convert a root-scoped identifier
+/// into a leaf EP before building an `EngineCommand::SnapshotCommit`.
+///
+/// Returns `RootEttleInvalid` when the subtree has no leaf EPs,
+/// `RootEttleAmbiguous` (with `candidates`) when there are multiple,
+/// and `NotFound` when the root Ettle itself does not exist.
+pub fn resolve_root_to_leaf_ep(conn: &mut Connection, root_ettle_id: &str) -> Result<String> {
+    let store = ettlex_store::repo::hydration::load_tree(conn).map_err(|e| {
+        ExError::new(ExErrorKind::Persistence)
+            .with_op("resolve_root_to_leaf_ep")
+            .with_message(format!("Failed to load tree: {}", e))
+    })?;
+    resolve_root_to_leaf(&store, root_ettle_id)
+}
+
 /// Resolve root Ettle to exactly one leaf EP (traverses entire subtree).
 fn resolve_root_to_leaf(
     store: &ettlex_core::ops::store::Store,
@@ -432,7 +458,7 @@ fn resolve_root_to_leaf(
     let leaf_eps = collect_leaf_ep_ids_in_subtree(store, root_ettle_id);
 
     match leaf_eps.len() {
-        0 => Err(ExError::new(ExErrorKind::NotFound)
+        0 => Err(ExError::new(ExErrorKind::RootEttleInvalid)
             .with_op("resolve_root_to_leaf")
             .with_entity_id(root_ettle_id)
             .with_message("No leaf EPs found in subtree")),
@@ -440,7 +466,8 @@ fn resolve_root_to_leaf(
         _ => Err(ExError::new(ExErrorKind::RootEttleAmbiguous)
             .with_op("resolve_root_to_leaf")
             .with_entity_id(root_ettle_id)
-            .with_message(format!("Multiple leaf EPs found: {:?}", leaf_eps))),
+            .with_message(format!("Multiple leaf EPs found: {:?}", leaf_eps))
+            .with_candidates(leaf_eps)),
     }
 }
 

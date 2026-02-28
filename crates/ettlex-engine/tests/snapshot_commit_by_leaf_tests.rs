@@ -41,6 +41,7 @@ fn test_snapshot_commit_succeeds_via_action_command() {
         options: SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
     };
 
@@ -101,6 +102,7 @@ fn test_snapshot_commit_rejects_non_leaf_ep() {
         options: SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
     };
 
@@ -139,6 +141,7 @@ fn test_snapshot_commit_rejects_unknown_ep() {
         options: SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
     };
 

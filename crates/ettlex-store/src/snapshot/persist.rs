@@ -18,6 +18,9 @@ pub struct SnapshotOptions {
     pub expected_head: Option<String>,
     /// If true, compute digests but don't persist
     pub dry_run: bool,
+    /// If true, return existing snapshot when semantic digest matches (idempotent).
+    /// Default false = append-only (each commit creates a new row).
+    pub allow_dedup: bool,
 }
 
 /// Result of a snapshot commit operation.
@@ -303,14 +306,17 @@ pub fn commit_snapshot(
         query_current_head(&tx, &manifest.root_ettle_id)?.map(|(_, sid)| sid)
     };
 
-    // 2. Check idempotency (semantic digest already exists?)
-    if let Some(existing) = query_by_semantic_digest(&tx, &manifest.semantic_manifest_digest)? {
-        tracing::debug!(
-            snapshot_id = %existing.snapshot_id,
-            semantic_digest = %manifest.semantic_manifest_digest,
-            "Snapshot with same semantic digest already exists (idempotent)"
-        );
-        return Ok(existing);
+    // 2. Check idempotency (only when allow_dedup=true; default is append-only)
+    if options.allow_dedup {
+        if let Some(existing) = query_by_semantic_digest(&tx, &manifest.semantic_manifest_digest)? {
+            tracing::info!(
+                snapshot_id = %existing.snapshot_id,
+                semantic_digest = %manifest.semantic_manifest_digest,
+                event = "reuse",
+                "Snapshot with same semantic digest already exists (dedup)"
+            );
+            return Ok(existing);
+        }
     }
 
     // 3. Persist manifest to CAS (outside transaction, idempotent)

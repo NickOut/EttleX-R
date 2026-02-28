@@ -47,6 +47,7 @@ fn test_snapshot_commit_happy_path() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -85,6 +86,7 @@ fn test_snapshot_commit_dry_run() {
         SnapshotOptions {
             expected_head: None,
             dry_run: true,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -116,6 +118,7 @@ fn test_snapshot_commit_logging() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -169,6 +172,7 @@ fn test_snapshot_commit_error_logging() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -211,13 +215,14 @@ fn test_snapshot_commit_idempotent_across_calls() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: true,
         },
         &mut conn,
         &cas,
     )
     .unwrap();
 
-    // Second commit (same state)
+    // Second commit (same state, allow_dedup=true → dedup)
     let result2 = snapshot_commit(
         &root_ettle_id,
         "policy/default@0",
@@ -225,6 +230,7 @@ fn test_snapshot_commit_idempotent_across_calls() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: true,
         },
         &mut conn,
         &cas,
@@ -287,6 +293,7 @@ fn test_snapshot_commit_with_constraints() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -350,6 +357,7 @@ fn test_snapshot_commit_single_ettle_no_children() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -401,6 +409,7 @@ fn test_snapshot_commit_deep_tree_three_levels() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -455,6 +464,7 @@ fn test_snapshot_commit_error_deleted_root() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -501,6 +511,7 @@ fn test_snapshot_commit_multiple_children() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,
@@ -537,6 +548,7 @@ fn test_snapshot_commit_root_with_no_eps() {
         SnapshotOptions {
             expected_head: None,
             dry_run: false,
+            allow_dedup: false,
         },
         &mut conn,
         &cas,

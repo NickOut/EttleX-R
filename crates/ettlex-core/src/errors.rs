@@ -58,6 +58,7 @@ pub enum ExErrorKind {
     NotALeaf,
     PolicyDenied,
     RootEttleAmbiguous,
+    RootEttleInvalid,
     EptAmbiguous,
 
     // Integration/IO (future)
@@ -112,6 +113,7 @@ impl ExErrorKind {
             ExErrorKind::NotALeaf => "ERR_NOT_A_LEAF",
             ExErrorKind::PolicyDenied => "ERR_POLICY_DENIED",
             ExErrorKind::RootEttleAmbiguous => "ERR_ROOT_ETTLE_AMBIGUOUS",
+            ExErrorKind::RootEttleInvalid => "ERR_ROOT_ETTLE_INVALID",
             ExErrorKind::EptAmbiguous => "ERR_EPT_AMBIGUOUS",
             ExErrorKind::Io => "ERR_IO",
             ExErrorKind::Serialization => "ERR_SERIALIZATION",
@@ -141,6 +143,7 @@ pub struct ExError {
     trace_id: Option<TraceId>,
     message: String,
     source: Option<Box<ExError>>,
+    candidates: Option<Vec<String>>,
 }
 
 impl ExError {
@@ -156,6 +159,7 @@ impl ExError {
             trace_id: None,
             message: String::new(),
             source: None,
+            candidates: None,
         }
     }
 
@@ -207,6 +211,12 @@ impl ExError {
         self
     }
 
+    /// Add candidate entity ids (used for RootEttleAmbiguous to carry candidate leaf EP ids)
+    pub fn with_candidates(mut self, ids: Vec<String>) -> Self {
+        self.candidates = Some(ids);
+        self
+    }
+
     /// Get the error kind
     pub fn kind(&self) -> ExErrorKind {
         self.kind
@@ -255,6 +265,11 @@ impl ExError {
     /// Get the source error, if any
     pub fn source_error(&self) -> Option<&ExError> {
         self.source.as_deref()
+    }
+
+    /// Get candidate entity ids, if any (populated on RootEttleAmbiguous)
+    pub fn candidates(&self) -> Option<&[String]> {
+        self.candidates.as_deref()
     }
 }
 
@@ -964,5 +979,29 @@ mod tests {
         for (kind, expected_code) in cases {
             assert_eq!(kind.code(), expected_code, "Wrong code for {:?}", kind);
         }
+    }
+
+    // S8: RootEttleInvalid has the correct error code
+    #[test]
+    fn test_root_ettle_invalid_error_code() {
+        assert_eq!(
+            ExErrorKind::RootEttleInvalid.code(),
+            "ERR_ROOT_ETTLE_INVALID"
+        );
+    }
+
+    // S7: ExError carries a structured candidates field
+    #[test]
+    fn test_ex_error_candidates_field() {
+        let err = ExError::new(ExErrorKind::RootEttleAmbiguous)
+            .with_candidates(vec!["ep:a".into(), "ep:b".into()]);
+        let candidates = err.candidates().expect("candidates should be Some");
+        assert_eq!(candidates, &["ep:a".to_string(), "ep:b".to_string()]);
+    }
+
+    #[test]
+    fn test_ex_error_candidates_none_by_default() {
+        let err = ExError::new(ExErrorKind::NotFound);
+        assert!(err.candidates().is_none());
     }
 }
