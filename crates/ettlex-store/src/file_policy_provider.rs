@@ -195,6 +195,18 @@ impl PolicyProvider for FilePolicyProvider {
     }
 
     #[allow(clippy::result_large_err)]
+    fn policy_project_for_handoff(
+        &self,
+        policy_ref: &str,
+        _profile_ref: Option<&str>,
+    ) -> Result<Vec<u8>, ExError> {
+        // Reuse the HANDOFF extraction logic from policy_export.
+        // profile_ref existence is validated at the engine layer before this call.
+        let text = self.policy_export(policy_ref, "codegen_handoff")?;
+        Ok(text.into_bytes())
+    }
+
+    #[allow(clippy::result_large_err)]
     fn policy_list(&self) -> Result<Vec<PolicyListEntry>, ExError> {
         let dir = &self.policies_dir;
         if !dir.exists() {

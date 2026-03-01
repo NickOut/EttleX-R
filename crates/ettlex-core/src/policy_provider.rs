@@ -92,6 +92,28 @@ pub trait PolicyProvider: Send + Sync {
     /// Returns `Io` if the policies directory cannot be read.
     #[allow(clippy::result_large_err)]
     fn policy_list(&self) -> Result<Vec<PolicyListEntry>, ExError>;
+
+    /// Produce a deterministic byte projection of a policy document for handoff.
+    ///
+    /// Extracts the HANDOFF block content from the policy identified by `policy_ref`
+    /// and returns it as raw bytes. Two calls with identical inputs MUST return
+    /// byte-identical output.
+    ///
+    /// - `policy_ref` — policy document identifier
+    /// - `profile_ref` — optional profile identifier; if `Some`, profile existence
+    ///   is validated at the engine layer before calling this method
+    ///
+    /// # Errors
+    ///
+    /// Returns `PolicyNotFound` if the `policy_ref` is unknown to this provider.
+    /// Returns `PolicyExportFailed` if the document has malformed/unterminated HANDOFF markers.
+    /// Returns `PolicyExportTooLarge` if the result exceeds the configured byte limit.
+    #[allow(clippy::result_large_err)]
+    fn policy_project_for_handoff(
+        &self,
+        policy_ref: &str,
+        profile_ref: Option<&str>,
+    ) -> Result<Vec<u8>, ExError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +163,17 @@ impl PolicyProvider for NoopPolicyProvider {
     #[allow(clippy::result_large_err)]
     fn policy_list(&self) -> Result<Vec<PolicyListEntry>, ExError> {
         Ok(vec![])
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn policy_project_for_handoff(
+        &self,
+        policy_ref: &str,
+        _profile_ref: Option<&str>,
+    ) -> Result<Vec<u8>, ExError> {
+        Err(ExError::new(ExErrorKind::PolicyNotFound)
+            .with_entity_id(policy_ref)
+            .with_message("NoopPolicyProvider: policy not found"))
     }
 }
 
@@ -193,6 +226,17 @@ impl PolicyProvider for DenyAllPolicyProvider {
     #[allow(clippy::result_large_err)]
     fn policy_list(&self) -> Result<Vec<PolicyListEntry>, ExError> {
         Ok(vec![])
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn policy_project_for_handoff(
+        &self,
+        policy_ref: &str,
+        _profile_ref: Option<&str>,
+    ) -> Result<Vec<u8>, ExError> {
+        Err(ExError::new(ExErrorKind::PolicyNotFound)
+            .with_entity_id(policy_ref)
+            .with_message("DenyAllPolicyProvider: policy not found"))
     }
 }
 

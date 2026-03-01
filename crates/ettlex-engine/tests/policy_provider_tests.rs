@@ -597,6 +597,143 @@ fn test_s15_invalid_utf8_returns_parse_error() {
 }
 
 // ---------------------------------------------------------------------------
+// S-PH-1 — policy.project_for_handoff returns deterministic projection bytes
+//
+// Spec: Two calls to PolicyProjectForHandoff with the same policy_ref must
+// return byte-identical results. The call is read-only: no snapshot row is
+// written, no approval row is added.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_project_for_handoff_deterministic() {
+    let (_dir, conn, cas) = setup();
+    let policies_tmp = TempDir::new().unwrap();
+
+    // Write a policy with a HANDOFF block
+    fs::write(
+        policies_tmp.path().join("proj_policy.md"),
+        "<!-- HANDOFF: START -->\nObligation X\n<!-- HANDOFF: END -->",
+    )
+    .unwrap();
+
+    let provider = FilePolicyProvider::new(policies_tmp.path());
+
+    let result1 = apply_engine_query(
+        EngineQuery::PolicyProjectForHandoff {
+            policy_ref: "proj_policy".to_string(),
+            profile_ref: None,
+        },
+        &conn,
+        &cas,
+        Some(&provider),
+    )
+    .unwrap();
+
+    let result2 = apply_engine_query(
+        EngineQuery::PolicyProjectForHandoff {
+            policy_ref: "proj_policy".to_string(),
+            profile_ref: None,
+        },
+        &conn,
+        &cas,
+        Some(&provider),
+    )
+    .unwrap();
+
+    let bytes1 = match result1 {
+        EngineQueryResult::PolicyProjectForHandoff(r) => r.projection_bytes,
+        other => panic!("Expected PolicyProjectForHandoff, got {:?}", other),
+    };
+    let bytes2 = match result2 {
+        EngineQueryResult::PolicyProjectForHandoff(r) => r.projection_bytes,
+        other => panic!("Expected PolicyProjectForHandoff, got {:?}", other),
+    };
+
+    assert_eq!(
+        bytes1, bytes2,
+        "projection bytes must be identical across repeated calls"
+    );
+    assert!(!bytes1.is_empty(), "projection bytes must not be empty");
+
+    // No snapshot or approval rows written
+    assert_eq!(snapshot_count(&conn), 0, "no snapshot must be written");
+}
+
+// ---------------------------------------------------------------------------
+// S-PH-2 — policy.project_for_handoff fails for unknown policy_ref
+//
+// Spec: If policy_ref does not exist in the provider, the query must return
+// Err with kind PolicyNotFound. No state mutation must occur.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_project_for_handoff_unknown_policy_ref() {
+    let (_dir, conn, cas) = setup();
+    let policies_tmp = TempDir::new().unwrap(); // empty — no policies
+
+    let provider = FilePolicyProvider::new(policies_tmp.path());
+
+    let err = apply_engine_query(
+        EngineQuery::PolicyProjectForHandoff {
+            policy_ref: "nonexistent_policy".to_string(),
+            profile_ref: None,
+        },
+        &conn,
+        &cas,
+        Some(&provider),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err.kind(),
+        ExErrorKind::PolicyNotFound,
+        "unknown policy_ref must return PolicyNotFound"
+    );
+    assert_eq!(snapshot_count(&conn), 0, "no snapshot must be written");
+}
+
+// ---------------------------------------------------------------------------
+// S-PH-3 — policy.project_for_handoff fails for unknown profile_ref
+//
+// Spec: If profile_ref is Some but the referenced profile does not exist in
+// the store, the query must return Err with kind ProfileNotFound. No state
+// mutation must occur. policy_ref must be valid (policy file exists).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_project_for_handoff_unknown_profile_ref() {
+    let (_dir, conn, cas) = setup();
+    let policies_tmp = TempDir::new().unwrap();
+
+    // Write a valid policy
+    fs::write(
+        policies_tmp.path().join("valid_policy.md"),
+        "<!-- HANDOFF: START -->\nObligation Y\n<!-- HANDOFF: END -->",
+    )
+    .unwrap();
+
+    let provider = FilePolicyProvider::new(policies_tmp.path());
+
+    let err = apply_engine_query(
+        EngineQuery::PolicyProjectForHandoff {
+            policy_ref: "valid_policy".to_string(),
+            profile_ref: Some("profile/unknown@99".to_string()),
+        },
+        &conn,
+        &cas,
+        Some(&provider),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err.kind(),
+        ExErrorKind::ProfileNotFound,
+        "unknown profile_ref must return ProfileNotFound"
+    );
+    assert_eq!(snapshot_count(&conn), 0, "no snapshot must be written");
+}
+
+// ---------------------------------------------------------------------------
 // Helper: locate the workspace-level policies/ directory
 // ---------------------------------------------------------------------------
 

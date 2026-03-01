@@ -493,6 +493,33 @@ EngineQuery::SnapshotManifestPolicyRef { manifest_digest: String }
 
 ---
 
+### `PolicyProjectForHandoff`
+
+Produces a deterministic byte projection of a policy document's HANDOFF content. Two calls with
+identical inputs return byte-identical output. This is a read-only, non-mutating operation.
+
+If `profile_ref` is provided, the profile must exist in the store; its existence is validated
+before calling the provider.
+
+```rust
+EngineQuery::PolicyProjectForHandoff {
+    policy_ref: String,
+    profile_ref: Option<String>,
+}
+// → EngineQueryResult::PolicyProjectForHandoff(PolicyProjectForHandoffResult {
+//       policy_ref: String,
+//       profile_ref: Option<String>,
+//       projection_bytes: Vec<u8>,
+//   })
+```
+
+**Errors**: `PolicyNotFound` if `policy_ref` is unknown. `ProfileNotFound` if `profile_ref` is
+`Some` and the profile does not exist in the store. `PolicyExportFailed` if the document has
+malformed/unterminated HANDOFF markers. `PolicyExportTooLarge` if the result exceeds the
+configured byte limit. `NotImplemented` if `policy_provider` is `None`.
+
+---
+
 ## Error Contract
 
 | `ExErrorKind`                  | When raised                                        |

@@ -34,8 +34,9 @@ use rusqlite::Connection;
 use crate::commands::read_tools::{
     ApprovalGetResult, ApprovalListItem, ApprovalPage, DecisionContextResult, DecisionPage,
     EptComputeResult, EttleGetResult, EttlePage, ListOptions, ManifestGetResult, Page,
-    PolicyExportResult, PolicyReadResult, PredicatePreviewResult, PreviewStatus, ProfileGetResult,
-    ProfilePage, ProfileResolveResult, SnapshotGetResult, StateVersionResult,
+    PolicyExportResult, PolicyProjectForHandoffResult, PolicyReadResult, PredicatePreviewResult,
+    PreviewStatus, ProfileGetResult, ProfilePage, ProfileResolveResult, SnapshotGetResult,
+    StateVersionResult,
 };
 
 // ---------------------------------------------------------------------------
@@ -184,6 +185,11 @@ pub enum EngineQuery {
     },
     /// Return the `policy_ref` recorded in a committed snapshot manifest.
     SnapshotManifestPolicyRef { manifest_digest: String },
+    /// Produce a deterministic byte projection of a policy document for handoff.
+    PolicyProjectForHandoff {
+        policy_ref: String,
+        profile_ref: Option<String>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +258,8 @@ pub enum EngineQueryResult {
     PolicyExport(PolicyExportResult),
     /// Result of a `SnapshotManifestPolicyRef` query.
     SnapshotManifestPolicyRef(String),
+    /// Result of a `PolicyProjectForHandoff` query.
+    PolicyProjectForHandoff(PolicyProjectForHandoffResult),
 }
 
 // ---------------------------------------------------------------------------
@@ -1441,6 +1449,52 @@ pub fn apply_engine_query(
                 Err(e) => {
                     let e_clone = e.clone();
                     log_op_error!("policy_export", e_clone, duration_ms = elapsed);
+                }
+            }
+            result
+        }
+
+        // ── PolicyProjectForHandoff ───────────────────────────────────────────
+        EngineQuery::PolicyProjectForHandoff {
+            policy_ref,
+            profile_ref,
+        } => {
+            log_op_start!("policy_project_for_handoff");
+            let start = std::time::Instant::now();
+            let result = (|| -> Result<EngineQueryResult> {
+                let provider = policy_provider.ok_or_else(|| {
+                    ExError::new(ExErrorKind::NotImplemented)
+                        .with_op("policy_project_for_handoff")
+                        .with_message("policy_provider is required for PolicyProjectForHandoff")
+                })?;
+
+                // Validate profile_ref if provided — must exist in the store
+                if let Some(ref pref) = profile_ref {
+                    load_profile_full(conn, pref)?.ok_or_else(|| {
+                        ExError::new(ExErrorKind::ProfileNotFound)
+                            .with_op("policy_project_for_handoff")
+                            .with_entity_id(pref)
+                            .with_message("profile not found")
+                    })?;
+                }
+
+                let projection_bytes =
+                    provider.policy_project_for_handoff(&policy_ref, profile_ref.as_deref())?;
+
+                Ok(EngineQueryResult::PolicyProjectForHandoff(
+                    PolicyProjectForHandoffResult {
+                        policy_ref,
+                        profile_ref,
+                        projection_bytes,
+                    },
+                ))
+            })();
+            let elapsed = start.elapsed().as_millis() as u64;
+            match &result {
+                Ok(_) => log_op_end!("policy_project_for_handoff", duration_ms = elapsed),
+                Err(e) => {
+                    let e_clone = e.clone();
+                    log_op_error!("policy_project_for_handoff", e_clone, duration_ms = elapsed);
                 }
             }
             result

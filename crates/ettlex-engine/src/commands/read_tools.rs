@@ -239,6 +239,17 @@ pub struct PolicyExportResult {
     pub text: String,
 }
 
+/// Result of a `PolicyProjectForHandoff` query.
+#[derive(Debug, Clone)]
+pub struct PolicyProjectForHandoffResult {
+    /// The policy reference identifier.
+    pub policy_ref: String,
+    /// The profile reference used, if any.
+    pub profile_ref: Option<String>,
+    /// Deterministic byte projection of the HANDOFF content.
+    pub projection_bytes: Vec<u8>,
+}
+
 // ---------------------------------------------------------------------------
 // EP list helper types
 // ---------------------------------------------------------------------------

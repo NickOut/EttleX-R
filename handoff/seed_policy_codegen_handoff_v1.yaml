@@ -1,0 +1,266 @@
+schema_version: 0
+project:
+  name: ettlex
+
+ettles:
+- id: ettle:policy_codegen_handoff
+  title: Policy System — Indirection + Base Code-Generation Handoff Policy Set (Phase 2)
+  eps:
+  - id: ep:policy_codegen_handoff:0
+    ordinal: 0
+    normative: true
+    why: |-
+      The current Phase 0.5/1 implementation has an embedded policy trait focused on anchored deletion. As the
+      spine grows (snapshot preview/commit, diff, TES hooks, and code-generation handoff), policy obligations
+      must become explicit, discoverable, and exportable without binding the engine to a single backend.
+
+      This EP defines:
+      - a stable, injectable policy indirection layer (so hard-coded policies can evolve into DB-backed
+        policies without changing the engine call sites),
+      - a baseline "code-generation handoff" policy set that matches the existing code generator prompt’s
+        acceptance gates and behavioural constraints,
+      - and policy read/export operations used by CLI/MCP for authoring workflows.
+
+      This supports CORE governance separation: Policy defines the law; Profile later governs enforcement
+      intensity and routing.
+
+    what: |-
+      A. Policy indirection (binding, Phase 2 minimum)
+
+      A1. The engine MUST evaluate a policy allow/deny hook before any action that performs durable writes.
+          The hook MUST be invoked both for:
+          - snapshot preview actions that would write CAS/ledger (if any), and
+          - snapshot commit actions (always).
+          If the hook denies, the engine MUST return typed error PolicyDenied and MUST perform NO durable writes.
+
+      A2. The policy API MUST be injectable behind a stable trait boundary, such that future DB-backed policy
+          storage can be introduced without modifying engine logic that invokes policy checks.
+
+      A3. Existing anchored-deletion policy semantics MUST be preserved by adapting the existing AnchorPolicy
+          trait into the new policy indirection layer (either by embedding it or by providing an adapter).
+          Backwards-compatibility MUST be demonstrated by tests.
+
+      A4. Policy selection MUST be referenceable by policy_ref recorded in facet snapshot manifests, as the
+          authoritative provenance of which "law set" was applied at snapshot time.
+
+      B. Base code-generation handoff policy set (binding, derived from current code generator prompt)
+
+      B1. The baseline policy set MUST contain the following normative obligations for code-generation work
+          performed from a leaf EP handoff:
+
+          B1.1 Behaviour authority:
+               - The leaf EP scenarios / scenario-deltas are the sole behavioural authority.
+               - Implementations MUST NOT invent or extend externally observable behaviour beyond the specified
+                 scenarios/deltas.
+
+          B1.2 Strict TDD for behaviour:
+               - For each scenario/delta, RED evidence MUST exist before production code changes (RED→GREEN
+                 sequence).
+               - No behavioural production code MAY exist without a driving scenario and corresponding automated
+                 test.
+
+          B1.3 Triad is mandatory:
+               - Tests, Code, and Docs MUST be produced/updated for any leaf handoff.
+
+          B1.4 Traceability is mandatory:
+               - A scenario→artefact mapping MUST be produced and MUST be part of the completion gate.
+
+          B1.5 Acceptance gates are mandatory:
+               - Canonical Make targets MUST be executed in order:
+                   1) make lint
+                   2) make test
+                   3) make coverage-check (coverage threshold enforced by COVERAGE_MIN)
+                   4) make coverage-html
+               - Coverage thresholds MUST NOT be lowered to pass.
+
+          B1.6 Completion report is mandatory:
+               - A completion report MUST be produced at:
+                 handoff/completed/<leaf-ep-id>_completion_report.md
+               - Completion is invalid without this document.
+
+      B2. The baseline policy set MUST be exportable as text into the handoff bundle, so the code generation
+          workflow is not dependent on a static, duplicated prompt for normative requirements.
+
+      C. Policy export scoping for handoff (binding)
+
+      C1. The system MUST define a deterministic rule that selects which policy text is included in a handoff
+          bundle. Selection MUST be stable for a given policy_ref.
+
+      C2. The selection rule MUST support producing the minimal, relevant policy subset for code generation,
+          not necessarily the entire policy corpus.
+
+      C3. If the selection rule cannot resolve the requested handoff policy subset, the export MUST fail with
+          typed error PolicyExportFailed and MUST NOT produce a partial bundle.
+
+      D. Policy read operations (binding, Phase 2 minimum)
+
+      D1. The engine MUST expose read operations sufficient for CLI/MCP to:
+          - list available policies (by id/ref and version),
+          - read a policy’s full text,
+          - export the handoff-scoped subset for a given policy_ref,
+          - and show which policy_ref is bound to a given facet snapshot manifest.
+    how: |-
+      (Structural EP — no executable scenarios. Behavioural scenarios are defined in other EPs or seeds.)
+
+  - id: ep:policy_codegen_handoff:1
+    ordinal: 1
+    normative: true
+    why: |-
+      Policy requirements only become real when they are executable gates and when their export semantics are
+      deterministic. This EP defines the concrete mechanisms and scenarios that force implementation of the
+      indirection layer, the baseline policy set, and the export rules.
+
+    what: |-
+      E. Backend-agnostic policy provider (binding)
+
+      E1. A PolicyProvider abstraction MUST exist with (at minimum) operations:
+          - policy_check(policy_ref, profile_ref?, action_kind, leaf_ep_id?, context?) -> allow|deny
+          - policy_read(policy_ref) -> policy_text
+          - policy_export(policy_ref, export_kind) -> policy_text_subset
+          - policy_list() -> {policy_ref...}
+
+      E2. The default Phase 2 implementation MUST provide:
+          - a FilePolicyProvider (policies stored as files in-repo), OR
+          - a DbPolicyProvider (policies stored in SQLite),
+          but the engine MUST depend only on PolicyProvider, not on the concrete backend.
+
+      E3. The anchored deletion policy MUST remain functional, either by:
+          - including AnchorPolicy inside PolicyProvider, OR
+          - providing an adapter that implements AnchorPolicy using PolicyProvider rules.
+
+      F. Handoff export scoping semantics (binding)
+
+      F1. Export kinds MUST include at least:
+          - export_kind = "codegen_handoff"
+
+      F2. The "codegen_handoff" export MUST include the baseline obligations enumerated in EP0.B1, and MAY
+          include additional policy clauses explicitly marked as handoff-relevant.
+
+      F3. Handoff-relevance marking MUST be deterministic and machine-resolvable. Acceptable mechanisms:
+          - policy sections in markdown demarcated by explicit markers (e.g. headings prefixed with "HANDOFF:"),
+          - or a small sidecar index (e.g. JSON) committed alongside the policy text.
+          The mechanism MUST be chosen such that it does not require schema-versioned YAML management for this
+          phase.
+
+      G. Snapshot integration (binding)
+
+      G1. Facet snapshot manifests MUST record the applied policy_ref (already required by CORE) and diffs
+          MUST report policy_ref changes as a top-level diff category.
+
+      G2. If a snapshot commit is attempted without a policy_ref in the request context, the engine MUST:
+          - either use a configured default policy_ref, OR
+          - fail with typed error PolicyRefMissing.
+          This behaviour MUST be explicit and tested.
+
+    how: |-
+      Feature: Policy checks gate durable writes
+
+        Scenario: Snapshot commit is denied by policy before any CAS or ledger writes
+          Given a policy_ref that denies commit for the target leaf_ep_id
+          When snapshot.commit is executed
+          Then the engine returns PolicyDenied
+          And no manifest CAS blob is written
+          And no facet_snapshots ledger entry is appended
+          And no provenance_event is appended for snapshot commit
+
+        Scenario: Snapshot commit is allowed by policy and proceeds
+          Given a policy_ref that allows commit for the target leaf_ep_id
+          When snapshot.commit is executed
+          Then the engine writes the manifest CAS blob
+          And appends a facet_snapshots ledger entry referencing the manifest_digest
+          And appends a provenance_event referencing the policy_ref used
+
+        Scenario: Preview is denied by policy when preview would perform durable writes
+          Given preview mode that would write a preview bundle to durable storage
+          And policy_ref denies that action_kind
+          When snapshot.preview is executed
+          Then the engine returns PolicyDenied
+          And no durable writes occur
+
+      Feature: Policy provider indirection is backend-agnostic
+
+        Scenario: Engine uses PolicyProvider trait, not backend-specific calls
+          Given PolicyProvider is implemented by FilePolicyProvider
+          When policy_check is invoked by snapshot.commit
+          Then the check is executed via PolicyProvider
+          When PolicyProvider is replaced with DbPolicyProvider
+          Then the engine compiles unchanged and tests pass
+
+        Scenario: AnchorPolicy compatibility is preserved via adapter
+          Given an existing AnchorPolicy implementation in Phase 0.5/1
+          When deletion behaviour calls is_anchored_ep and is_anchored_ettle
+          Then behaviour remains unchanged under the new policy indirection layer
+          And tests demonstrate equivalence against NeverAnchoredPolicy and SelectedAnchoredPolicy
+
+      Feature: Code-generation handoff policy export
+
+        Scenario: Export includes baseline code-generation obligations
+          Given policy_ref references the baseline code-generation policy set
+          When policy_export(policy_ref, "codegen_handoff") is executed
+          Then the returned policy text includes:
+            | Obligation | Required |
+            | Behaviour authority (no invented behaviour) | yes |
+            | Strict TDD (RED→GREEN) | yes |
+            | Triad required (tests/code/docs) | yes |
+            | Traceability mapping required | yes |
+            | Make targets enforced in order | yes |
+            | Coverage threshold not lowered | yes |
+            | Completion report mandatory with required fields | yes |
+
+        Scenario: Export selection is deterministic for the same policy_ref
+          Given policy_ref is unchanged
+          When policy_export(policy_ref, "codegen_handoff") is executed twice
+          Then the exported bytes are identical
+
+        Scenario: Export fails if handoff markers are malformed or unresolved
+          Given policy text contains an unterminated HANDOFF section marker
+          When policy_export(policy_ref, "codegen_handoff") is executed
+          Then the engine returns PolicyExportFailed
+          And no partial policy text is returned
+
+        Scenario: Export fails if policy_ref is unknown
+          Given a policy_ref that does not exist
+          When policy_read or policy_export is executed
+          Then the engine returns PolicyNotFound
+
+      Feature: Policy read operations
+
+        Scenario: List policies returns stable identifiers and versions
+          Given multiple policies are available
+          When policy_list is executed
+          Then each policy has stable id/ref and version metadata
+
+        Scenario: Read returns full policy text as stored
+          Given a policy_ref exists
+          When policy_read(policy_ref) is executed
+          Then the returned text matches the stored canonical bytes
+
+        Scenario: Snapshot manifest reveals applied policy_ref
+          Given a committed facet snapshot exists
+          When snapshot.show(manifest_digest) is executed
+          Then the manifest contains policy_ref matching the provenance event
+          And snapshot.diff reports changes in policy_ref between two manifests
+
+      Feature: Boundary conditions and negative cases
+
+        Scenario: Missing policy_ref is rejected when no default is configured
+          Given no default policy_ref is configured
+          When snapshot.commit is executed without policy_ref
+          Then the engine returns PolicyRefMissing
+
+        Scenario: Large policy text export is supported up to configured maximum
+          Given a policy whose text size is near the configured export limit
+          When policy_export(policy_ref, "codegen_handoff") is executed
+          Then the export succeeds
+          And the exported text size is <= the configured maximum
+          When the policy text exceeds the limit
+          Then the engine returns PolicyExportTooLarge
+
+        Scenario: Policy parsing errors are surfaced with actionable diagnostics
+          Given a policy text with invalid UTF-8 or invalid marker encoding
+          When policy_read or policy_export is executed
+          Then the engine returns PolicyParseError
+          And includes the policy_ref and a diagnostic summary
+
+links:
+
