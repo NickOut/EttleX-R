@@ -440,12 +440,70 @@ Key dependencies:
 - `uuid` (v7) - Time-ordered IDs
 - `chrono` - Timestamp handling
 
+### `snapshot/query.rs` — Read-Only Snapshot Queries
+
+Pure read functions for the snapshots ledger (never write):
+
+- `fetch_snapshot_manifest_digest(conn, snapshot_id)` — fetch `manifest_digest` column
+- `fetch_snapshot_digests(conn, snapshot_id)` — fetch both `(manifest_digest, semantic_manifest_digest)`
+- `fetch_snapshot_row(conn, snapshot_id)` — full `SnapshotRow` struct
+- `list_snapshot_rows(conn, ettle_id: Option)` — all rows, optionally filtered by root Ettle
+- `fetch_head_snapshot(conn)` — most recent committed snapshot (`ORDER BY created_at DESC`)
+- `fetch_manifest_bytes_by_digest(cas, digest)` — read manifest blob from CAS
+
+### `profile.rs` — Profile and Approval Queries
+
+Read functions for profiles and approval requests (all `&Connection`):
+
+- `load_profile_full(conn, profile_ref)` — full profile payload + digest
+- `load_default_profile(conn)` — profile with `is_default = 1`
+- `list_profiles_paginated(conn, after_ref, limit)` — cursor-paginated profile list
+- `fetch_approval_row(conn, approval_token)` — full `ApprovalRow` struct
+- `list_approval_rows_paginated(conn, after_key, limit)` — cursor-paginated approval list (ascending `created_at`)
+- `query_approval_rows_no_digest(conn, after_key, limit)` — fallback for rows without `request_digest`
+
+### Migration 007
+
+`007_approval_cas_schema.sql` adds `request_digest TEXT` column to `approval_requests`
+and an index on it. The `SqliteApprovalRouter` now writes full approval payload JSON
+to CAS and stores the digest in this column (enabling `ApprovalGet` to retrieve the blob).
+
+### Database Schema (additions)
+
+#### `profiles` Table (Migration 005)
+
+```sql
+CREATE TABLE profiles (
+    profile_ref TEXT PRIMARY KEY NOT NULL,
+    payload_json TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+) STRICT;
+```
+
+#### `approval_requests` Table (Migrations 006 + 007)
+
+```sql
+CREATE TABLE approval_requests (
+    approval_token TEXT PRIMARY KEY NOT NULL,
+    reason_code TEXT NOT NULL,
+    candidate_set_json TEXT NOT NULL,
+    semantic_request_digest TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL,
+    request_digest TEXT  -- added by migration 007
+) STRICT;
+```
+
 ## Future Work
 
 Planned enhancements:
 
 - [x] Migration 002: Snapshot ledger schema (completed)
 - [x] Migration 003: Constraint persistence tables (completed)
+- [x] Migration 005: Profiles table (completed)
+- [x] Migration 006: Approval requests table (completed)
+- [x] Migration 007: Approval CAS storage (`request_digest`) (completed)
 - [ ] Event sourcing for all CRUD operations
 - [ ] Read-optimized views (materialized EPT)
 - [ ] Multi-repository support

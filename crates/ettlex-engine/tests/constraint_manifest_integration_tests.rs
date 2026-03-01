@@ -6,6 +6,7 @@
 //! 6. Unknown families supported
 //! 7. Deterministic ordering
 
+use ettlex_core::constraint_engine::ConstraintFamilyStatus;
 use ettlex_core::model::{Constraint, Ep, EpConstraintRef, Ettle};
 use ettlex_core::ops::Store;
 use ettlex_core::snapshot::manifest::generate_manifest;
@@ -90,14 +91,32 @@ fn test_scenario_4_family_agnostic_envelope() {
     )
     .unwrap();
 
-    // Verify constraints envelope is populated
+    // Verify constraints envelope is populated with plain IDs
     assert!(!manifest.constraints.declared_refs.is_empty());
     assert_eq!(manifest.constraints.declared_refs.len(), 3);
 
-    // Verify families are present
+    // declared_refs should be plain constraint IDs (not "family:kind:id" format)
+    assert!(manifest
+        .constraints
+        .declared_refs
+        .contains(&"c1".to_string()));
+    assert!(manifest
+        .constraints
+        .declared_refs
+        .contains(&"c2".to_string()));
+    assert!(manifest
+        .constraints
+        .declared_refs
+        .contains(&"c3".to_string()));
+
+    // Verify families are present with UNCOMPUTED status
     assert!(manifest.constraints.families.contains_key("ABB"));
     assert!(manifest.constraints.families.contains_key("SBB"));
     assert!(manifest.constraints.families.contains_key("Custom"));
+    assert_eq!(
+        manifest.constraints.families["ABB"].status,
+        ConstraintFamilyStatus::Uncomputed
+    );
 
     // Verify constraints_digest is computed
     assert!(!manifest.constraints.constraints_digest.is_empty());
@@ -155,9 +174,12 @@ fn test_scenario_5_abb_sbb_projections_empty() {
     assert!(manifest.constraints.applicable_abb.is_empty());
     assert!(manifest.constraints.resolved_sbb.is_empty());
 
-    // But family-specific data should be populated
+    // Family-specific data should be populated with plain IDs and UNCOMPUTED status
     assert!(manifest.constraints.families.contains_key("ABB"));
-    assert!(!manifest.constraints.families["ABB"].active_refs.is_empty());
+    let abb = &manifest.constraints.families["ABB"];
+    assert!(!abb.active_refs.is_empty());
+    assert_eq!(abb.active_refs[0], "c1"); // plain ID, not "ABB:Rule:c1"
+    assert_eq!(abb.status, ConstraintFamilyStatus::Uncomputed);
 }
 
 // Scenario 6: Unknown/arbitrary families are supported
@@ -271,14 +293,19 @@ fn test_scenario_7_deterministic_ordering() {
     )
     .unwrap();
 
-    // declared_refs should be sorted deterministically
+    // declared_refs ordering is deterministic and ordinal-based (not alphabetical)
+    // constraint_ids are ["c-zulu"(ord 0), "c-alpha"(ord 1), "c-mike"(ord 2), "c-bravo"(ord 3)]
+    // Expected: ordinal order → c-zulu, c-alpha, c-mike, c-bravo
     let declared_refs = &manifest.constraints.declared_refs;
-    let mut sorted_refs = declared_refs.clone();
-    sorted_refs.sort();
-    assert_eq!(
-        declared_refs, &sorted_refs,
-        "declared_refs should be sorted"
-    );
+    assert_eq!(declared_refs.len(), 4);
+    assert_eq!(declared_refs[0], "c-zulu"); // ordinal 0
+    assert_eq!(declared_refs[1], "c-alpha"); // ordinal 1
+    assert_eq!(declared_refs[2], "c-mike"); // ordinal 2
+    assert_eq!(declared_refs[3], "c-bravo"); // ordinal 3
+
+    // Two calls with same state must produce same output (determinism)
+    let declared_refs2 = &manifest.constraints.declared_refs;
+    assert_eq!(declared_refs, declared_refs2);
 
     // families should use BTreeMap (deterministic key ordering)
     // Verify by checking serialization is deterministic

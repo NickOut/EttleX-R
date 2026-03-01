@@ -878,7 +878,10 @@ mod tests {
         let result = apply(state, cmd, &policy);
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+        assert!(matches!(
+            result,
+            Err(EttleXError::ConstraintTombstoned { .. })
+        ));
     }
 
     #[test]

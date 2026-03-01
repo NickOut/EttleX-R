@@ -284,6 +284,22 @@ impl Store {
             .collect()
     }
 
+    /// Get a Constraint by ID, including tombstoned constraints
+    ///
+    /// Returns the Constraint regardless of tombstone status.
+    /// Used for history access (e.g., reading tombstoned constraints for audit).
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConstraintNotFound` if the constraint doesn't exist.
+    pub fn get_constraint_including_deleted(&self, id: &str) -> Result<&Constraint> {
+        self.constraints
+            .get(id)
+            .ok_or_else(|| EttleXError::ConstraintNotFound {
+                constraint_id: id.to_string(),
+            })
+    }
+
     // ===== Decision Methods =====
 
     /// Get a Decision by ID

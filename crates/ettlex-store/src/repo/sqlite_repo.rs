@@ -5,6 +5,7 @@
 #![allow(clippy::result_large_err)]
 
 use crate::errors::{from_rusqlite, Result};
+use ettlex_core::errors::{ExError, ExErrorKind};
 use ettlex_core::model::{
     Constraint, Decision, DecisionEvidenceItem, DecisionLink, Ep, EpConstraintRef, Ettle,
 };
@@ -819,6 +820,425 @@ impl SqliteRepo {
             .map_err(from_rusqlite)?;
 
         Ok(items)
+    }
+
+    /// List Ettles with optional prefix filter and cursor-based pagination.
+    ///
+    /// Returns up to `limit` Ettles whose `id` is lexicographically greater than
+    /// `after_id` (exclusive), optionally filtered to IDs that start with `prefix_filter`.
+    /// Results are ordered by `id` ascending.
+    pub fn list_ettles_paginated(
+        conn: &Connection,
+        prefix_filter: Option<&str>,
+        after_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<Ettle>> {
+        // Build query dynamically based on optional filters
+        let mut conditions: Vec<String> = Vec::new();
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(after) = after_id {
+            conditions.push("id > ?".to_string());
+            params.push(Box::new(after.to_string()));
+        }
+
+        if let Some(prefix) = prefix_filter {
+            conditions.push("id LIKE ? ESCAPE '\\'".to_string());
+            // Escape special LIKE characters and append %
+            let escaped = prefix
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            params.push(Box::new(format!("{}%", escaped)));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!(
+            "SELECT id, title, parent_id, deleted, created_at, updated_at, metadata
+             FROM ettles
+             {}
+             ORDER BY id
+             LIMIT {}",
+            where_clause, limit
+        );
+
+        let mut stmt = conn.prepare(&sql).map_err(from_rusqlite)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let ettles = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                let id: String = row.get(0)?;
+                let title: String = row.get(1)?;
+                let parent_id: Option<String> = row.get(2)?;
+                let deleted: i32 = row.get(3)?;
+                let created_at: i64 = row.get(4)?;
+                let updated_at: i64 = row.get(5)?;
+                let metadata_json: String = row.get(6)?;
+
+                let mut ettle = Ettle::new(id, title);
+                ettle.parent_id = parent_id;
+                ettle.deleted = deleted != 0;
+                ettle.created_at = chrono::DateTime::from_timestamp(created_at, 0)
+                    .unwrap_or_else(chrono::Utc::now);
+                ettle.updated_at = chrono::DateTime::from_timestamp(updated_at, 0)
+                    .unwrap_or_else(chrono::Utc::now);
+                ettle.metadata = serde_json::from_str(&metadata_json).unwrap_or_default();
+
+                Ok(ettle)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(ettles)
+    }
+
+    /// List all EPs belonging to an ettle, ordered by ordinal.
+    pub fn list_eps_for_ettle(conn: &Connection, ettle_id: &str) -> Result<Vec<Ep>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline,
+                        deleted, created_at, updated_at
+                 FROM eps
+                 WHERE ettle_id = ?1
+                 ORDER BY ordinal",
+            )
+            .map_err(from_rusqlite)?;
+
+        Self::query_eps(&mut stmt, [ettle_id])
+    }
+
+    /// List the child EPs of a given EP.
+    ///
+    /// Follows the refinement pointer: gets the `child_ettle_id` of `ep_id`, then
+    /// returns all EPs in that child ettle ordered by ordinal. Returns an empty Vec
+    /// if the EP has no child ettle.
+    pub fn list_child_eps_of_ep(conn: &Connection, ep_id: &str) -> Result<Vec<Ep>> {
+        // Look up the child_ettle_id for this EP
+        let child_ettle_id: Option<String> = conn
+            .query_row(
+                "SELECT child_ettle_id FROM eps WHERE id = ?1",
+                [ep_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(from_rusqlite)?
+            .flatten();
+
+        match child_ettle_id {
+            None => Ok(Vec::new()),
+            Some(child_id) => Self::list_eps_for_ettle(conn, &child_id),
+        }
+    }
+
+    /// List the parent EPs of a given EP.
+    ///
+    /// A parent EP is one whose `child_ettle_id` equals the `ettle_id` of the given EP.
+    /// Returns `RefinementIntegrityViolation` if more than one parent EP is found.
+    pub fn list_parent_eps_of_ep(conn: &Connection, ep_id: &str) -> Result<Vec<Ep>> {
+        // Get the ettle_id of the given EP
+        let ettle_id: Option<String> = conn
+            .query_row("SELECT ettle_id FROM eps WHERE id = ?1", [ep_id], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(from_rusqlite)?;
+
+        let ettle_id = match ettle_id {
+            None => return Ok(Vec::new()),
+            Some(id) => id,
+        };
+
+        // Find all EPs where child_ettle_id = that ettle_id
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline,
+                        deleted, created_at, updated_at
+                 FROM eps
+                 WHERE child_ettle_id = ?1
+                 ORDER BY ettle_id, ordinal",
+            )
+            .map_err(from_rusqlite)?;
+
+        let parents = Self::query_eps(&mut stmt, [ettle_id.as_str()])?;
+
+        // Check integrity: group by ettle_id to detect multi-parent violation
+        // More than one distinct ettle owning an EP that points to our ettle → violation
+        let distinct_parent_ettles: std::collections::BTreeSet<&str> =
+            parents.iter().map(|ep| ep.ettle_id.as_str()).collect();
+        if distinct_parent_ettles.len() > 1 {
+            return Err(ExError::new(ExErrorKind::RefinementIntegrityViolation)
+                .with_op("list_parent_eps_of_ep")
+                .with_entity_id(ep_id)
+                .with_message(format!(
+                    "EP has {} parent ettles (integrity violation)",
+                    distinct_parent_ettles.len()
+                )));
+        }
+
+        Ok(parents)
+    }
+
+    /// List Constraints by family, with optional tombstone filter.
+    ///
+    /// If `include_tombstoned` is false, only constraints where `deleted_at IS NULL`
+    /// are returned.
+    pub fn list_constraints_by_family(
+        conn: &Connection,
+        family: &str,
+        include_tombstoned: bool,
+    ) -> Result<Vec<Constraint>> {
+        let sql = if include_tombstoned {
+            "SELECT constraint_id, family, kind, scope, payload_json, payload_digest,
+                    created_at, updated_at, deleted_at
+             FROM constraints
+             WHERE family = ?1
+             ORDER BY constraint_id"
+                .to_string()
+        } else {
+            "SELECT constraint_id, family, kind, scope, payload_json, payload_digest,
+                    created_at, updated_at, deleted_at
+             FROM constraints
+             WHERE family = ?1 AND deleted_at IS NULL
+             ORDER BY constraint_id"
+                .to_string()
+        };
+
+        let mut stmt = conn.prepare(&sql).map_err(from_rusqlite)?;
+        Self::query_constraints(&mut stmt, [family])
+    }
+
+    /// List Constraints attached to an EP, ordered by their attachment ordinal.
+    pub fn list_constraints_for_ep_ordered(
+        conn: &Connection,
+        ep_id: &str,
+    ) -> Result<Vec<Constraint>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT c.constraint_id, c.family, c.kind, c.scope, c.payload_json,
+                        c.payload_digest, c.created_at, c.updated_at, c.deleted_at
+                 FROM constraints c
+                 JOIN ep_constraint_refs r ON r.constraint_id = c.constraint_id
+                 WHERE r.ep_id = ?1
+                 ORDER BY r.ordinal, c.constraint_id",
+            )
+            .map_err(from_rusqlite)?;
+
+        Self::query_constraints(&mut stmt, [ep_id])
+    }
+
+    /// List Decisions linked to a target entity, with optional tombstone filter.
+    pub fn list_decisions_by_target(
+        conn: &Connection,
+        target_kind: &str,
+        target_id: &str,
+        include_tombstoned: bool,
+    ) -> Result<Vec<Decision>> {
+        let sql = if include_tombstoned {
+            "SELECT d.decision_id, d.title, d.status, d.decision_text, d.rationale,
+                    d.alternatives_text, d.consequences_text, d.evidence_kind,
+                    d.evidence_excerpt, d.evidence_capture_id, d.evidence_file_path,
+                    d.evidence_hash, d.created_at, d.updated_at, d.tombstoned_at
+             FROM decisions d
+             JOIN decision_links l ON l.decision_id = d.decision_id
+             WHERE l.target_kind = ?1 AND l.target_id = ?2 AND l.tombstoned_at IS NULL
+             GROUP BY d.decision_id
+             ORDER BY d.created_at, d.decision_id"
+                .to_string()
+        } else {
+            "SELECT d.decision_id, d.title, d.status, d.decision_text, d.rationale,
+                    d.alternatives_text, d.consequences_text, d.evidence_kind,
+                    d.evidence_excerpt, d.evidence_capture_id, d.evidence_file_path,
+                    d.evidence_hash, d.created_at, d.updated_at, d.tombstoned_at
+             FROM decisions d
+             JOIN decision_links l ON l.decision_id = d.decision_id
+             WHERE l.target_kind = ?1 AND l.target_id = ?2
+               AND l.tombstoned_at IS NULL AND d.tombstoned_at IS NULL
+             GROUP BY d.decision_id
+             ORDER BY d.created_at, d.decision_id"
+                .to_string()
+        };
+
+        let mut stmt = conn.prepare(&sql).map_err(from_rusqlite)?;
+        Self::query_decisions(&mut stmt, rusqlite::params![target_kind, target_id])
+    }
+
+    /// List Decisions with cursor-based pagination.
+    ///
+    /// `after_key` is `(created_at_ms, decision_id)` exclusive lower bound.
+    pub fn list_decisions_paginated(
+        conn: &Connection,
+        after_key: Option<(i64, &str)>,
+        limit: usize,
+    ) -> Result<Vec<Decision>> {
+        let sql = match after_key {
+            None => format!(
+                "SELECT decision_id, title, status, decision_text, rationale,
+                        alternatives_text, consequences_text, evidence_kind,
+                        evidence_excerpt, evidence_capture_id, evidence_file_path,
+                        evidence_hash, created_at, updated_at, tombstoned_at
+                 FROM decisions
+                 ORDER BY created_at, decision_id
+                 LIMIT {}",
+                limit
+            ),
+            Some(_) => format!(
+                "SELECT decision_id, title, status, decision_text, rationale,
+                        alternatives_text, consequences_text, evidence_kind,
+                        evidence_excerpt, evidence_capture_id, evidence_file_path,
+                        evidence_hash, created_at, updated_at, tombstoned_at
+                 FROM decisions
+                 WHERE (created_at > ?1) OR (created_at = ?1 AND decision_id > ?2)
+                 ORDER BY created_at, decision_id
+                 LIMIT {}",
+                limit
+            ),
+        };
+
+        let mut stmt = conn.prepare(&sql).map_err(from_rusqlite)?;
+
+        match after_key {
+            None => Self::query_decisions(&mut stmt, []),
+            Some((ts, id)) => Self::query_decisions(&mut stmt, rusqlite::params![ts, id]),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Internal helpers
+    // -----------------------------------------------------------------------
+
+    fn query_eps<P: rusqlite::Params>(
+        stmt: &mut rusqlite::Statement<'_>,
+        params: P,
+    ) -> Result<Vec<Ep>> {
+        let eps = stmt
+            .query_map(params, |row| {
+                let id: String = row.get(0)?;
+                let ettle_id: String = row.get(1)?;
+                let ordinal: u32 = row.get(2)?;
+                let normative: i32 = row.get(3)?;
+                let child_ettle_id: Option<String> = row.get(4)?;
+                let content_inline: String = row.get(5)?;
+                let deleted: i32 = row.get(6)?;
+                let created_at: i64 = row.get(7)?;
+                let updated_at: i64 = row.get(8)?;
+
+                let content: serde_json::Value =
+                    serde_json::from_str(&content_inline).unwrap_or_default();
+                let why = content["why"].as_str().unwrap_or_default().to_string();
+                let what = content["what"].as_str().unwrap_or_default().to_string();
+                let how = content["how"].as_str().unwrap_or_default().to_string();
+
+                let mut ep = Ep::new(id, ettle_id, ordinal, normative != 0, why, what, how);
+                ep.child_ettle_id = child_ettle_id;
+                ep.deleted = deleted != 0;
+                ep.created_at = chrono::DateTime::from_timestamp(created_at, 0)
+                    .unwrap_or_else(chrono::Utc::now);
+                ep.updated_at = chrono::DateTime::from_timestamp(updated_at, 0)
+                    .unwrap_or_else(chrono::Utc::now);
+
+                Ok(ep)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(eps)
+    }
+
+    fn query_constraints<P: rusqlite::Params>(
+        stmt: &mut rusqlite::Statement<'_>,
+        params: P,
+    ) -> Result<Vec<Constraint>> {
+        let constraints = stmt
+            .query_map(params, |row| {
+                let constraint_id: String = row.get(0)?;
+                let family: String = row.get(1)?;
+                let kind: String = row.get(2)?;
+                let scope: String = row.get(3)?;
+                let payload_json_str: String = row.get(4)?;
+                let payload_digest: String = row.get(5)?;
+                let created_at_ms: i64 = row.get(6)?;
+                let updated_at_ms: i64 = row.get(7)?;
+                let deleted_at_ms: Option<i64> = row.get(8)?;
+
+                let payload_json: serde_json::Value =
+                    serde_json::from_str(&payload_json_str).unwrap_or(serde_json::json!({}));
+
+                let mut constraint =
+                    Constraint::new(constraint_id, family, kind, scope, payload_json);
+                constraint.payload_digest = payload_digest;
+                constraint.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                constraint.updated_at = chrono::DateTime::from_timestamp_millis(updated_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                constraint.deleted_at =
+                    deleted_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                Ok(constraint)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(constraints)
+    }
+
+    fn query_decisions<P: rusqlite::Params>(
+        stmt: &mut rusqlite::Statement<'_>,
+        params: P,
+    ) -> Result<Vec<Decision>> {
+        let decisions = stmt
+            .query_map(params, |row| {
+                let decision_id: String = row.get(0)?;
+                let title: String = row.get(1)?;
+                let status: String = row.get(2)?;
+                let decision_text: String = row.get(3)?;
+                let rationale: String = row.get(4)?;
+                let alternatives_text: Option<String> = row.get(5)?;
+                let consequences_text: Option<String> = row.get(6)?;
+                let evidence_kind: String = row.get(7)?;
+                let evidence_excerpt: Option<String> = row.get(8)?;
+                let evidence_capture_id: Option<String> = row.get(9)?;
+                let evidence_file_path: Option<String> = row.get(10)?;
+                let evidence_hash: String = row.get(11)?;
+                let created_at_ms: i64 = row.get(12)?;
+                let updated_at_ms: i64 = row.get(13)?;
+                let tombstoned_at_ms: Option<i64> = row.get(14)?;
+
+                let mut decision = Decision::new(
+                    decision_id,
+                    title,
+                    status,
+                    decision_text,
+                    rationale,
+                    alternatives_text,
+                    consequences_text,
+                    evidence_kind,
+                    evidence_excerpt,
+                    evidence_capture_id,
+                    evidence_file_path,
+                );
+                decision.evidence_hash = evidence_hash;
+                decision.created_at = chrono::DateTime::from_timestamp_millis(created_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                decision.updated_at = chrono::DateTime::from_timestamp_millis(updated_at_ms)
+                    .unwrap_or_else(chrono::Utc::now);
+                decision.tombstoned_at =
+                    tombstoned_at_ms.and_then(chrono::DateTime::from_timestamp_millis);
+
+                Ok(decision)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(decisions)
     }
 }
 

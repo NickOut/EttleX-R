@@ -15,6 +15,8 @@ pub mod apply;
 pub mod approval_router;
 pub mod candidate_resolver;
 pub mod commands;
+pub mod constraint_engine;
+pub mod diff;
 pub mod errors;
 pub mod logging_facility;
 pub mod model;

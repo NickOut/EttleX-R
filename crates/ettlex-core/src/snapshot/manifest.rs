@@ -30,8 +30,8 @@
 //! - `store_schema_version`: Store schema version
 //! - `seed_digest`: Optional seed digest
 
+use crate::constraint_engine::{ConstraintEvalCtx, ConstraintFamilyStatus};
 use crate::errors::Result;
-use crate::ops::constraint_ops;
 use crate::ops::Store;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -87,85 +87,61 @@ impl ConstraintsEnvelope {
     ///
     /// Returns `EttleXError::Serialization` if JSON serialization fails during digest computation.
     pub fn from_ept(ept: &[String], store: &Store) -> Result<Self> {
-        use sha2::{Digest, Sha256};
+        use crate::constraint_engine;
 
-        // Collect all constraint IDs from EPT (maintaining order, avoiding duplicates)
-        let mut seen_constraint_ids = std::collections::BTreeSet::new();
-        let mut all_constraints = Vec::new();
+        // Use a synthetic leaf EP ID (first EP in EPT, or empty string for empty EPT)
+        let leaf_ep_id = ept.first().cloned().unwrap_or_default();
 
-        for ep_id in ept {
-            if let Ok(constraints) = constraint_ops::list_constraints_for_ep(store, ep_id) {
-                for constraint in constraints {
-                    if !constraint.is_deleted()
-                        && seen_constraint_ids.insert(constraint.constraint_id.clone())
-                    {
-                        all_constraints.push(constraint);
-                    }
-                }
+        let ctx = ConstraintEvalCtx {
+            leaf_ep_id,
+            ept_ep_ids: ept.to_vec(),
+            policy_ref: String::new(),
+            profile_ref: String::new(),
+        };
+
+        let eval = constraint_engine::evaluate(&ctx, store).map_err(|e| {
+            crate::errors::EttleXError::Serialization {
+                message: format!("constraint_engine::evaluate failed: {}", e),
             }
-        }
+        })?;
 
-        // Build declared_refs (sorted by family, kind, id for determinism)
-        let mut declared_refs: Vec<String> = all_constraints
+        // Build declared_refs as plain constraint IDs (ordinal-ordered, deduplicated)
+        let declared_refs: Vec<String> = eval
+            .declared_refs
             .iter()
-            .map(|c| format!("{}:{}:{}", c.family, c.kind, c.constraint_id))
+            .map(|r| r.constraint_id.clone())
             .collect();
-        declared_refs.sort();
 
-        // Group constraints by family using BTreeMap for deterministic ordering
-        let mut families: BTreeMap<String, Vec<&crate::model::Constraint>> = BTreeMap::new();
-        for constraint in &all_constraints {
-            families
-                .entry(constraint.family.clone())
-                .or_default()
-                .push(constraint);
-        }
-
-        // Build family-specific data
+        // Build per-family data from evaluation result
         let mut family_constraints_map: BTreeMap<String, FamilyConstraints> = BTreeMap::new();
-        for (family_name, constraints) in families {
-            let mut active_refs: Vec<String> = constraints
+        for (family_name, family_eval) in eval.families {
+            // active_refs: plain constraint IDs for this family
+            let active_refs: Vec<String> = eval
+                .declared_refs
                 .iter()
-                .map(|c| format!("{}:{}:{}", c.family, c.kind, c.constraint_id))
+                .filter(|r| r.family == family_name)
+                .map(|r| r.constraint_id.clone())
                 .collect();
-            active_refs.sort();
-
-            // Compute family digest from active_refs (deterministic)
-            let family_canonical = serde_json::to_string(&active_refs)?;
-            let mut hasher = Sha256::new();
-            hasher.update(family_canonical.as_bytes());
-            let family_digest = hex::encode(hasher.finalize());
 
             family_constraints_map.insert(
                 family_name,
                 FamilyConstraints {
+                    status: family_eval.status,
                     active_refs,
                     outcomes: Vec::new(), // Empty in v0
                     evidence: Vec::new(), // Empty in v0
-                    digest: family_digest,
+                    digest: family_eval.digest,
                 },
             );
         }
 
-        // Create envelope without digest first
-        let envelope = ConstraintsEnvelope {
+        Ok(ConstraintsEnvelope {
             declared_refs,
             families: family_constraints_map,
             applicable_abb: Vec::new(), // Backward compat only, kept empty
             resolved_sbb: Vec::new(),   // Backward compat only, kept empty
             resolution_evidence: Vec::new(),
-            constraints_digest: String::new(),
-        };
-
-        // Compute envelope digest over canonical JSON (excluding the digest field)
-        let canonical = serde_json::to_string(&envelope)?;
-        let mut hasher = Sha256::new();
-        hasher.update(canonical.as_bytes());
-        let digest = hex::encode(hasher.finalize());
-
-        Ok(ConstraintsEnvelope {
-            constraints_digest: digest,
-            ..envelope
+            constraints_digest: eval.constraints_digest,
         })
     }
 }
@@ -176,7 +152,10 @@ impl ConstraintsEnvelope {
 /// to coexist without schema lock-in.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FamilyConstraints {
-    /// Active constraint refs for this family
+    /// Evaluation status for this family (UNCOMPUTED in Phase 1)
+    pub status: ConstraintFamilyStatus,
+
+    /// Active constraint IDs for this family (plain IDs, not "family:kind:id")
     pub active_refs: Vec<String>,
 
     /// Outcomes from constraint evaluation

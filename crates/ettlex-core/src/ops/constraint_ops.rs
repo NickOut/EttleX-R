@@ -25,7 +25,8 @@ use serde_json::Value as JsonValue;
 ///
 /// # Errors
 ///
-/// This operation is infallible for valid inputs (no constraint validation at creation time).
+/// Returns `InvalidConstraintFamily` if family is empty.
+/// Returns `ConstraintAlreadyExists` if a constraint with the same ID already exists.
 pub fn create_constraint(
     store: &mut Store,
     constraint_id: String,
@@ -34,6 +35,18 @@ pub fn create_constraint(
     scope: String,
     payload_json: JsonValue,
 ) -> Result<()> {
+    if family.is_empty() {
+        return Err(EttleXError::InvalidConstraintFamily {
+            constraint_id: constraint_id.clone(),
+        });
+    }
+
+    if store.constraints.contains_key(&constraint_id) {
+        return Err(EttleXError::ConstraintAlreadyExists {
+            constraint_id: constraint_id.clone(),
+        });
+    }
+
     let constraint = Constraint::new(constraint_id.clone(), family, kind, scope, payload_json);
     store.insert_constraint(constraint);
     Ok(())
@@ -90,10 +103,10 @@ pub fn attach_constraint_to_ep(
     constraint_id: String,
     ordinal: i32,
 ) -> Result<()> {
-    // Verify constraint exists and is not deleted
-    let constraint = store.get_constraint(&constraint_id)?;
+    // Verify constraint exists and is not tombstoned
+    let constraint = store.get_constraint_including_deleted(&constraint_id)?;
     if constraint.is_deleted() {
-        return Err(EttleXError::ConstraintDeleted {
+        return Err(EttleXError::ConstraintTombstoned {
             constraint_id: constraint_id.clone(),
         });
     }
@@ -364,7 +377,10 @@ mod tests {
 
         let result = attach_constraint_to_ep(&mut store, ep_id, "c1".to_string(), 0);
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+        assert!(matches!(
+            result,
+            Err(EttleXError::ConstraintTombstoned { .. })
+        ));
     }
 
     #[test]

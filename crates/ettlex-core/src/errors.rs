@@ -52,6 +52,14 @@ pub enum ExErrorKind {
     // Approval Errors
     ApprovalNotFound,
     ApprovalRoutingUnavailable,
+    /// CAS blob referenced by an approval_requests row is missing
+    ApprovalStorageCorrupt,
+
+    // Constraint Errors
+    InvalidConstraintFamily,
+    AlreadyExists,
+    ConstraintTombstoned,
+    DuplicateAttachment,
 
     // Commit policy
     HeadMismatch,
@@ -60,6 +68,22 @@ pub enum ExErrorKind {
     RootEttleAmbiguous,
     RootEttleInvalid,
     EptAmbiguous,
+
+    // Structural/Validation (extended)
+    /// An EP has more than one parent EP in the refinement graph (integrity violation)
+    RefinementIntegrityViolation,
+    /// A valid query surface that is not yet implemented in this build
+    NotImplemented,
+
+    // Diff / manifest parsing
+    /// Manifest bytes are not valid UTF-8 JSON, or `manifest_schema_version` is the wrong type
+    InvalidManifest,
+    /// A required manifest field (e.g. `semantic_manifest_digest`, `constraints`) is absent
+    MissingField,
+    /// A CAS digest referenced in the manifest was not found in the CAS store
+    MissingBlob,
+    /// The constraints envelope disagrees with its own recorded digest (non-fatal: diff still returns)
+    InvariantViolation,
 
     // Integration/IO (future)
     Io,
@@ -109,12 +133,23 @@ impl ExErrorKind {
             ExErrorKind::ProfileDefaultMissing => "ERR_PROFILE_DEFAULT_MISSING",
             ExErrorKind::ApprovalNotFound => "ERR_APPROVAL_NOT_FOUND",
             ExErrorKind::ApprovalRoutingUnavailable => "ERR_APPROVAL_ROUTING_UNAVAILABLE",
+            ExErrorKind::ApprovalStorageCorrupt => "ERR_APPROVAL_STORAGE_CORRUPT",
+            ExErrorKind::RefinementIntegrityViolation => "ERR_REFINEMENT_INTEGRITY_VIOLATION",
+            ExErrorKind::NotImplemented => "ERR_NOT_IMPLEMENTED",
+            ExErrorKind::InvalidConstraintFamily => "ERR_INVALID_CONSTRAINT_FAMILY",
+            ExErrorKind::AlreadyExists => "ERR_ALREADY_EXISTS",
+            ExErrorKind::ConstraintTombstoned => "ERR_CONSTRAINT_TOMBSTONED",
+            ExErrorKind::DuplicateAttachment => "ERR_DUPLICATE_ATTACHMENT",
             ExErrorKind::HeadMismatch => "ERR_HEAD_MISMATCH",
             ExErrorKind::NotALeaf => "ERR_NOT_A_LEAF",
             ExErrorKind::PolicyDenied => "ERR_POLICY_DENIED",
             ExErrorKind::RootEttleAmbiguous => "ERR_ROOT_ETTLE_AMBIGUOUS",
             ExErrorKind::RootEttleInvalid => "ERR_ROOT_ETTLE_INVALID",
             ExErrorKind::EptAmbiguous => "ERR_EPT_AMBIGUOUS",
+            ExErrorKind::InvalidManifest => "ERR_INVALID_MANIFEST",
+            ExErrorKind::MissingField => "ERR_MISSING_FIELD",
+            ExErrorKind::MissingBlob => "ERR_MISSING_BLOB",
+            ExErrorKind::InvariantViolation => "ERR_INVARIANT_VIOLATION",
             ExErrorKind::Io => "ERR_IO",
             ExErrorKind::Serialization => "ERR_SERIALIZATION",
             ExErrorKind::Persistence => "ERR_PERSISTENCE",
@@ -342,6 +377,18 @@ pub enum EttleXError {
     /// Constraint was previously deleted (tombstoned)
     #[error("Constraint was deleted: {constraint_id}")]
     ConstraintDeleted { constraint_id: String },
+
+    /// Constraint already exists (duplicate ID)
+    #[error("Constraint already exists: {constraint_id}")]
+    ConstraintAlreadyExists { constraint_id: String },
+
+    /// Constraint is tombstoned (used in attach path - distinct from ConstraintDeleted)
+    #[error("Constraint {constraint_id} is tombstoned and cannot be attached")]
+    ConstraintTombstoned { constraint_id: String },
+
+    /// Constraint family is invalid (empty not allowed)
+    #[error("Constraint family is invalid: {constraint_id}")]
+    InvalidConstraintFamily { constraint_id: String },
 
     /// Constraint already attached to EP
     #[error("Constraint {constraint_id} is already attached to EP {ep_id}")]
@@ -628,10 +675,28 @@ impl From<EttleXError> for ExError {
                 .with_entity_id(constraint_id)
                 .with_message("Constraint was deleted"),
 
+            EttleXError::ConstraintAlreadyExists { constraint_id } => {
+                ExError::new(ExErrorKind::AlreadyExists)
+                    .with_entity_id(constraint_id)
+                    .with_message("Constraint already exists")
+            }
+
+            EttleXError::ConstraintTombstoned { constraint_id } => {
+                ExError::new(ExErrorKind::ConstraintTombstoned)
+                    .with_entity_id(constraint_id)
+                    .with_message("Constraint is tombstoned and cannot be attached")
+            }
+
+            EttleXError::InvalidConstraintFamily { constraint_id } => {
+                ExError::new(ExErrorKind::InvalidConstraintFamily)
+                    .with_entity_id(constraint_id)
+                    .with_message("Constraint family is invalid")
+            }
+
             EttleXError::ConstraintAlreadyAttached {
                 constraint_id,
                 ep_id,
-            } => ExError::new(ExErrorKind::ConstraintViolation)
+            } => ExError::new(ExErrorKind::DuplicateAttachment)
                 .with_entity_id(constraint_id)
                 .with_ep_id(ep_id)
                 .with_message("Constraint is already attached to EP"),

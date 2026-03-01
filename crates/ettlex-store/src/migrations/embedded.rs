@@ -35,5 +35,9 @@ pub fn get_migrations() -> Vec<Migration> {
             id: "006_approval_requests_schema",
             sql: include_str!("../../migrations/006_approval_requests_schema.sql"),
         },
+        Migration {
+            id: "007_approval_cas_schema",
+            sql: include_str!("../../migrations/007_approval_cas_schema.sql"),
+        },
     ]
 }
