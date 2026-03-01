@@ -11,7 +11,8 @@ None of these operations write to the database or CAS.
 ```rust
 use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery, EngineQueryResult};
 
-let result = apply_engine_query(query, &conn, &cas)?;
+let result = apply_engine_query(query, &conn, &cas, policy_provider)?;
+// policy_provider: Option<&dyn PolicyProvider> — pass Some(&provider) for policy queries, None otherwise
 ```
 
 ---
@@ -423,17 +424,90 @@ EngineQuery::ConstraintPredicatesPreview {
 
 ---
 
+## Policy Queries (`ep:policy_codegen_handoff:0`)
+
+Policy queries require `policy_provider: Some(&provider)`. Passing `None` returns `NotImplemented`.
+
+### `PolicyList`
+
+Returns all policy documents known to the provider, sorted by `policy_ref`.
+
+```rust
+EngineQuery::PolicyList
+// → EngineQueryResult::PolicyList(Vec<PolicyListEntry {
+//       policy_ref: String,
+//       version: String,
+//   }>)
+```
+
+**Errors**: `Io` if the policies directory cannot be read.
+
+---
+
+### `PolicyRead`
+
+Returns the full canonical text of a policy document.
+
+```rust
+EngineQuery::PolicyRead { policy_ref: String }
+// → EngineQueryResult::PolicyRead(PolicyReadResult {
+//       policy_ref: String,
+//       text: String,
+//   })
+```
+
+**Errors**: `PolicyNotFound` if `policy_ref` is unknown. `PolicyParseError` if the file contains invalid UTF-8.
+
+---
+
+### `PolicyExport`
+
+Extracts structured HANDOFF blocks from a policy document.
+
+```rust
+EngineQuery::PolicyExport {
+    policy_ref: String,
+    export_kind: String,  // currently: "codegen_handoff"
+}
+// → EngineQueryResult::PolicyExport(PolicyExportResult {
+//       policy_ref: String,
+//       export_kind: String,
+//       text: String,   // concatenated HANDOFF block content
+//   })
+```
+
+**Errors**: `PolicyNotFound` if ref is unknown. `PolicyExportFailed` if markers are malformed or `export_kind` is unknown. `PolicyExportTooLarge` if result exceeds the configured byte limit. See [policy-system.md](./policy-system.md) for HANDOFF marker format.
+
+---
+
+### `SnapshotManifestPolicyRef`
+
+Returns the `policy_ref` string stored in a committed snapshot manifest. Does not require a policy provider.
+
+```rust
+EngineQuery::SnapshotManifestPolicyRef { manifest_digest: String }
+// → EngineQueryResult::SnapshotManifestPolicyRef(String)
+```
+
+**Errors**: `MissingBlob` if the manifest is not in CAS. `InvalidManifest` if the manifest cannot be deserialized. `MissingField` if the manifest has no `policy_ref` field.
+
+---
+
 ## Error Contract
 
-| `ExErrorKind`                  | When raised                                       |
-| ------------------------------ | ------------------------------------------------- |
-| `NotFound`                     | Generic entity lookup failure                     |
-| `ProfileNotFound`              | Profile ref not found                             |
-| `ApprovalNotFound`             | Approval token not found                          |
-| `ApprovalStorageCorrupt`       | Row exists in DB but CAS blob is missing          |
-| `RefinementIntegrityViolation` | EP has more than one structural parent            |
-| `MissingBlob`                  | CAS blob not found for a snapshot manifest digest |
-| `NotImplemented`               | Query is valid but deferred to a future phase     |
-| `InvalidManifest`              | Manifest bytes cannot be deserialized             |
-| `Persistence`                  | SQLite query failure                              |
-| `Io`                           | Filesystem / CAS I/O failure                      |
+| `ExErrorKind`                  | When raised                                        |
+| ------------------------------ | -------------------------------------------------- |
+| `NotFound`                     | Generic entity lookup failure                      |
+| `ProfileNotFound`              | Profile ref not found                              |
+| `ApprovalNotFound`             | Approval token not found                           |
+| `ApprovalStorageCorrupt`       | Row exists in DB but CAS blob is missing           |
+| `RefinementIntegrityViolation` | EP has more than one structural parent             |
+| `MissingBlob`                  | CAS blob not found for a snapshot manifest digest  |
+| `NotImplemented`               | Query is valid but deferred to a future phase      |
+| `InvalidManifest`              | Manifest bytes cannot be deserialized              |
+| `Persistence`                  | SQLite query failure                               |
+| `PolicyNotFound`               | `policy_ref` not found in the provider             |
+| `PolicyExportFailed`           | Malformed HANDOFF markers or unknown `export_kind` |
+| `PolicyExportTooLarge`         | Export size exceeds configured byte limit          |
+| `PolicyParseError`             | Policy file contains invalid UTF-8                 |
+| `Io`                           | Filesystem / CAS I/O failure                       |

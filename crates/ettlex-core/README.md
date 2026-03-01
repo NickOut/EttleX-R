@@ -635,6 +635,53 @@ Comprehensive validation available via `validate_tree()` with 7 mandatory checks
 - ❌ Ettle/EP splitting or combining
 - ❌ Undo/rollback
 
+## Policy Provider
+
+`ettlex-core` defines the backend-agnostic `PolicyProvider` trait and two built-in implementations:
+
+```rust
+use ettlex_core::policy_provider::{NoopPolicyProvider, DenyAllPolicyProvider, PolicyProvider};
+
+// Always allows commits; policy_read/export return PolicyNotFound
+let noop = NoopPolicyProvider;
+
+// Always denies commits with PolicyDenied
+let deny = DenyAllPolicyProvider;
+```
+
+### `PolicyProvider` Trait
+
+| Method                                   | Description                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------------- |
+| `policy_check(ref, profile, op, entity)` | Gate a snapshot commit. Returns `Ok(())` to allow, `Err(PolicyDenied)` to block. |
+| `policy_read(ref)`                       | Return the full text of a policy document.                                       |
+| `policy_export(ref, kind)`               | Extract structured content (HANDOFF blocks) from a policy document.              |
+| `policy_list()`                          | List all available policies sorted by `policy_ref`.                              |
+
+### `PolicyProviderAnchorAdapter`
+
+Wraps any `PolicyProvider` and implements `AnchorPolicy` with NeverAnchored semantics:
+
+```rust
+use ettlex_core::policy::{AnchorPolicy, PolicyProviderAnchorAdapter};
+use ettlex_core::policy_provider::NoopPolicyProvider;
+
+let adapter = PolicyProviderAnchorAdapter::new(&NoopPolicyProvider);
+assert!(!adapter.is_anchored_ep("any-ep"));
+assert!(!adapter.is_anchored_ettle("any-ettle"));
+```
+
+### New Error Kinds (5)
+
+| `ExErrorKind`          | Code                          | When raised                                      |
+| ---------------------- | ----------------------------- | ------------------------------------------------ |
+| `PolicyDenied`         | `ERR_POLICY_DENIED`           | `policy_check` rejected the operation            |
+| `PolicyNotFound`       | `ERR_POLICY_NOT_FOUND`        | `policy_ref` not found in the provider           |
+| `PolicyRefMissing`     | `ERR_POLICY_REF_MISSING`      | Empty `policy_ref` passed to snapshot commit     |
+| `PolicyExportFailed`   | `ERR_POLICY_EXPORT_FAILED`    | Malformed HANDOFF markers or unknown export kind |
+| `PolicyExportTooLarge` | `ERR_POLICY_EXPORT_TOO_LARGE` | Exported content exceeds byte limit              |
+| `PolicyParseError`     | `ERR_POLICY_PARSE_ERROR`      | Policy file contains invalid UTF-8               |
+
 ## Contributing
 
 This is Phase 0.5 of the EttleX project. See specifications:

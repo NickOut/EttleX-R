@@ -78,7 +78,7 @@ fn test_snapshot_diff_is_read_only() {
         a_ref: SnapshotRef::SnapshotId(snap_id.clone()),
         b_ref: SnapshotRef::SnapshotId(snap_id.clone()),
     };
-    apply_engine_query(query, &conn, &cas).unwrap();
+    apply_engine_query(query, &conn, &cas, None).unwrap();
 
     let after: i64 = conn
         .query_row("SELECT COUNT(*) FROM snapshots", [], |r| r.get(0))
@@ -100,7 +100,7 @@ fn test_snapshot_diff_resolves_snapshot_id() {
         a_ref: SnapshotRef::SnapshotId(snap_id.clone()),
         b_ref: SnapshotRef::SnapshotId(snap_id.clone()),
     };
-    let result = apply_engine_query(query, &conn, &cas).unwrap();
+    let result = apply_engine_query(query, &conn, &cas, None).unwrap();
 
     match result {
         EngineQueryResult::SnapshotDiff(r) => {
@@ -136,7 +136,7 @@ fn test_snapshot_diff_missing_snapshot_id() {
         a_ref: SnapshotRef::SnapshotId("does-not-exist".to_string()),
         b_ref: SnapshotRef::SnapshotId("also-does-not-exist".to_string()),
     };
-    let err = apply_engine_query(query, &conn, &cas).unwrap_err();
+    let err = apply_engine_query(query, &conn, &cas, None).unwrap_err();
     assert_eq!(err.kind(), ettlex_core::errors::ExErrorKind::NotFound);
 }
 
@@ -150,7 +150,7 @@ fn test_snapshot_diff_missing_manifest_digest_in_cas() {
         a_ref: SnapshotRef::ManifestDigest(fake_digest.clone()),
         b_ref: SnapshotRef::ManifestDigest(fake_digest),
     };
-    let err = apply_engine_query(query, &conn, &cas).unwrap_err();
+    let err = apply_engine_query(query, &conn, &cas, None).unwrap_err();
     assert_eq!(
         err.kind(),
         ettlex_core::errors::ExErrorKind::MissingBlob,
@@ -172,7 +172,7 @@ fn test_snapshot_diff_malformed_manifest_bytes() {
         a_ref: SnapshotRef::ManifestDigest(digest.clone()),
         b_ref: SnapshotRef::ManifestDigest(digest),
     };
-    let err = apply_engine_query(query, &conn, &cas).unwrap_err();
+    let err = apply_engine_query(query, &conn, &cas, None).unwrap_err();
     assert_eq!(
         err.kind(),
         ettlex_core::errors::ExErrorKind::InvalidManifest,

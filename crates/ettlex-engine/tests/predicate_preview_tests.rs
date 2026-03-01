@@ -60,6 +60,7 @@ fn test_preview_does_not_create_approval_request() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -93,11 +94,11 @@ fn test_preview_deterministic() {
         candidates: vec!["ep:x".to_string()],
     };
 
-    let r1 = match apply_engine_query(query(), &conn, &cas).unwrap() {
+    let r1 = match apply_engine_query(query(), &conn, &cas, None).unwrap() {
         EngineQueryResult::PredicatePreview(r) => r,
         _ => panic!("expected PredicatePreview"),
     };
-    let r2 = match apply_engine_query(query(), &conn, &cas).unwrap() {
+    let r2 = match apply_engine_query(query(), &conn, &cas, None).unwrap() {
         EngineQueryResult::PredicatePreview(r) => r,
         _ => panic!("expected PredicatePreview"),
     };
@@ -136,6 +137,7 @@ fn test_preview_evaluation_disabled() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -184,6 +186,7 @@ fn test_preview_empty_candidates_no_match() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 

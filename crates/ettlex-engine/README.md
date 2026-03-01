@@ -351,6 +351,24 @@ pub struct ListOptions {
 
 Results return `Page<T>` with `cursor: Option<String>` and `has_more: bool`.
 
+### Policy Queries (`ep:policy_codegen_handoff:0`)
+
+Policy queries require `policy_provider: Some(&provider)`. Passing `None` returns `NotImplemented`.
+
+| Query                                           | Description                                                                           |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `PolicyList`                                    | List all policy documents in the provider (sorted by `policy_ref`)                    |
+| `PolicyRead { policy_ref }`                     | Return the full text of a policy document                                             |
+| `PolicyExport { policy_ref, export_kind }`      | Extract HANDOFF block content from a policy document                                  |
+| `SnapshotManifestPolicyRef { manifest_digest }` | Return the `policy_ref` field from a committed snapshot manifest (no provider needed) |
+
+```rust
+apply_engine_query(EngineQuery::PolicyList, &conn, &cas, Some(&provider))?;
+apply_engine_query(EngineQuery::SnapshotManifestPolicyRef { manifest_digest }, &conn, &cas, None)?;
+```
+
+See [`docs/action-read-tools.md`](../../docs/action-read-tools.md) for full parameter/return/error documentation.
+
 ### Error Contract
 
 | Error kind                     | Meaning                                                  |
@@ -362,6 +380,10 @@ Results return `Page<T>` with `cursor: Option<String>` and `has_more: bool`.
 | `RefinementIntegrityViolation` | EP has more than one structural parent                   |
 | `MissingBlob`                  | CAS blob not found for a snapshot manifest digest        |
 | `NotImplemented`               | Query is valid but deferred (e.g., `ApprovalListByKind`) |
+| `PolicyNotFound`               | `policy_ref` not found in the provider                   |
+| `PolicyExportFailed`           | Malformed HANDOFF markers or unknown `export_kind`       |
+| `PolicyExportTooLarge`         | Export size exceeds configured byte limit                |
+| `PolicyParseError`             | Policy file contains invalid UTF-8                       |
 
 ## Future Work
 

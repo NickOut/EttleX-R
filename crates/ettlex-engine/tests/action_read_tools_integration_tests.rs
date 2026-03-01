@@ -73,11 +73,12 @@ fn test_read_tools_are_nonmutating() {
         .unwrap();
 
     // Issue several read queries
-    apply_engine_query(EngineQuery::StateGetVersion, &conn, &cas).unwrap();
+    apply_engine_query(EngineQuery::StateGetVersion, &conn, &cas, None).unwrap();
     apply_engine_query(
         EngineQuery::EttleList(ettlex_engine::commands::read_tools::ListOptions::default()),
         &conn,
         &cas,
+        None,
     )
     .unwrap();
     apply_engine_query(
@@ -86,6 +87,7 @@ fn test_read_tools_are_nonmutating() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
     apply_engine_query(
@@ -94,6 +96,7 @@ fn test_read_tools_are_nonmutating() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -138,6 +141,7 @@ fn test_ettle_get_returns_metadata_and_eps() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -176,6 +180,7 @@ fn test_ettle_list_enforces_default_limit() {
         EngineQuery::EttleList(ettlex_engine::commands::read_tools::ListOptions::default()),
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -216,7 +221,8 @@ fn test_ettle_list_cursor_pagination_deterministic() {
         prefix_filter: None,
         title_contains: None,
     };
-    let page1 = match apply_engine_query(EngineQuery::EttleList(opts1), &conn, &cas).unwrap() {
+    let page1 = match apply_engine_query(EngineQuery::EttleList(opts1), &conn, &cas, None).unwrap()
+    {
         EngineQueryResult::EttleList(p) => p,
         _ => panic!("expected EttleList"),
     };
@@ -231,7 +237,8 @@ fn test_ettle_list_cursor_pagination_deterministic() {
         prefix_filter: None,
         title_contains: None,
     };
-    let page2 = match apply_engine_query(EngineQuery::EttleList(opts2), &conn, &cas).unwrap() {
+    let page2 = match apply_engine_query(EngineQuery::EttleList(opts2), &conn, &cas, None).unwrap()
+    {
         EngineQueryResult::EttleList(p) => p,
         _ => panic!("expected EttleList"),
     };
@@ -272,7 +279,7 @@ fn test_ettle_list_prefix_filter() {
         prefix_filter: Some("abc:".to_string()),
         title_contains: None,
     };
-    let page = match apply_engine_query(EngineQuery::EttleList(opts), &conn, &cas).unwrap() {
+    let page = match apply_engine_query(EngineQuery::EttleList(opts), &conn, &cas, None).unwrap() {
         EngineQueryResult::EttleList(p) => p,
         _ => panic!("expected EttleList"),
     };
@@ -324,6 +331,7 @@ fn test_ep_list_children_deterministic() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -371,6 +379,7 @@ fn test_ep_list_parents_single_parent() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -422,6 +431,7 @@ fn test_ep_list_parents_integrity_violation() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap_err();
 
@@ -463,6 +473,7 @@ fn test_constraint_list_by_family_tombstone_filter() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -482,6 +493,7 @@ fn test_constraint_list_by_family_tombstone_filter() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -533,6 +545,7 @@ fn test_ep_list_constraints_ordered() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -575,6 +588,7 @@ fn test_manifest_get_by_snapshot_digests_and_bytes() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -605,6 +619,7 @@ fn test_manifest_get_by_digest_not_found() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap_err();
 
@@ -652,6 +667,7 @@ fn test_ept_compute_deterministic() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
     let result2 = apply_engine_query(
@@ -660,6 +676,7 @@ fn test_ept_compute_deterministic() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -717,6 +734,7 @@ fn test_ept_compute_ambiguous() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap_err();
 
@@ -777,12 +795,14 @@ fn test_decision_list_deterministic() {
         EngineQuery::DecisionList(ettlex_engine::commands::read_tools::ListOptions::default()),
         &conn,
         &cas,
+        None,
     )
     .unwrap();
     let result2 = apply_engine_query(
         EngineQuery::DecisionList(ettlex_engine::commands::read_tools::ListOptions::default()),
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -883,6 +903,7 @@ fn test_ep_list_decisions_with_ancestors() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -906,6 +927,7 @@ fn test_ep_list_decisions_with_ancestors() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -975,6 +997,7 @@ fn test_ept_compute_decision_context_deterministic() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -1048,6 +1071,7 @@ fn test_decision_queries_no_snapshot_effect() {
         EngineQuery::DecisionList(ettlex_engine::commands::read_tools::ListOptions::default()),
         &conn,
         &cas,
+        None,
     )
     .unwrap();
     apply_engine_query(
@@ -1056,6 +1080,7 @@ fn test_decision_queries_no_snapshot_effect() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -1102,6 +1127,7 @@ fn test_read_tools_scale() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
     let elapsed = start.elapsed();

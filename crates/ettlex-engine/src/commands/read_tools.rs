@@ -216,6 +216,30 @@ pub struct PredicatePreviewResult {
 }
 
 // ---------------------------------------------------------------------------
+// Policy
+// ---------------------------------------------------------------------------
+
+/// Result of a `PolicyRead` query.
+#[derive(Debug, Clone)]
+pub struct PolicyReadResult {
+    /// The policy reference identifier.
+    pub policy_ref: String,
+    /// Full canonical text of the policy document.
+    pub text: String,
+}
+
+/// Result of a `PolicyExport` query.
+#[derive(Debug, Clone)]
+pub struct PolicyExportResult {
+    /// The policy reference identifier.
+    pub policy_ref: String,
+    /// The export kind used (e.g. `"codegen_handoff"`).
+    pub export_kind: String,
+    /// Extracted and concatenated obligation text.
+    pub text: String,
+}
+
+// ---------------------------------------------------------------------------
 // EP list helper types
 // ---------------------------------------------------------------------------
 

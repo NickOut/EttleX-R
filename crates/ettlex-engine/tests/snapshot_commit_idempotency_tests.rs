@@ -1,7 +1,7 @@
 //! Idempotency and append-only semantics tests for snapshot commit (S15, S16)
 
 use ettlex_core::approval_router::NoopApprovalRouter;
-use ettlex_core::policy::NoopCommitPolicyHook;
+use ettlex_core::policy_provider::NoopPolicyProvider;
 use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
@@ -51,7 +51,7 @@ fn commit(conn: &mut Connection, cas: &FsStore, allow_dedup: bool) -> EngineComm
         },
         conn,
         cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     )
     .unwrap()
@@ -159,7 +159,7 @@ fn test_snapshot_commit_large_manifest() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
     let elapsed = start.elapsed();

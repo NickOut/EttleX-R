@@ -75,6 +75,18 @@ pub enum ExErrorKind {
     /// A valid query surface that is not yet implemented in this build
     NotImplemented,
 
+    // Policy
+    /// The referenced policy document does not exist in the policy provider
+    PolicyNotFound,
+    /// Policy export failed (malformed/unterminated HANDOFF markers, or unknown export_kind)
+    PolicyExportFailed,
+    /// A snapshot commit was attempted with an empty policy_ref
+    PolicyRefMissing,
+    /// Policy export result exceeded the configured maximum byte limit
+    PolicyExportTooLarge,
+    /// Policy file contains invalid UTF-8 or cannot be decoded
+    PolicyParseError,
+
     // Diff / manifest parsing
     /// Manifest bytes are not valid UTF-8 JSON, or `manifest_schema_version` is the wrong type
     InvalidManifest,
@@ -146,6 +158,11 @@ impl ExErrorKind {
             ExErrorKind::RootEttleAmbiguous => "ERR_ROOT_ETTLE_AMBIGUOUS",
             ExErrorKind::RootEttleInvalid => "ERR_ROOT_ETTLE_INVALID",
             ExErrorKind::EptAmbiguous => "ERR_EPT_AMBIGUOUS",
+            ExErrorKind::PolicyNotFound => "ERR_POLICY_NOT_FOUND",
+            ExErrorKind::PolicyExportFailed => "ERR_POLICY_EXPORT_FAILED",
+            ExErrorKind::PolicyRefMissing => "ERR_POLICY_REF_MISSING",
+            ExErrorKind::PolicyExportTooLarge => "ERR_POLICY_EXPORT_TOO_LARGE",
+            ExErrorKind::PolicyParseError => "ERR_POLICY_PARSE_ERROR",
             ExErrorKind::InvalidManifest => "ERR_INVALID_MANIFEST",
             ExErrorKind::MissingField => "ERR_MISSING_FIELD",
             ExErrorKind::MissingBlob => "ERR_MISSING_BLOB",
@@ -1068,5 +1085,27 @@ mod tests {
     fn test_ex_error_candidates_none_by_default() {
         let err = ExError::new(ExErrorKind::NotFound);
         assert!(err.candidates().is_none());
+    }
+
+    // TDD Cycle 1 — Policy ExErrorKind codes (S8, S9, S13, S14, S15)
+    #[test]
+    fn test_policy_error_kind_codes() {
+        assert_eq!(ExErrorKind::PolicyNotFound.code(), "ERR_POLICY_NOT_FOUND");
+        assert_eq!(
+            ExErrorKind::PolicyExportFailed.code(),
+            "ERR_POLICY_EXPORT_FAILED"
+        );
+        assert_eq!(
+            ExErrorKind::PolicyRefMissing.code(),
+            "ERR_POLICY_REF_MISSING"
+        );
+        assert_eq!(
+            ExErrorKind::PolicyExportTooLarge.code(),
+            "ERR_POLICY_EXPORT_TOO_LARGE"
+        );
+        assert_eq!(
+            ExErrorKind::PolicyParseError.code(),
+            "ERR_POLICY_PARSE_ERROR"
+        );
     }
 }

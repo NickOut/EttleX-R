@@ -1,7 +1,7 @@
 //! Tests: Snapshot commit via action command (leaf-scoped)
 
 use ettlex_core::approval_router::NoopApprovalRouter;
-use ettlex_core::policy::NoopCommitPolicyHook;
+use ettlex_core::policy_provider::NoopPolicyProvider;
 use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
@@ -49,7 +49,7 @@ fn test_snapshot_commit_succeeds_via_action_command() {
         cmd,
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
     assert!(
@@ -110,7 +110,7 @@ fn test_snapshot_commit_rejects_non_leaf_ep() {
         cmd,
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
     assert!(result.is_err(), "Expected failure for non-leaf EP");
@@ -149,7 +149,7 @@ fn test_snapshot_commit_rejects_unknown_ep() {
         cmd,
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
     assert!(result.is_err());

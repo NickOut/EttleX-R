@@ -1,7 +1,7 @@
 //! Determinism invariant tests for snapshot commit
 
 use ettlex_core::approval_router::NoopApprovalRouter;
-use ettlex_core::policy::NoopCommitPolicyHook;
+use ettlex_core::policy_provider::NoopPolicyProvider;
 use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
@@ -66,7 +66,7 @@ fn test_snapshot_output_deterministic_across_paths() {
         cmd,
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     )
     .unwrap() else {
@@ -165,7 +165,7 @@ fn test_no_extra_mutation_during_commit() {
         cmd,
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     )
     .unwrap();

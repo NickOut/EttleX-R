@@ -34,8 +34,8 @@ use rusqlite::Connection;
 use crate::commands::read_tools::{
     ApprovalGetResult, ApprovalListItem, ApprovalPage, DecisionContextResult, DecisionPage,
     EptComputeResult, EttleGetResult, EttlePage, ListOptions, ManifestGetResult, Page,
-    PredicatePreviewResult, PreviewStatus, ProfileGetResult, ProfilePage, ProfileResolveResult,
-    SnapshotGetResult, StateVersionResult,
+    PolicyExportResult, PolicyReadResult, PredicatePreviewResult, PreviewStatus, ProfileGetResult,
+    ProfilePage, ProfileResolveResult, SnapshotGetResult, StateVersionResult,
 };
 
 // ---------------------------------------------------------------------------
@@ -171,6 +171,19 @@ pub enum EngineQuery {
         context: serde_json::Value,
         candidates: Vec<String>,
     },
+
+    // ── Policy ───────────────────────────────────────────────────────────────
+    /// List all policies available in the provider.
+    PolicyList,
+    /// Return the full canonical text of a policy document.
+    PolicyRead { policy_ref: String },
+    /// Export structured content from a policy document (e.g. HANDOFF obligations).
+    PolicyExport {
+        policy_ref: String,
+        export_kind: String,
+    },
+    /// Return the `policy_ref` recorded in a committed snapshot manifest.
+    SnapshotManifestPolicyRef { manifest_digest: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +242,16 @@ pub enum EngineQueryResult {
 
     // ── Predicate preview ────────────────────────────────────────────────────
     PredicatePreview(PredicatePreviewResult),
+
+    // ── Policy ───────────────────────────────────────────────────────────────
+    /// Result of a `PolicyList` query.
+    PolicyList(Vec<ettlex_core::policy_provider::PolicyListEntry>),
+    /// Result of a `PolicyRead` query.
+    PolicyRead(PolicyReadResult),
+    /// Result of a `PolicyExport` query.
+    PolicyExport(PolicyExportResult),
+    /// Result of a `SnapshotManifestPolicyRef` query.
+    SnapshotManifestPolicyRef(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +311,11 @@ fn sha256_hex(data: &[u8]) -> String {
 /// All branches use only `&Connection` (shared, non-mutable) and `&FsStore`.
 /// Nothing is written to the database, CAS, or ledger.
 ///
+/// The `policy_provider` parameter is required for policy-related queries
+/// (`PolicyList`, `PolicyRead`, `PolicyExport`, `SnapshotManifestPolicyRef`).
+/// Pass `None` for non-policy queries. Policy queries with `policy_provider = None`
+/// return `Err(NotImplemented)`.
+///
 /// # Errors
 ///
 /// Error kinds depend on the query; see individual variant documentation.
@@ -295,6 +323,7 @@ pub fn apply_engine_query(
     query: EngineQuery,
     conn: &Connection,
     cas: &FsStore,
+    policy_provider: Option<&dyn ettlex_core::policy_provider::PolicyProvider>,
 ) -> Result<EngineQueryResult> {
     match query {
         // ── SnapshotDiff ──────────────────────────────────────────────────────
@@ -1327,6 +1356,126 @@ pub fn apply_engine_query(
                     let e_clone = e.clone();
                     log_op_error!(
                         "constraint_predicates_preview",
+                        e_clone,
+                        duration_ms = elapsed
+                    );
+                }
+            }
+            result
+        }
+
+        // ── PolicyList ────────────────────────────────────────────────────────
+        EngineQuery::PolicyList => {
+            log_op_start!("policy_list");
+            let start = std::time::Instant::now();
+            let result = (|| -> Result<EngineQueryResult> {
+                let provider = policy_provider.ok_or_else(|| {
+                    ExError::new(ExErrorKind::NotImplemented)
+                        .with_op("policy_list")
+                        .with_message("policy_provider is required for PolicyList")
+                })?;
+                let entries = provider.policy_list()?;
+                Ok(EngineQueryResult::PolicyList(entries))
+            })();
+            let elapsed = start.elapsed().as_millis() as u64;
+            match &result {
+                Ok(_) => log_op_end!("policy_list", duration_ms = elapsed),
+                Err(e) => {
+                    let e_clone = e.clone();
+                    log_op_error!("policy_list", e_clone, duration_ms = elapsed);
+                }
+            }
+            result
+        }
+
+        // ── PolicyRead ────────────────────────────────────────────────────────
+        EngineQuery::PolicyRead { policy_ref } => {
+            log_op_start!("policy_read");
+            let start = std::time::Instant::now();
+            let result = (|| -> Result<EngineQueryResult> {
+                let provider = policy_provider.ok_or_else(|| {
+                    ExError::new(ExErrorKind::NotImplemented)
+                        .with_op("policy_read")
+                        .with_message("policy_provider is required for PolicyRead")
+                })?;
+                let text = provider.policy_read(&policy_ref)?;
+                Ok(EngineQueryResult::PolicyRead(PolicyReadResult {
+                    policy_ref,
+                    text,
+                }))
+            })();
+            let elapsed = start.elapsed().as_millis() as u64;
+            match &result {
+                Ok(_) => log_op_end!("policy_read", duration_ms = elapsed),
+                Err(e) => {
+                    let e_clone = e.clone();
+                    log_op_error!("policy_read", e_clone, duration_ms = elapsed);
+                }
+            }
+            result
+        }
+
+        // ── PolicyExport ──────────────────────────────────────────────────────
+        EngineQuery::PolicyExport {
+            policy_ref,
+            export_kind,
+        } => {
+            log_op_start!("policy_export");
+            let start = std::time::Instant::now();
+            let result = (|| -> Result<EngineQueryResult> {
+                let provider = policy_provider.ok_or_else(|| {
+                    ExError::new(ExErrorKind::NotImplemented)
+                        .with_op("policy_export")
+                        .with_message("policy_provider is required for PolicyExport")
+                })?;
+                let text = provider.policy_export(&policy_ref, &export_kind)?;
+                Ok(EngineQueryResult::PolicyExport(PolicyExportResult {
+                    policy_ref,
+                    export_kind,
+                    text,
+                }))
+            })();
+            let elapsed = start.elapsed().as_millis() as u64;
+            match &result {
+                Ok(_) => log_op_end!("policy_export", duration_ms = elapsed),
+                Err(e) => {
+                    let e_clone = e.clone();
+                    log_op_error!("policy_export", e_clone, duration_ms = elapsed);
+                }
+            }
+            result
+        }
+
+        // ── SnapshotManifestPolicyRef ─────────────────────────────────────────
+        EngineQuery::SnapshotManifestPolicyRef { manifest_digest } => {
+            log_op_start!("snapshot_manifest_policy_ref");
+            let start = std::time::Instant::now();
+            let result = (|| -> Result<EngineQueryResult> {
+                let manifest_bytes = fetch_manifest_bytes_by_digest(cas, &manifest_digest)?;
+                let manifest_json: serde_json::Value = serde_json::from_slice(&manifest_bytes)
+                    .map_err(|e| {
+                        ExError::new(ExErrorKind::InvalidManifest)
+                            .with_op("snapshot_manifest_policy_ref")
+                            .with_message(format!("Failed to parse manifest JSON: {}", e))
+                    })?;
+                let policy_ref = manifest_json
+                    .get("policy_ref")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        ExError::new(ExErrorKind::MissingField)
+                            .with_op("snapshot_manifest_policy_ref")
+                            .with_message("Manifest missing 'policy_ref' field")
+                    })?
+                    .to_string();
+                Ok(EngineQueryResult::SnapshotManifestPolicyRef(policy_ref))
+            })();
+            let elapsed = start.elapsed().as_millis() as u64;
+            match &result {
+                Ok(_) => log_op_end!("snapshot_manifest_policy_ref", duration_ms = elapsed),
+                Err(e) => {
+                    let e_clone = e.clone();
+                    log_op_error!(
+                        "snapshot_manifest_policy_ref",
                         e_clone,
                         duration_ms = elapsed
                     );

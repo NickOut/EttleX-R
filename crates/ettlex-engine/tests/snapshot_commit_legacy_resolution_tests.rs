@@ -6,7 +6,7 @@
 
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::errors::ExErrorKind;
-use ettlex_core::policy::NoopCommitPolicyHook;
+use ettlex_core::policy_provider::NoopPolicyProvider;
 use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
@@ -55,7 +55,7 @@ fn test_legacy_root_resolves_when_exactly_one_leaf() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 

@@ -9,6 +9,7 @@
 pub mod cas;
 pub mod db;
 pub mod errors;
+pub mod file_policy_provider;
 pub mod migrations;
 pub mod profile;
 pub mod repo;

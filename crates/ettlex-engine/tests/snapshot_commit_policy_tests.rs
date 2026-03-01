@@ -5,7 +5,7 @@
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::candidate_resolver::DryRunConstraintStatus;
 use ettlex_core::errors::ExErrorKind;
-use ettlex_core::policy::{DenyAllCommitPolicyHook, NoopCommitPolicyHook};
+use ettlex_core::policy_provider::{DenyAllPolicyProvider, NoopPolicyProvider};
 use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
@@ -96,7 +96,7 @@ fn commit_leaf(conn: &mut Connection, cas: &FsStore) -> EngineCommandResult {
         },
         conn,
         cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     )
     .unwrap()
@@ -124,7 +124,7 @@ fn test_policy_denied_no_writes_no_routing() {
         },
         &mut conn,
         &cas,
-        &DenyAllCommitPolicyHook,
+        &DenyAllPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -155,7 +155,7 @@ fn test_not_found_ep_fails_fast() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -196,7 +196,7 @@ fn test_not_a_leaf_fails_fast() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -227,7 +227,7 @@ fn test_unknown_profile_ref_fails() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -261,7 +261,7 @@ fn test_missing_profile_ref_uses_default() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -307,7 +307,7 @@ fn test_ept_ambiguous_not_waivable() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -356,7 +356,7 @@ fn test_constraint_ambiguity_fail_fast() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -392,7 +392,7 @@ fn test_constraint_ambiguity_choose_deterministic() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -435,7 +435,7 @@ fn test_constraint_ambiguity_routed() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &router,
     );
 
@@ -481,7 +481,7 @@ fn test_constraint_ambiguity_router_unavailable() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -521,7 +521,7 @@ fn test_expected_head_mismatch() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -562,7 +562,7 @@ fn test_expected_head_match_advances_head() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -597,7 +597,7 @@ fn test_expected_head_rejected_no_prior() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -628,7 +628,7 @@ fn test_first_commit_no_expected_head() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -672,7 +672,7 @@ fn test_concurrent_head_race() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
     // Client A gets was_duplicate (same semantic) — that's fine, head is still H
@@ -704,7 +704,7 @@ fn test_concurrent_head_race() {
             },
             &mut conn,
             &cas,
-            &NoopCommitPolicyHook,
+            &NoopPolicyProvider,
             &NoopApprovalRouter,
         );
         assert!(client_b.is_err());
@@ -738,7 +738,7 @@ fn test_dry_run_no_writes() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -796,7 +796,7 @@ fn test_dry_run_no_routing() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &router,
     );
 
@@ -852,7 +852,7 @@ fn test_created_at_manifest_digest_differs_semantic_same() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     )
     .unwrap()
@@ -895,7 +895,7 @@ fn test_semantic_digest_differs_on_different_inputs() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     )
     .unwrap()
@@ -918,7 +918,7 @@ fn test_semantic_digest_differs_on_different_inputs() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     )
     .unwrap()
@@ -962,7 +962,7 @@ fn test_routed_no_ledger_no_manifest() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &router,
     );
 
@@ -1007,7 +1007,7 @@ fn test_approval_request_deterministic_excl_created_at() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &router1,
     )
     .unwrap();
@@ -1035,7 +1035,7 @@ fn test_approval_request_deterministic_excl_created_at() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &router2,
     )
     .unwrap();
@@ -1084,7 +1084,7 @@ fn test_dry_run_computes_resolved_constraint_resolution() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -1129,7 +1129,7 @@ fn test_dry_run_yields_uncomputed_when_predicate_evaluation_disabled() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 
@@ -1193,7 +1193,7 @@ fn test_snapshot_commit_cas_failure_surfaces_persistence_error() {
         },
         &mut conn,
         &cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 

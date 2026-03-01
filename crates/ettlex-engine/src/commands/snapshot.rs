@@ -18,7 +18,7 @@ use ettlex_core::candidate_resolver::{
     DryRunConstraintResolution, DryRunConstraintStatus, ResolveResult,
 };
 use ettlex_core::errors::{ExError, ExErrorKind};
-use ettlex_core::policy::CommitPolicyHook;
+use ettlex_core::policy_provider::PolicyProvider;
 use ettlex_core::snapshot::manifest::generate_manifest;
 use ettlex_core::traversal::ept::compute_ept;
 
@@ -231,17 +231,24 @@ fn get_seed_digest(conn: &Connection) -> Result<Option<String>> {
 
 /// Commit a snapshot for a leaf EP — CANONICAL entry point.
 ///
-/// Runs the full policy pipeline (policy check → leaf validation → profile
-/// resolution → EPT computation → constraint resolution → persist).
+/// Runs the full policy pipeline:
+/// 1. `PolicyRefMissing` guard — reject empty `policy_ref` immediately
+/// 2. Policy provider check — allow/deny (hard stop, no writes, no routing)
+/// 3. Hydrate store
+/// 4. Validate leaf EP (NotFound / NotALeaf)
+/// 5. Profile resolution → ambiguity_policy + predicate_evaluation_enabled
+/// 6. EPT computation (EptAmbiguous and DeterminismViolation are NOT waivable)
+/// 7. Constraint candidate resolution (governed by ambiguity_policy)
+/// 8. dry_run short-circuit (no writes) — OR — persist
 ///
 /// ## Arguments
 /// - `leaf_ep_id`: Leaf EP identifier (must exist and have no child_ettle_id)
-/// - `policy_ref`: Policy identifier recorded in manifest
+/// - `policy_ref`: Policy identifier recorded in manifest (must not be empty)
 /// - `profile_ref`: Optional profile ref; if None, defaults to "profile/default@0"
 /// - `options`: expected_head / dry_run / allow_dedup
 /// - `conn`: Database connection
 /// - `cas`: CAS store
-/// - `policy_hook`: Allow/deny hook evaluated before any writes
+/// - `policy_provider`: Backend-agnostic policy provider (check + read + export + list)
 /// - `approval_router`: Approval workflow router (used for route_for_approval)
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn snapshot_commit_by_leaf(
@@ -251,13 +258,26 @@ pub(crate) fn snapshot_commit_by_leaf(
     options: SnapshotOptions,
     conn: &mut Connection,
     cas: &FsStore,
-    policy_hook: &dyn CommitPolicyHook,
+    policy_provider: &dyn PolicyProvider,
     approval_router: &dyn ApprovalRouter,
 ) -> Result<SnapshotCommitOutcome> {
     let effective_profile_ref = profile_ref.unwrap_or("profile/default@0");
 
-    // Step 1: Policy hook check (hard stop, no writes, no routing)
-    policy_hook.check(policy_ref, effective_profile_ref, leaf_ep_id)?;
+    // Step 1a: PolicyRefMissing guard (fires before policy check, before any writes)
+    if policy_ref.is_empty() {
+        return Err(ExError::new(ExErrorKind::PolicyRefMissing)
+            .with_op("snapshot_commit_by_leaf")
+            .with_ep_id(leaf_ep_id)
+            .with_message("policy_ref must not be empty"));
+    }
+
+    // Step 1b: Policy provider check (hard stop, no writes, no routing)
+    policy_provider.policy_check(
+        policy_ref,
+        Some(effective_profile_ref),
+        "snapshot_commit",
+        Some(leaf_ep_id),
+    )?;
 
     // Step 2: Hydrate store
     let store = ettlex_store::repo::hydration::load_tree(conn).map_err(|e| {
@@ -397,7 +417,7 @@ pub(crate) fn snapshot_commit_by_root_legacy(
     options: SnapshotOptions,
     conn: &mut Connection,
     cas: &FsStore,
-    policy_hook: &dyn CommitPolicyHook,
+    policy_provider: &dyn PolicyProvider,
     approval_router: &dyn ApprovalRouter,
 ) -> Result<SnapshotCommitOutcome> {
     let store = ettlex_store::repo::hydration::load_tree(conn).map_err(|e| {
@@ -414,7 +434,7 @@ pub(crate) fn snapshot_commit_by_root_legacy(
         options,
         conn,
         cas,
-        policy_hook,
+        policy_provider,
         approval_router,
     )
 }
@@ -481,7 +501,7 @@ pub fn snapshot_commit(
     cas: &FsStore,
 ) -> Result<SnapshotCommitResult> {
     use ettlex_core::approval_router::NoopApprovalRouter;
-    use ettlex_core::policy::NoopCommitPolicyHook;
+    use ettlex_core::policy_provider::NoopPolicyProvider;
     use std::time::Instant;
 
     let start = Instant::now();
@@ -497,7 +517,7 @@ pub fn snapshot_commit(
         options,
         conn,
         cas,
-        &NoopCommitPolicyHook,
+        &NoopPolicyProvider,
         &NoopApprovalRouter,
     );
 

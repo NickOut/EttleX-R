@@ -141,6 +141,50 @@ pub trait CommitPolicyHook: Send + Sync {
     ) -> std::result::Result<(), crate::errors::ExError>;
 }
 
+// ---------------------------------------------------------------------------
+// PolicyProviderAnchorAdapter
+// ---------------------------------------------------------------------------
+
+/// Adapts a [`crate::policy_provider::PolicyProvider`] to the [`AnchorPolicy`] interface.
+///
+/// In Phase 2, this adapter uses "NeverAnchored" semantics — all entities are
+/// considered non-anchored regardless of the underlying provider. This matches
+/// [`NeverAnchoredPolicy`] behaviour and satisfies backward compatibility with
+/// code that requires an [`AnchorPolicy`] implementor.
+///
+/// # Example
+/// ```
+/// use ettlex_core::policy::{AnchorPolicy, PolicyProviderAnchorAdapter};
+/// use ettlex_core::policy_provider::NoopPolicyProvider;
+///
+/// let adapter = PolicyProviderAnchorAdapter::new(&NoopPolicyProvider);
+/// assert!(!adapter.is_anchored_ep("any-ep"));
+/// assert!(!adapter.is_anchored_ettle("any-ettle"));
+/// ```
+pub struct PolicyProviderAnchorAdapter<'a>(
+    // Stored for Phase 3 extension; not yet queried (Phase 2 = NeverAnchored semantics).
+    #[allow(dead_code)] &'a dyn crate::policy_provider::PolicyProvider,
+);
+
+impl<'a> PolicyProviderAnchorAdapter<'a> {
+    /// Create a new adapter wrapping the given `PolicyProvider`.
+    pub fn new(p: &'a dyn crate::policy_provider::PolicyProvider) -> Self {
+        Self(p)
+    }
+}
+
+impl AnchorPolicy for PolicyProviderAnchorAdapter<'_> {
+    fn is_anchored_ep(&self, _ep_id: &str) -> bool {
+        // Phase 2: NeverAnchored semantics — all EPs can be hard-deleted.
+        false
+    }
+
+    fn is_anchored_ettle(&self, _ettle_id: &str) -> bool {
+        // Phase 2: NeverAnchored semantics — all Ettles can be hard-deleted.
+        false
+    }
+}
+
 /// Always allows (noop - for CLI default and tests that don't test policy denial).
 pub struct NoopCommitPolicyHook;
 

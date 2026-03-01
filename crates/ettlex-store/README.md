@@ -495,6 +495,34 @@ CREATE TABLE approval_requests (
 ) STRICT;
 ```
 
+## `FilePolicyProvider`
+
+Implements `PolicyProvider` backed by Markdown files on the local filesystem.
+
+```rust
+use ettlex_store::file_policy_provider::FilePolicyProvider;
+use ettlex_core::policy_provider::PolicyProvider;
+
+let provider = FilePolicyProvider::new("policies");
+// Override the default 1 MiB export size limit:
+let provider = FilePolicyProvider::new("policies").with_max_bytes(512_000);
+
+let list = provider.policy_list().unwrap();
+let text = provider.policy_read("codegen_handoff_policy_v1").unwrap();
+let export = provider.policy_export("codegen_handoff_policy_v1", "codegen_handoff").unwrap();
+```
+
+**Behaviour**:
+
+- `policy_ref` maps to `{policies_dir}/{policy_ref}.md`
+- `policy_list()` returns all `.md` files sorted by stem, each with `version = "0"`
+- `policy_read(ref)` returns full UTF-8 text; invalid UTF-8 → `PolicyParseError`
+- `policy_export(ref, "codegen_handoff")` extracts `<!-- HANDOFF: START -->…<!-- HANDOFF: END -->` blocks
+- `policy_check(ref, ...)` returns `Ok(())` if the file exists, else `PolicyNotFound`
+- Default max export: **1 MiB** (`DEFAULT_MAX_EXPORT_BYTES`)
+
+See [`docs/policy-system.md`](../../docs/policy-system.md) for the full HANDOFF marker specification and error contract.
+
 ## Future Work
 
 Planned enhancements:

@@ -57,6 +57,7 @@ fn test_profile_get_deterministic() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
     let r2 = apply_engine_query(
@@ -65,6 +66,7 @@ fn test_profile_get_deterministic() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -97,6 +99,7 @@ fn test_profile_resolve_null_uses_default() {
         EngineQuery::ProfileResolve { profile_ref: None },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -123,6 +126,7 @@ fn test_profile_resolve_unknown_not_found() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap_err();
 
@@ -152,6 +156,7 @@ fn test_profile_list_pagination_deterministic() {
         }),
         &conn,
         &cas,
+        None,
     )
     .unwrap()
     {
@@ -171,6 +176,7 @@ fn test_profile_list_pagination_deterministic() {
         }),
         &conn,
         &cas,
+        None,
     )
     .unwrap()
     {
@@ -214,6 +220,7 @@ fn test_approval_get_digests_and_bytes() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 
@@ -247,6 +254,7 @@ fn test_approval_get_unknown_token() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap_err();
 
@@ -284,6 +292,7 @@ fn test_approval_get_cas_blob_missing_corrupt_error() {
         },
         &conn,
         &cas,
+        None,
     )
     .unwrap_err();
 
@@ -318,6 +327,7 @@ fn test_approval_list_deterministic() {
         EngineQuery::ApprovalList(ListOptions::default()),
         &conn,
         &cas,
+        None,
     )
     .unwrap();
 

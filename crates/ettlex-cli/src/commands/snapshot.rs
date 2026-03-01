@@ -2,7 +2,7 @@
 
 use clap::{Args, Subcommand};
 use ettlex_core::approval_router::NoopApprovalRouter;
-use ettlex_core::policy::NoopCommitPolicyHook;
+use ettlex_core::policy_provider::NoopPolicyProvider;
 use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
@@ -84,7 +84,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
             cmd,
             &mut conn,
             &cas,
-            &NoopCommitPolicyHook,
+            &NoopPolicyProvider,
             &NoopApprovalRouter,
         )? {
             EngineCommandResult::SnapshotCommit(r) => SnapshotCommitOutcome::Committed(r),
@@ -105,7 +105,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
             cmd,
             &mut conn,
             &cas,
-            &NoopCommitPolicyHook,
+            &NoopPolicyProvider,
             &NoopApprovalRouter,
         )? {
             EngineCommandResult::SnapshotCommit(r) => SnapshotCommitOutcome::Committed(r),

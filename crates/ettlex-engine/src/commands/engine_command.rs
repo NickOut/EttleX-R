@@ -6,7 +6,7 @@ use crate::commands::snapshot::{
     RoutedForApprovalResult, SnapshotCommitOutcome, SnapshotCommitResult, SnapshotOptions,
 };
 use ettlex_core::approval_router::ApprovalRouter;
-use ettlex_core::policy::CommitPolicyHook;
+use ettlex_core::policy_provider::PolicyProvider;
 use ettlex_store::cas::FsStore;
 use ettlex_store::errors::Result;
 use rusqlite::Connection;
@@ -33,12 +33,12 @@ pub enum EngineCommandResult {
     SnapshotCommitRouted(RoutedForApprovalResult),
 }
 
-/// Apply an engine command with policy hook and approval router.
+/// Apply an engine command with policy provider and approval router.
 pub fn apply_engine_command(
     cmd: EngineCommand,
     conn: &mut Connection,
     cas: &FsStore,
-    policy_hook: &dyn CommitPolicyHook,
+    policy_provider: &dyn PolicyProvider,
     approval_router: &dyn ApprovalRouter,
 ) -> Result<EngineCommandResult> {
     match cmd {
@@ -55,7 +55,7 @@ pub fn apply_engine_command(
                 options,
                 conn,
                 cas,
-                policy_hook,
+                policy_provider,
                 approval_router,
             )?;
             match outcome {
