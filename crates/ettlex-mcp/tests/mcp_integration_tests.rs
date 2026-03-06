@@ -245,7 +245,7 @@ impl TestHarness {
     /// Commit a snapshot for the seeded leaf EP using the noop policy.
     fn commit_snapshot(&mut self) -> String {
         let resp = self.call(
-            "ettlex.apply",
+            "ettlex_apply",
             json!({
                 "command": {
                     "tag": "SnapshotCommit",
@@ -289,7 +289,7 @@ fn assert_ok(resp: McpResponse) -> serde_json::Value {
 #[test]
 fn test_s_auth_1_reject_missing_token() {
     let mut h = TestHarness::new();
-    let resp = h.call_no_auth("ettle.list", json!({}));
+    let resp = h.call_no_auth("ettle_list", json!({}));
     assert_error(&resp, "AuthRequired");
 }
 
@@ -301,7 +301,7 @@ fn test_s_auth_1_reject_missing_token() {
 fn test_s_auth_2_correlation_threaded() {
     let mut h = TestHarness::new();
     // Call with correlation_id; the response must echo it back
-    let resp = h.call_with_correlation("ettle.list", json!({}), "c:1");
+    let resp = h.call_with_correlation("ettle_list", json!({}), "c:1");
     assert_eq!(resp.correlation_id.as_deref(), Some("c:1"));
     // Even on a successful call, correlation_id is threaded
     match resp.result {
@@ -328,7 +328,7 @@ fn test_s_unk_1_unknown_tool() {
 #[test]
 fn test_s_cursor_1_invalid_cursor() {
     let mut h = TestHarness::new();
-    let resp = h.call("ettle.list", json!({ "cursor": "not-a-cursor" }));
+    let resp = h.call("ettle_list", json!({ "cursor": "not-a-cursor" }));
     assert_error(&resp, "InvalidCursor");
 }
 
@@ -340,7 +340,7 @@ fn test_s_cursor_1_invalid_cursor() {
 fn test_s_apply_1_unknown_command_tag() {
     let mut h = TestHarness::new();
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({ "command": { "tag": "Command::Nope", "data": 42 } }),
     );
     assert_error(&resp, "InvalidCommand");
@@ -355,7 +355,7 @@ fn test_s_apply_2_missing_required_field() {
     let mut h = TestHarness::new();
     // EpCreate requires ep_id/ettle_id; omit them
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({ "command": { "tag": "EpCreate" } }), // missing required fields
     );
     assert_error(&resp, "InvalidInput");
@@ -370,7 +370,7 @@ fn test_s_apply_3_oversized_payload() {
     let mut h = TestHarness::new();
     // payload_size > 1MB = 1048576 bytes
     let resp = h.call_oversized(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({ "command": { "tag": "EttleCreate", "title": "x" } }),
         1_048_577,
     );
@@ -387,7 +387,7 @@ fn test_s_occ_1_head_mismatch() {
     let current_sv = h.state_version(); // 0 on fresh DB
     let wrong_sv = current_sv + 999;
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": { "tag": "EttleCreate", "title": "Occ Test" },
             "expected_state_version": wrong_sv
@@ -407,7 +407,7 @@ fn test_s_occ_2_new_state_version() {
     let mut h = TestHarness::new();
     let before = h.state_version();
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({ "command": { "tag": "EttleCreate", "title": "Sv Test" } }),
     );
     let v = assert_ok(resp);
@@ -428,8 +428,8 @@ fn test_s_inv_1_delegation_only() {
     h.seed_leaf();
 
     // Call ettle.get twice; bytes should be identical
-    let r1 = assert_ok(h.call("ettle.get", json!({ "ettle_id": "ettle:root" })));
-    let r2 = assert_ok(h.call("ettle.get", json!({ "ettle_id": "ettle:root" })));
+    let r1 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
+    let r2 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
     // Same canonical bytes
     assert_eq!(
         serde_json::to_string(&r1).unwrap(),
@@ -448,7 +448,7 @@ fn test_s_inv_2_write_via_apply_only() {
     let mut h = TestHarness::new();
     let before_sv = h.state_version();
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({ "command": { "tag": "EttleCreate", "title": "InvTest" } }),
     );
     let v = assert_ok(resp);
@@ -470,11 +470,11 @@ fn test_s_query_1_no_mutation() {
     let snap_before = h.snapshot_count();
 
     // Run a representative set of query tools
-    let _ = h.call("ettle.list", json!({}));
-    let _ = h.call("ettle.get", json!({ "ettle_id": "ettle:root" }));
-    let _ = h.call("ep.get", json!({ "ep_id": "ep:root:0" }));
-    let _ = h.call("snapshot.list", json!({}));
-    let _ = h.call("profile.list", json!({}));
+    let _ = h.call("ettle_list", json!({}));
+    let _ = h.call("ettle_get", json!({ "ettle_id": "ettle:root" }));
+    let _ = h.call("ep_get", json!({ "ep_id": "ep:root:0" }));
+    let _ = h.call("snapshot_list", json!({}));
+    let _ = h.call("profile_list", json!({}));
 
     // Nothing changed
     assert_eq!(h.state_version(), sv_before);
@@ -490,7 +490,7 @@ fn test_s_page_1_ettle_list_default_limit() {
     let mut h = TestHarness::new();
     h.seed_ettles(150); // > default limit of 100
 
-    let v = assert_ok(h.call("ettle.list", json!({})));
+    let v = assert_ok(h.call("ettle_list", json!({})));
     let items = v["items"].as_array().expect("items array");
     assert!(items.len() <= 100, "items.len() {} > 100", items.len());
     // cursor present since more exist
@@ -506,7 +506,7 @@ fn test_s_page_2_ettle_list_cursor_deterministic() {
     let mut h = TestHarness::new();
     h.seed_ettles(250);
 
-    let v1 = assert_ok(h.call("ettle.list", json!({ "limit": 100 })));
+    let v1 = assert_ok(h.call("ettle_list", json!({ "limit": 100 })));
     let cursor1 = v1["cursor"]
         .as_str()
         .expect("cursor_1 must be present")
@@ -519,7 +519,7 @@ fn test_s_page_2_ettle_list_cursor_deterministic() {
         .collect();
     assert_eq!(ids1.len(), 100);
 
-    let v2 = assert_ok(h.call("ettle.list", json!({ "limit": 100, "cursor": cursor1 })));
+    let v2 = assert_ok(h.call("ettle_list", json!({ "limit": 100, "cursor": cursor1 })));
     let ids2: Vec<String> = v2["items"]
         .as_array()
         .unwrap()
@@ -532,7 +532,7 @@ fn test_s_page_2_ettle_list_cursor_deterministic() {
     assert_eq!(all_ids.len(), ids1.len() + ids2.len(), "duplicates found");
 
     // Determinism: same call returns same result
-    let v1b = assert_ok(h.call("ettle.list", json!({ "limit": 100 })));
+    let v1b = assert_ok(h.call("ettle_list", json!({ "limit": 100 })));
     let ids1b: Vec<String> = v1b["items"]
         .as_array()
         .unwrap()
@@ -554,7 +554,7 @@ fn test_s_page_3_snapshot_list_default_limit() {
     // We'll just assert that list returns <= default limit; single snapshot is enough to test structure
     let _ = h.commit_snapshot();
 
-    let v = assert_ok(h.call("snapshot.list", json!({})));
+    let v = assert_ok(h.call("snapshot_list", json!({})));
     let items = v["items"].as_array().expect("items array");
     assert!(!items.is_empty(), "expected at least one snapshot");
     // Limit enforced (<=100 by default)
@@ -571,8 +571,8 @@ fn test_s_page_4_snapshot_get_head_deterministic() {
     h.seed_leaf();
     let _ = h.commit_snapshot();
 
-    let r1 = assert_ok(h.call("snapshot.get_head", json!({ "ettle_id": "ettle:root" })));
-    let r2 = assert_ok(h.call("snapshot.get_head", json!({ "ettle_id": "ettle:root" })));
+    let r1 = assert_ok(h.call("snapshot_get_head", json!({ "ettle_id": "ettle:root" })));
+    let r2 = assert_ok(h.call("snapshot_get_head", json!({ "ettle_id": "ettle:root" })));
 
     let d1 = r1["manifest_digest"].as_str().expect("manifest_digest");
     let d2 = r2["manifest_digest"].as_str().expect("manifest_digest");
@@ -592,8 +592,8 @@ fn test_s_pol_1_policy_get_deterministic() {
     // policies/codegen_handoff_policy_v1.md should be loadable via FilePolicyProvider
     // For this test we use NoopPolicyProvider which returns PolicyNotFound; we just
     // verify that two identical calls produce the same (possibly error) result.
-    let r1 = h.call("policy.get", json!({ "policy_ref": "any/policy@0" }));
-    let r2 = h.call("policy.get", json!({ "policy_ref": "any/policy@0" }));
+    let r1 = h.call("policy_get", json!({ "policy_ref": "any/policy@0" }));
+    let r2 = h.call("policy_get", json!({ "policy_ref": "any/policy@0" }));
     // Both should return the same error code (deterministic)
     match (&r1.result, &r2.result) {
         (McpResult::Ok(v1), McpResult::Ok(v2)) => {
@@ -617,11 +617,11 @@ fn test_s_pol_1_policy_get_deterministic() {
 fn test_s_pol_2_project_for_handoff_deterministic() {
     let mut h = TestHarness::new();
     let r1 = h.call(
-        "policy.project_for_handoff",
+        "policy_project_for_handoff",
         json!({ "policy_ref": "any@0", "profile_ref": null }),
     );
     let r2 = h.call(
-        "policy.project_for_handoff",
+        "policy_project_for_handoff",
         json!({ "policy_ref": "any@0", "profile_ref": null }),
     );
     match (&r1.result, &r2.result) {
@@ -646,7 +646,7 @@ fn test_s_pol_2_project_for_handoff_deterministic() {
 fn test_s_pol_3_policy_not_found() {
     let mut h = TestHarness::new();
     let resp = h.call(
-        "policy.project_for_handoff",
+        "policy_project_for_handoff",
         json!({ "policy_ref": "policy/unknown@0" }),
     );
     assert_error(&resp, "PolicyNotFound");
@@ -662,7 +662,7 @@ fn test_s_pol_4_profile_not_found() {
     // Using ettle.list, since it doesn't require a policy provider to surface ProfileNotFound.
     // Actually we test this via snapshot.get_head for a non-existent ettle.
     // But ProfileNotFound is specifically from profile operations.
-    let resp = h.call("profile.get", json!({ "profile_ref": "profile/missing@0" }));
+    let resp = h.call("profile_get", json!({ "profile_ref": "profile/missing@0" }));
     assert_error(&resp, "ProfileNotFound");
 }
 
@@ -674,7 +674,7 @@ fn test_s_pol_4_profile_not_found() {
 fn test_s_pol_5_policy_list_default_limit() {
     let mut h = TestHarness::new();
     // With NoopPolicyProvider, policy.list returns empty list (not error)
-    let v = assert_ok(h.call("policy.list", json!({})));
+    let v = assert_ok(h.call("policy_list", json!({})));
     let items = v["items"].as_array().expect("items array");
     assert!(items.len() <= 100, "items must be <= 100");
 }
@@ -687,7 +687,7 @@ fn test_s_pol_5_policy_list_default_limit() {
 fn test_s_pol_6_policy_list_cursor() {
     let mut h = TestHarness::new();
     // With NoopPolicyProvider, policy.list returns empty
-    let v = assert_ok(h.call("policy.list", json!({ "limit": 100 })));
+    let v = assert_ok(h.call("policy_list", json!({ "limit": 100 })));
     let items = v["items"].as_array().expect("items array");
     assert!(items.len() <= 100);
     // No cursor since no items
@@ -703,8 +703,8 @@ fn test_s_det_1_canonical_json_stable() {
     let mut h = TestHarness::new();
     h.seed_leaf();
 
-    let r1 = assert_ok(h.call("ettle.get", json!({ "ettle_id": "ettle:root" })));
-    let r2 = assert_ok(h.call("ettle.get", json!({ "ettle_id": "ettle:root" })));
+    let r1 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
+    let r2 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
 
     let s1 = serde_json::to_string(&r1).unwrap();
     let s2 = serde_json::to_string(&r2).unwrap();
@@ -748,7 +748,7 @@ fn test_s_snap_1_snapshot_commit() {
     let before = h.snapshot_count();
 
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "SnapshotCommit",
@@ -795,7 +795,7 @@ fn test_s_snap_2_not_a_leaf() {
     ).unwrap();
 
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "SnapshotCommit",
@@ -822,7 +822,7 @@ fn test_s_snap_3_policy_denied() {
     let before = h.snapshot_count();
 
     let resp = h.call_with_deny_policy(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "SnapshotCommit",
@@ -854,7 +854,7 @@ fn test_s_diff_1_snapshot_diff() {
     let snap_id_2 = h.commit_snapshot();
 
     let resp = h.call(
-        "snapshot.diff",
+        "snapshot_diff",
         json!({ "a_snapshot_id": snap_id_1, "b_snapshot_id": snap_id_2 }),
     );
     let v = assert_ok(resp);
@@ -883,7 +883,7 @@ fn test_s_diff_2_missing_ref() {
     let snap_id = h.commit_snapshot();
 
     let resp = h.call(
-        "snapshot.diff",
+        "snapshot_diff",
         json!({ "a_snapshot_id": "snapshot:missing", "b_snapshot_id": snap_id }),
     );
     assert_error(&resp, "NotFound");
@@ -906,7 +906,7 @@ fn test_s_diff_3_missing_blob() {
     ).unwrap();
 
     let resp = h.call(
-        "snapshot.diff",
+        "snapshot_diff",
         json!({ "a_snapshot_id": "snapshot:corrupt", "b_snapshot_id": snap_id }),
     );
     // Should return MissingBlob or StorageError
@@ -933,7 +933,7 @@ fn test_s_con_1_create_attach_snapshot() {
 
     // Create a constraint
     let r1 = assert_ok(h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ConstraintCreate",
@@ -949,7 +949,7 @@ fn test_s_con_1_create_attach_snapshot() {
 
     // Attach to EP
     let r2 = assert_ok(h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ConstraintAttachToEp",
@@ -963,7 +963,7 @@ fn test_s_con_1_create_attach_snapshot() {
 
     // Commit snapshot
     let r3 = assert_ok(h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "SnapshotCommit",
@@ -979,7 +979,7 @@ fn test_s_con_1_create_attach_snapshot() {
 
     // Get the manifest via MCP
     let manifest_resp =
-        assert_ok(h.call("snapshot.get_manifest", json!({ "snapshot_id": snap_id })));
+        assert_ok(h.call("snapshot_get_manifest", json!({ "snapshot_id": snap_id })));
 
     // The manifest bytes are returned; parse and check declared_refs
     let manifest_bytes = manifest_resp["manifest_bytes"].as_str().unwrap_or_default();
@@ -1007,7 +1007,7 @@ fn test_s_con_1_create_attach_snapshot() {
 fn test_s_con_2_missing_family() {
     let mut h = TestHarness::new();
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ConstraintCreate",
@@ -1033,7 +1033,7 @@ fn test_s_con_3_duplicate_attachment() {
 
     // Create and attach once
     let _ = assert_ok(h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ConstraintCreate",
@@ -1046,7 +1046,7 @@ fn test_s_con_3_duplicate_attachment() {
         }),
     ));
     let _ = assert_ok(h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ConstraintAttachToEp",
@@ -1059,7 +1059,7 @@ fn test_s_con_3_duplicate_attachment() {
 
     // Attach again → DuplicateAttachment
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ConstraintAttachToEp",
@@ -1096,7 +1096,7 @@ fn test_s_bound_1_large_list_eps() {
         ).unwrap();
     }
 
-    let resp = h.call("ettle.list_eps", json!({ "ettle_id": "ettle:big" }));
+    let resp = h.call("ettle_list_eps", json!({ "ettle_id": "ettle:big" }));
     // Should either succeed (paginated) or return ResponseTooLarge
     match &resp.result {
         McpResult::Ok(v) => {
@@ -1120,8 +1120,8 @@ fn test_s_prof_1_profile_get_bytes() {
     let mut h = TestHarness::new();
     h.seed_profile("profile/default@0", r#"{"ambiguity_policy":"deny"}"#, true);
 
-    let r1 = assert_ok(h.call("profile.get", json!({ "profile_ref": "profile/default@0" })));
-    let r2 = assert_ok(h.call("profile.get", json!({ "profile_ref": "profile/default@0" })));
+    let r1 = assert_ok(h.call("profile_get", json!({ "profile_ref": "profile/default@0" })));
+    let r2 = assert_ok(h.call("profile_get", json!({ "profile_ref": "profile/default@0" })));
 
     assert_eq!(
         serde_json::to_string(&r1).unwrap(),
@@ -1146,7 +1146,7 @@ fn test_s_prof_2_profile_list_limit() {
         ).unwrap();
     }
 
-    let v = assert_ok(h.call("profile.list", json!({})));
+    let v = assert_ok(h.call("profile_list", json!({})));
     let items = v["items"].as_array().expect("items array");
     assert!(items.len() <= 100, "items.len() {} > 100", items.len());
     assert!(v["cursor"].is_string(), "cursor present when more exist");
@@ -1160,7 +1160,7 @@ fn test_s_prof_2_profile_list_limit() {
 fn test_s_appr_1_approval_not_found() {
     let mut h = TestHarness::new();
     let resp = h.call(
-        "approval.get",
+        "approval_get",
         json!({ "approval_token": "approval:missing" }),
     );
     assert_error(&resp, "ApprovalNotFound");
@@ -1180,11 +1180,11 @@ fn test_s_pred_1_preview_thin_transport() {
     );
 
     let r1 = assert_ok(h.call(
-        "constraint_predicates.preview",
+        "constraint_predicates_preview",
         json!({ "profile_ref": "profile/default@0", "context": {}, "candidates": [] }),
     ));
     let r2 = assert_ok(h.call(
-        "constraint_predicates.preview",
+        "constraint_predicates_preview",
         json!({ "profile_ref": "profile/default@0", "context": {}, "candidates": [] }),
     ));
     // Identical inputs → identical outputs
@@ -1211,7 +1211,7 @@ fn test_s_pred_2_preview_no_mutation() {
     let appr_before = h.approval_count();
 
     let _ = assert_ok(h.call(
-        "constraint_predicates.preview",
+        "constraint_predicates_preview",
         json!({ "profile_ref": "profile/default@0", "context": {}, "candidates": [] }),
     ));
 
@@ -1241,11 +1241,11 @@ fn test_s_pred_3_preview_deterministic() {
     );
 
     let r1 = assert_ok(h.call(
-        "constraint_predicates.preview",
+        "constraint_predicates_preview",
         json!({ "profile_ref": "profile/default@0", "context": {}, "candidates": ["c:a", "c:b"] }),
     ));
     let r2 = assert_ok(h.call(
-        "constraint_predicates.preview",
+        "constraint_predicates_preview",
         json!({ "profile_ref": "profile/default@0", "context": {}, "candidates": ["c:a", "c:b"] }),
     ));
     assert_eq!(
@@ -1272,7 +1272,7 @@ fn test_s_rap_1_routed_for_approval() {
 
     // SnapshotCommit with route profile; uses NoopApprovalRouter (no real ambiguity to route)
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "SnapshotCommit",
@@ -1305,7 +1305,7 @@ fn test_s_rap_2_no_auto_profile_ref() {
 
     // Apply SnapshotCommit without profile_ref — MCP must forward null
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "SnapshotCommit",
@@ -1342,7 +1342,7 @@ fn test_s_rap_3_policy_denied_no_approval() {
     let appr_before = h.approval_count();
 
     let resp = h.call_with_deny_policy(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "SnapshotCommit",
@@ -1372,7 +1372,7 @@ fn test_s_pa_1_profile_create_readable() {
 
     let payload = json!({ "ambiguity_policy": "deny" });
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ProfileCreate",
@@ -1385,7 +1385,7 @@ fn test_s_pa_1_profile_create_readable() {
     assert_eq!(v["new_state_version"].as_u64(), Some(before_sv + 1));
 
     // Read back
-    let r = assert_ok(h.call("profile.get", json!({ "profile_ref": "profile/demo@0" })));
+    let r = assert_ok(h.call("profile_get", json!({ "profile_ref": "profile/demo@0" })));
     assert_eq!(r["profile_ref"].as_str(), Some("profile/demo@0"));
     assert_eq!(r["payload"]["ambiguity_policy"].as_str(), Some("deny"));
 }
@@ -1401,7 +1401,7 @@ fn test_s_pa_2_profile_conflict() {
 
     // Create with different content → ProfileConflict
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ProfileCreate",
@@ -1421,7 +1421,7 @@ fn test_s_pa_2_profile_conflict() {
 fn test_s_pa_3_profile_set_default_not_found() {
     let mut h = TestHarness::new();
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ProfileSetDefault",
@@ -1442,7 +1442,7 @@ fn test_s_pa_4_profile_set_default_readable() {
     h.seed_profile("profile/demo@0", r#"{"ambiguity_policy":"deny"}"#, false);
 
     let resp = h.call(
-        "ettlex.apply",
+        "ettlex_apply",
         json!({
             "command": {
                 "tag": "ProfileSetDefault",
@@ -1453,7 +1453,7 @@ fn test_s_pa_4_profile_set_default_readable() {
     let _ = assert_ok(resp);
 
     // Get default profile
-    let r = assert_ok(h.call("profile.get_default", json!({})));
+    let r = assert_ok(h.call("profile_get_default", json!({})));
     assert_eq!(
         r["profile_ref"].as_str(),
         Some("profile/demo@0"),

@@ -178,7 +178,7 @@ fn handle_initialize() -> Value {
 fn handle_tools_list() -> Value {
     let tools = vec![
         tool_def(
-            "ettlex.apply",
+            "ettlex_apply",
             "Apply a write command (EttleCreate, EpCreate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault).",
             json!({
                 "type": "object",
@@ -196,7 +196,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "ettle.get",
+            "ettle_get",
             "Get a single ettle by ID.",
             json!({
                 "type": "object",
@@ -207,7 +207,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "ettle.list",
+            "ettle_list",
             "List ettles with pagination.",
             json!({
                 "type": "object",
@@ -218,7 +218,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "ettle.list_eps",
+            "ettle_list_eps",
             "List EPs belonging to an ettle.",
             json!({
                 "type": "object",
@@ -229,7 +229,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "ep.get",
+            "ep_get",
             "Get a single EP by ID.",
             json!({
                 "type": "object",
@@ -240,7 +240,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "snapshot.get",
+            "snapshot_get",
             "Get a snapshot ledger row.",
             json!({
                 "type": "object",
@@ -251,7 +251,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "snapshot.list",
+            "snapshot_list",
             "List snapshots with pagination.",
             json!({
                 "type": "object",
@@ -262,7 +262,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "snapshot.get_head",
+            "snapshot_get_head",
             "Get the manifest digest of the most recently committed snapshot for an ettle.",
             json!({
                 "type": "object",
@@ -273,7 +273,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "snapshot.get_manifest",
+            "snapshot_get_manifest",
             "Get raw manifest bytes for a snapshot.",
             json!({
                 "type": "object",
@@ -284,7 +284,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "snapshot.diff",
+            "snapshot_diff",
             "Compute a structured diff between two snapshots.",
             json!({
                 "type": "object",
@@ -296,7 +296,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "policy.get",
+            "policy_get",
             "Read a policy document by reference.",
             json!({
                 "type": "object",
@@ -307,7 +307,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "policy.list",
+            "policy_list",
             "List available policies with pagination.",
             json!({
                 "type": "object",
@@ -318,7 +318,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "policy.project_for_handoff",
+            "policy_project_for_handoff",
             "Produce a deterministic projection of a policy's HANDOFF obligations for code-generator prompts.",
             json!({
                 "type": "object",
@@ -330,7 +330,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "profile.get",
+            "profile_get",
             "Get a profile by reference.",
             json!({
                 "type": "object",
@@ -341,7 +341,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "profile.list",
+            "profile_list",
             "List profiles with pagination.",
             json!({
                 "type": "object",
@@ -352,12 +352,12 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "profile.get_default",
+            "profile_get_default",
             "Get the default profile.",
             json!({ "type": "object", "properties": {} }),
         ),
         tool_def(
-            "approval.get",
+            "approval_get",
             "Get an approval request by token.",
             json!({
                 "type": "object",
@@ -368,7 +368,7 @@ fn handle_tools_list() -> Value {
             }),
         ),
         tool_def(
-            "constraint_predicates.preview",
+            "constraint_predicates_preview",
             "Preview constraint predicate resolution without side-effects.",
             json!({
                 "type": "object",

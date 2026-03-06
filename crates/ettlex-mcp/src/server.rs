@@ -18,7 +18,7 @@ use crate::tools::{apply, approval, ep, ettle, policy, predicate, profile, snaps
 
 /// An inbound MCP tool call, as constructed by the caller (test harness or main).
 pub struct McpToolCall {
-    /// Name of the tool to invoke, e.g. `"ettle.list"`.
+    /// Name of the tool to invoke, e.g. `"ettle_list"`.
     pub tool_name: String,
     /// JSON parameters for the tool.
     pub params: Value,
@@ -98,46 +98,46 @@ impl McpServer {
         let p = &call.params;
         match call.tool_name.as_str() {
             // ── Write ──────────────────────────────────────────────────────
-            "ettlex.apply" => apply::handle_apply(p, conn, cas, policy_provider, approval_router),
+            "ettlex_apply" => apply::handle_apply(p, conn, cas, policy_provider, approval_router),
 
             // ── Ettle ──────────────────────────────────────────────────────
-            "ettle.get" => ettle::handle_ettle_get(p, conn, cas, policy_provider),
-            "ettle.list" => ettle::handle_ettle_list(p, conn, cas, policy_provider),
-            "ettle.list_eps" => ettle::handle_ettle_list_eps(p, conn, cas, policy_provider),
+            "ettle_get" => ettle::handle_ettle_get(p, conn, cas, policy_provider),
+            "ettle_list" => ettle::handle_ettle_list(p, conn, cas, policy_provider),
+            "ettle_list_eps" => ettle::handle_ettle_list_eps(p, conn, cas, policy_provider),
 
             // ── EP ─────────────────────────────────────────────────────────
-            "ep.get" => ep::handle_ep_get(p, conn, cas, policy_provider),
+            "ep_get" => ep::handle_ep_get(p, conn, cas, policy_provider),
 
             // ── Snapshot ───────────────────────────────────────────────────
-            "snapshot.list" => snapshot::handle_snapshot_list(p, conn, cas, policy_provider),
-            "snapshot.get" => snapshot::handle_snapshot_get(p, conn, cas, policy_provider),
-            "snapshot.get_head" => {
+            "snapshot_list" => snapshot::handle_snapshot_list(p, conn, cas, policy_provider),
+            "snapshot_get" => snapshot::handle_snapshot_get(p, conn, cas, policy_provider),
+            "snapshot_get_head" => {
                 snapshot::handle_snapshot_get_head(p, conn, cas, policy_provider)
             }
-            "snapshot.get_manifest" => {
+            "snapshot_get_manifest" => {
                 snapshot::handle_snapshot_get_manifest(p, conn, cas, policy_provider)
             }
-            "snapshot.diff" => snapshot::handle_snapshot_diff(p, conn, cas, policy_provider),
+            "snapshot_diff" => snapshot::handle_snapshot_diff(p, conn, cas, policy_provider),
 
             // ── Policy ─────────────────────────────────────────────────────
-            "policy.get" => policy::handle_policy_get(p, conn, cas, policy_provider),
-            "policy.list" => policy::handle_policy_list(p, conn, cas, policy_provider),
-            "policy.project_for_handoff" => {
+            "policy_get" => policy::handle_policy_get(p, conn, cas, policy_provider),
+            "policy_list" => policy::handle_policy_list(p, conn, cas, policy_provider),
+            "policy_project_for_handoff" => {
                 policy::handle_policy_project_for_handoff(p, conn, cas, policy_provider)
             }
 
             // ── Profile ────────────────────────────────────────────────────
-            "profile.get" => profile::handle_profile_get(p, conn, cas, policy_provider),
-            "profile.list" => profile::handle_profile_list(p, conn, cas, policy_provider),
-            "profile.get_default" => {
+            "profile_get" => profile::handle_profile_get(p, conn, cas, policy_provider),
+            "profile_list" => profile::handle_profile_list(p, conn, cas, policy_provider),
+            "profile_get_default" => {
                 profile::handle_profile_get_default(p, conn, cas, policy_provider)
             }
 
             // ── Approval ───────────────────────────────────────────────────
-            "approval.get" => approval::handle_approval_get(p, conn, cas, policy_provider),
+            "approval_get" => approval::handle_approval_get(p, conn, cas, policy_provider),
 
             // ── Predicate ──────────────────────────────────────────────────
-            "constraint_predicates.preview" => {
+            "constraint_predicates_preview" => {
                 predicate::handle_predicate_preview(p, conn, cas, policy_provider)
             }
 

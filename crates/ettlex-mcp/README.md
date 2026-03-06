@@ -14,35 +14,35 @@ surface unchanged.
 
 | Tool           | Description                                       |
 | -------------- | ------------------------------------------------- |
-| `ettlex.apply` | Apply a write command (see [Commands](#commands)) |
+| `ettlex_apply` | Apply a write command (see [Commands](#commands)) |
 
 ### Read tools
 
 | Tool                            | Description                                               |
 | ------------------------------- | --------------------------------------------------------- |
-| `ettle.get`                     | Get an ettle by ID                                        |
-| `ettle.list`                    | List ettles (paginated)                                   |
-| `ettle.list_eps`                | List EPs for an ettle                                     |
-| `ep.get`                        | Get an EP by ID                                           |
-| `snapshot.get`                  | Get a snapshot ledger row                                 |
-| `snapshot.list`                 | List snapshots (paginated)                                |
-| `snapshot.get_head`             | Get manifest digest of the most recent committed snapshot |
-| `snapshot.get_manifest`         | Get raw manifest bytes for a snapshot                     |
-| `snapshot.diff`                 | Compute a structured diff between two snapshots           |
-| `policy.get`                    | Get a policy document by reference                        |
-| `policy.list`                   | List available policies (paginated)                       |
-| `policy.project_for_handoff`    | Project a policy for code-generator handoff               |
-| `profile.get`                   | Get a profile by reference                                |
-| `profile.list`                  | List profiles (paginated)                                 |
-| `profile.get_default`           | Get the default profile                                   |
-| `approval.get`                  | Get an approval request by token                          |
-| `constraint_predicates.preview` | Preview constraint predicate resolution (read-only)       |
+| `ettle_get`                     | Get an ettle by ID                                        |
+| `ettle_list`                    | List ettles (paginated)                                   |
+| `ettle_list_eps`                | List EPs for an ettle                                     |
+| `ep_get`                        | Get an EP by ID                                           |
+| `snapshot_get`                  | Get a snapshot ledger row                                 |
+| `snapshot_list`                 | List snapshots (paginated)                                |
+| `snapshot_get_head`             | Get manifest digest of the most recent committed snapshot |
+| `snapshot_get_manifest`         | Get raw manifest bytes for a snapshot                     |
+| `snapshot_diff`                 | Compute a structured diff between two snapshots           |
+| `policy_get`                    | Get a policy document by reference                        |
+| `policy_list`                   | List available policies (paginated)                       |
+| `policy_project_for_handoff`    | Project a policy for code-generator handoff               |
+| `profile_get`                   | Get a profile by reference                                |
+| `profile_list`                  | List profiles (paginated)                                 |
+| `profile_get_default`           | Get the default profile                                   |
+| `approval_get`                  | Get an approval request by token                          |
+| `constraint_predicates_preview` | Preview constraint predicate resolution (read-only)       |
 
 ---
 
-## Commands (via `ettlex.apply`)
+## Commands (via `ettlex_apply`)
 
-All write operations go through `ettlex.apply` with a typed `command` payload:
+All write operations go through `ettlex_apply` with a typed `command` payload:
 
 ```json
 { "command": { "tag": "EttleCreate", "title": "My Ettle" } }

@@ -15,10 +15,10 @@ for AI agents interacting with an EttleX repository via MCP.
 
 A typical agent workflow for committing an EP snapshot:
 
-1. **Read current state** — call `ettle.list` or `ettle.get` to locate the
+1. **Read current state** — call `ettle_list` or `ettle_get` to locate the
    target ettle and its leaf EP ID.
-2. **Check policies** — call `policy.list` and `policy.get` to understand
-   applicable policies; optionally `policy.project_for_handoff` to obtain
+2. **Check policies** — call `policy_list` and `policy_get` to understand
+   applicable policies; optionally `policy_project_for_handoff` to obtain
    structured obligations.
 3. **Create constraints** (if needed) — `ettlex.apply ConstraintCreate` then
    `ettlex.apply ConstraintAttachToEp`.
@@ -27,13 +27,13 @@ A typical agent workflow for committing an EP snapshot:
      `manifest_digest`.
    - On routed approval: `result.tag == "RoutedForApproval"` with
      `approval_token`.
-5. **Verify** — call `snapshot.get_head` or `snapshot.get_manifest` to confirm.
+5. **Verify** — call `snapshot_get_head` or `snapshot_get_manifest` to confirm.
 
 ---
 
 ## Tool Reference
 
-### `ettlex.apply`
+### `ettlex_apply`
 
 The single write endpoint. All mutations go through this tool.
 
@@ -73,7 +73,7 @@ if it differs.
 
 ---
 
-### `ettle.get`
+### `ettle_get`
 
 Get a single ettle and its EP IDs.
 
@@ -83,7 +83,7 @@ Get a single ettle and its EP IDs.
 
 ---
 
-### `ettle.list`
+### `ettle_list`
 
 List ettles with pagination.
 
@@ -93,7 +93,7 @@ List ettles with pagination.
 
 ---
 
-### `ettle.list_eps`
+### `ettle_list_eps`
 
 List EPs belonging to an ettle.
 
@@ -103,7 +103,7 @@ List EPs belonging to an ettle.
 
 ---
 
-### `ep.get`
+### `ep_get`
 
 Get a single EP.
 
@@ -113,7 +113,7 @@ Get a single EP.
 
 ---
 
-### `snapshot.get_head`
+### `snapshot_get_head`
 
 Get the manifest digest of the most recently committed snapshot for an ettle.
 
@@ -123,7 +123,7 @@ Get the manifest digest of the most recently committed snapshot for an ettle.
 
 ---
 
-### `snapshot.get_manifest`
+### `snapshot_get_manifest`
 
 Get raw manifest bytes for a snapshot.
 
@@ -133,7 +133,7 @@ Get raw manifest bytes for a snapshot.
 
 ---
 
-### `snapshot.diff`
+### `snapshot_diff`
 
 Compute a structured diff between two snapshots.
 
@@ -143,7 +143,7 @@ Compute a structured diff between two snapshots.
 
 ---
 
-### `policy.get`
+### `policy_get`
 
 Read a policy document.
 
@@ -153,7 +153,7 @@ Read a policy document.
 
 ---
 
-### `policy.project_for_handoff`
+### `policy_project_for_handoff`
 
 Produce a deterministic byte projection of a policy's HANDOFF obligations,
 suitable for passing to a code-generator prompt.
@@ -164,19 +164,19 @@ suitable for passing to a code-generator prompt.
 
 ---
 
-### `profile.get` / `profile.list` / `profile.get_default`
+### `profile_get` / `profile_list` / `profile_get_default`
 
 Query profile configuration.
 
-`profile.get` params: `{ "profile_ref": "profile/name@version" }`
+`profile_get` params: `{ "profile_ref": "profile/name@version" }`
 
-`profile.get_default` params: `{}`
+`profile_get_default` params: `{}`
 
 Both respond with: `{ "profile_ref", "profile_digest", "payload": {...} }`
 
 ---
 
-### `approval.get`
+### `approval_get`
 
 Get an approval request.
 
@@ -184,7 +184,7 @@ Get an approval request.
 
 ---
 
-### `constraint_predicates.preview`
+### `constraint_predicates_preview`
 
 Preview constraint predicate resolution without any side-effects.
 
@@ -223,7 +223,7 @@ Preview constraint predicate resolution without any side-effects.
 
 - **MCP never injects business logic.** Query results are delegated byte-for-byte
   from the engine.
-- **All writes go through `ettlex.apply`.** The MCP layer has no direct store
+- **All writes go through `ettlex_apply`.** The MCP layer has no direct store
   access.
 - **Query tools are read-only.** They use `&Connection` and never write to the
   DB, CAS, or ledger.
