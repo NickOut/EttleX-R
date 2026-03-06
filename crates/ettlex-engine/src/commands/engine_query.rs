@@ -190,6 +190,10 @@ pub enum EngineQuery {
         policy_ref: String,
         profile_ref: Option<String>,
     },
+
+    // ── Snapshot head ─────────────────────────────────────────────────────────
+    /// Get the manifest digest of the most recent committed snapshot for an ettle.
+    SnapshotGetHead { realised_ettle_id: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +264,10 @@ pub enum EngineQueryResult {
     SnapshotManifestPolicyRef(String),
     /// Result of a `PolicyProjectForHandoff` query.
     PolicyProjectForHandoff(PolicyProjectForHandoffResult),
+
+    // ── Snapshot head ─────────────────────────────────────────────────────────
+    /// Result of a `SnapshotGetHead` query: manifest digest of the head, or None.
+    SnapshotGetHead(Option<String>),
 }
 
 // ---------------------------------------------------------------------------
@@ -1533,6 +1541,39 @@ pub fn apply_engine_query(
                         e_clone,
                         duration_ms = elapsed
                     );
+                }
+            }
+            result
+        }
+
+        // ── SnapshotGetHead ──────────────────────────────────────────────────
+        EngineQuery::SnapshotGetHead { realised_ettle_id } => {
+            let start = std::time::Instant::now();
+            log_op_start!("snapshot_get_head", entity_id = %realised_ettle_id);
+            let result: Result<EngineQueryResult> = (|| {
+                let digest: Option<String> = conn
+                    .query_row(
+                        "SELECT manifest_digest FROM snapshots
+                         WHERE root_ettle_id = ?1 AND status = 'committed'
+                         ORDER BY created_at DESC LIMIT 1",
+                        [&realised_ettle_id],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|e| {
+                        ExError::new(ExErrorKind::Persistence)
+                            .with_op("snapshot_get_head")
+                            .with_entity_id(&realised_ettle_id)
+                            .with_message(format!("DB error: {}", e))
+                    })?;
+                Ok(EngineQueryResult::SnapshotGetHead(digest))
+            })();
+            let elapsed = start.elapsed().as_millis() as u64;
+            match &result {
+                Ok(_) => log_op_end!("snapshot_get_head", duration_ms = elapsed),
+                Err(e) => {
+                    let e_clone = e.clone();
+                    log_op_error!("snapshot_get_head", e_clone, duration_ms = elapsed);
                 }
             }
             result

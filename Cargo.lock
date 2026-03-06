@@ -1169,19 +1169,34 @@ dependencies = [
 name = "ettlex-engine"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "ettlex-core",
  "ettlex-core-types",
  "ettlex-store",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "ettlex-mcp"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ettlex-core",
+ "ettlex-engine",
+ "ettlex-store",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "uuid",
+]
 
 [[package]]
 name = "ettlex-projection"

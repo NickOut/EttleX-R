@@ -9,6 +9,7 @@ use ettlex_core::approval_router::ApprovalRouter;
 use ettlex_core::policy_provider::PolicyProvider;
 use ettlex_store::cas::FsStore;
 use ettlex_store::errors::Result;
+use ettlex_store::profile::{create_profile, set_default_profile};
 use rusqlite::Connection;
 
 /// Engine-level commands that require I/O (database, CAS).
@@ -22,6 +23,14 @@ pub enum EngineCommand {
         profile_ref: Option<String>,
         options: SnapshotOptions,
     },
+    /// Create a profile (idempotent on same canonical content; ProfileConflict on mismatch).
+    ProfileCreate {
+        profile_ref: String,
+        payload_json: serde_json::Value,
+        source: Option<String>,
+    },
+    /// Set a profile as the repository default.
+    ProfileSetDefault { profile_ref: String },
 }
 
 /// Result of applying an engine command.
@@ -31,6 +40,10 @@ pub enum EngineCommandResult {
     SnapshotCommit(SnapshotCommitResult),
     /// Snapshot commit was routed for approval.
     SnapshotCommitRouted(RoutedForApprovalResult),
+    /// Profile was created (or already existed with same content).
+    ProfileCreate,
+    /// Profile default was updated.
+    ProfileSetDefault,
 }
 
 /// Apply an engine command with policy provider and approval router.
@@ -64,6 +77,18 @@ pub fn apply_engine_command(
                     Ok(EngineCommandResult::SnapshotCommitRouted(r))
                 }
             }
+        }
+        EngineCommand::ProfileCreate {
+            profile_ref,
+            payload_json,
+            ..
+        } => {
+            create_profile(conn, &profile_ref, &payload_json)?;
+            Ok(EngineCommandResult::ProfileCreate)
+        }
+        EngineCommand::ProfileSetDefault { profile_ref } => {
+            set_default_profile(conn, &profile_ref)?;
+            Ok(EngineCommandResult::ProfileSetDefault)
         }
     }
 }

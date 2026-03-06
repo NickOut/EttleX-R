@@ -39,5 +39,9 @@ pub fn get_migrations() -> Vec<Migration> {
             id: "007_approval_cas_schema",
             sql: include_str!("../../migrations/007_approval_cas_schema.sql"),
         },
+        Migration {
+            id: "008_mcp_command_log",
+            sql: include_str!("../../migrations/008_mcp_command_log.sql"),
+        },
     ]
 }

@@ -48,6 +48,8 @@ pub enum ExErrorKind {
     // Profile Errors
     ProfileNotFound,
     ProfileDefaultMissing,
+    /// A profile create was attempted with a ref that already exists with different content
+    ProfileConflict,
 
     // Approval Errors
     ApprovalNotFound,
@@ -143,6 +145,7 @@ impl ExErrorKind {
             ExErrorKind::InvalidTargetKind => "ERR_INVALID_TARGET_KIND",
             ExErrorKind::ProfileNotFound => "ERR_PROFILE_NOT_FOUND",
             ExErrorKind::ProfileDefaultMissing => "ERR_PROFILE_DEFAULT_MISSING",
+            ExErrorKind::ProfileConflict => "ERR_PROFILE_CONFLICT",
             ExErrorKind::ApprovalNotFound => "ERR_APPROVAL_NOT_FOUND",
             ExErrorKind::ApprovalRoutingUnavailable => "ERR_APPROVAL_ROUTING_UNAVAILABLE",
             ExErrorKind::ApprovalStorageCorrupt => "ERR_APPROVAL_STORAGE_CORRUPT",

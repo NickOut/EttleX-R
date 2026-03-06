@@ -1,215 +1,137 @@
 # ettlex-mcp
 
-**EttleX MCP Server - Model Context Protocol Integration**
+MCP (Model Context Protocol) thin-slice server for EttleX.
 
-MCP server for integrating EttleX with AI assistants and development tools.
+This crate is a **transport-only adapter** over `ettlex-engine`. It contains
+no business logic — every tool call is delegated to the engine query or command
+surface unchanged.
 
-## Status
+---
 
-🚧 **Stub Crate** - Not yet implemented
+## Tool Surface
 
-This crate is a placeholder for future MCP server functionality.
+### Write tools
 
-## Overview
+| Tool           | Description                                       |
+| -------------- | ------------------------------------------------- |
+| `ettlex.apply` | Apply a write command (see [Commands](#commands)) |
 
-EttleX MCP will provide a Model Context Protocol (MCP) server that allows AI assistants and other MCP clients to interact with EttleX repositories.
+### Read tools
 
-## Planned Features
+| Tool                            | Description                                               |
+| ------------------------------- | --------------------------------------------------------- |
+| `ettle.get`                     | Get an ettle by ID                                        |
+| `ettle.list`                    | List ettles (paginated)                                   |
+| `ettle.list_eps`                | List EPs for an ettle                                     |
+| `ep.get`                        | Get an EP by ID                                           |
+| `snapshot.get`                  | Get a snapshot ledger row                                 |
+| `snapshot.list`                 | List snapshots (paginated)                                |
+| `snapshot.get_head`             | Get manifest digest of the most recent committed snapshot |
+| `snapshot.get_manifest`         | Get raw manifest bytes for a snapshot                     |
+| `snapshot.diff`                 | Compute a structured diff between two snapshots           |
+| `policy.get`                    | Get a policy document by reference                        |
+| `policy.list`                   | List available policies (paginated)                       |
+| `policy.project_for_handoff`    | Project a policy for code-generator handoff               |
+| `profile.get`                   | Get a profile by reference                                |
+| `profile.list`                  | List profiles (paginated)                                 |
+| `profile.get_default`           | Get the default profile                                   |
+| `approval.get`                  | Get an approval request by token                          |
+| `constraint_predicates.preview` | Preview constraint predicate resolution (read-only)       |
 
-### 🔧 Tools (MCP)
+---
 
-Expose EttleX operations as MCP tools:
+## Commands (via `ettlex.apply`)
 
-- **`seed_import`** - Import seed YAML files
-- **`render_ettle`** - Render single Ettle to Markdown
-- **`render_bundle`** - Render leaf bundle (full EPT path)
-- **`validate_tree`** - Validate tree invariants
-- **`snapshot_commit`** - Create snapshot commit
-- **`snapshot_diff`** - Diff two snapshots
-- **`query_ept`** - Compute EPT for an Ettle
-- **`search_ettles`** - Search Ettles by title/content
+All write operations go through `ettlex.apply` with a typed `command` payload:
 
-### 📚 Resources (MCP)
-
-Expose EttleX entities as MCP resources:
-
-- **`ettle://{id}`** - Single Ettle with all EPs
-- **`ep://{id}`** - Single EP with content
-- **`bundle://{leaf_id}`** - Full bundle (EPT path)
-- **`snapshot://{id}`** - Snapshot manifest
-- **`tree://`** - Full tree structure
-
-### 📝 Prompts (MCP)
-
-Pre-configured prompts for common workflows:
-
-- **`review_ettle`** - Review Ettle for completeness
-- **`suggest_refinement`** - Suggest child Ettles
-- **`validate_seed`** - Validate seed YAML syntax
-- **`generate_scenarios`** - Generate Gherkin scenarios from WHAT
-
-## Architecture
-
-```
-MCP Client (Claude Desktop, VS Code, etc.)
-    ↓ (JSON-RPC over stdio)
-MCP Server (ettlex-mcp)
-    ↓
-Engine Commands (ettlex-engine)
-    ↓
-Store/Core Layers
+```json
+{ "command": { "tag": "EttleCreate", "title": "My Ettle" } }
 ```
 
-## Usage (Planned)
+| Tag                    | Fields                                                                  | Description                                   |
+| ---------------------- | ----------------------------------------------------------------------- | --------------------------------------------- |
+| `SnapshotCommit`       | `leaf_ep_id`, `policy_ref`, `profile_ref?`, `dry_run`, `expected_head?` | Commit a snapshot                             |
+| `EttleCreate`          | `title`                                                                 | Create an ettle                               |
+| `EpCreate`             | `ettle_id`, `ordinal`, `normative`, `why`, `what`, `how`                | Create an EP                                  |
+| `ConstraintCreate`     | `constraint_id`, `family`, `kind`, `scope`, `payload_json`              | Create a constraint                           |
+| `ConstraintAttachToEp` | `ep_id`, `constraint_id`, `ordinal`                                     | Attach a constraint to an EP                  |
+| `ProfileCreate`        | `profile_ref`, `payload_json`, `source?`                                | Create a profile (idempotent on same content) |
+| `ProfileSetDefault`    | `profile_ref`                                                           | Set the repository default profile            |
 
-### Running the Server
-
-```bash
-ettlex-mcp
-```
-
-The server communicates over stdio using JSON-RPC as defined by the MCP protocol.
-
-### Configuration (claude_desktop_config.json)
+### Response shape
 
 ```json
 {
-  "mcpServers": {
-    "ettlex": {
-      "command": "/path/to/ettlex-mcp",
-      "args": [],
-      "cwd": "/path/to/ettlex/repo"
-    }
-  }
+  "new_state_version": 42,
+  "result": { "tag": "EttleCreate", "ettle_id": "ettle:..." }
 }
 ```
 
-### Example Tool Call
+### Optimistic Concurrency Control (OCC)
+
+Pass `expected_state_version` to guard against concurrent mutations:
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tools/call",
-  "params": {
-    "name": "render_ettle",
-    "arguments": {
-      "ettle_id": "ettle:snapshot_commit"
-    }
-  }
+  "command": { "tag": "EttleCreate", "title": "Safe" },
+  "expected_state_version": 41
 }
 ```
 
-### Example Resource Access
+Returns `HeadMismatch` if the current `state_version` differs.
+
+---
+
+## Error Contract
+
+All errors have the shape `{ error_code: String, message: String }`.
+
+| Code                      | Meaning                                           |
+| ------------------------- | ------------------------------------------------- |
+| `AuthRequired`            | Missing or invalid bearer token                   |
+| `ToolNotFound`            | Unknown tool name                                 |
+| `InvalidCursor`           | Malformed pagination cursor                       |
+| `InvalidCommand`          | Unknown command tag                               |
+| `InvalidInput`            | Missing required fields or bad values             |
+| `RequestTooLarge`         | Payload exceeds size limit                        |
+| `HeadMismatch`            | OCC version mismatch                              |
+| `NotFound`                | Entity not found                                  |
+| `NotALeaf`                | SnapshotCommit on a non-leaf EP                   |
+| `PolicyDenied`            | Policy rejected the snapshot                      |
+| `PolicyNotFound`          | Unknown policy reference                          |
+| `ProfileNotFound`         | Unknown profile reference                         |
+| `ProfileConflict`         | ProfileCreate with different content for same ref |
+| `ApprovalNotFound`        | Unknown approval token                            |
+| `InvalidConstraintFamily` | Empty constraint family                           |
+| `DuplicateAttachment`     | Constraint already attached to EP                 |
+| `MissingBlob`             | CAS blob not found                                |
+| `ResponseTooLarge`        | Response would exceed size limit                  |
+
+---
+
+## Authentication
+
+Configure via `AuthConfig`:
+
+```rust
+// Require a token on every request
+AuthConfig::with_token("t:dev")
+
+// Disable auth (development only)
+AuthConfig::disabled()
+```
+
+The token is passed as `auth_token` on `McpToolCall`. Missing or incorrect
+tokens return `AuthRequired` before any tool routing occurs.
+
+---
+
+## Pagination
+
+List tools support `limit` and `cursor` params:
 
 ```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "method": "resources/read",
-  "params": {
-    "uri": "ettle://snapshot_commit"
-  }
-}
+{ "limit": 50, "cursor": "<opaque-base64-string>" }
 ```
 
-## Tool Definitions (Planned)
-
-### `seed_import`
-
-Import a seed YAML file into the repository.
-
-**Input**:
-
-```json
-{
-  "path": "handoff/seed_example.yaml"
-}
-```
-
-**Output**:
-
-```json
-{
-  "seed_digest": "ce110808...",
-  "imported_ettles": ["ettle:root", "ettle:store"],
-  "imported_links": 2
-}
-```
-
-### `render_bundle`
-
-Render full EPT path for a leaf Ettle.
-
-**Input**:
-
-```json
-{
-  "leaf_id": "ettle:snapshot_diff",
-  "ep_ordinal": 0
-}
-```
-
-**Output**:
-
-```json
-{
-  "markdown": "# Leaf Bundle: ...\n\n## WHY...",
-  "ept": ["ep:root:1", "ep:store:0", "ep:snapshot_commit:0"],
-  "path": ["ettle:root", "ettle:store", "ettle:snapshot_commit", "ettle:snapshot_diff"]
-}
-```
-
-### `validate_tree`
-
-Validate tree invariants for an Ettle.
-
-**Input**:
-
-```json
-{
-  "root_ettle_id": "ettle:root"
-}
-```
-
-**Output**:
-
-```json
-{
-  "valid": true,
-  "violations": [],
-  "statistics": {
-    "total_ettles": 5,
-    "total_eps": 12,
-    "total_links": 4
-  }
-}
-```
-
-## Dependencies (Planned)
-
-- `ettlex-engine` - Command orchestration
-- `ettlex-core` - Domain models
-- `serde` / `serde_json` - JSON-RPC serialization
-- `tokio` - Async runtime
-- MCP SDK (when available)
-
-## Testing
-
-MCP server will include:
-
-- Unit tests for tool handlers
-- Integration tests with mock MCP client
-- Resource serialization tests
-- Error handling tests
-
-## Future Work
-
-- [ ] Implement MCP server framework
-- [ ] Add tool handlers for all EttleX operations
-- [ ] Implement resource providers
-- [ ] Add pre-configured prompts
-- [ ] Support sampling (AI-initiated actions)
-- [ ] Add progress reporting for long operations
-- [ ] Support cancellation
-- [ ] Add telemetry/logging integration
+The default limit is 100. Responses include a `cursor` field when more items exist.

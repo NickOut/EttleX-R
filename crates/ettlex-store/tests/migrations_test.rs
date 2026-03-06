@@ -25,9 +25,9 @@ fn test_apply_migrations_on_empty_db() {
         result.err()
     );
 
-    // And: All 14 expected tables exist (including sqlite_sequence from AUTOINCREMENT)
+    // And: All 15 expected tables exist (including sqlite_sequence from AUTOINCREMENT)
     let tables = get_table_names(&conn);
-    assert_eq!(tables.len(), 14, "Should have exactly 14 tables");
+    assert_eq!(tables.len(), 15, "Should have exactly 15 tables");
 
     let expected_tables = vec![
         "schema_version",
@@ -43,6 +43,7 @@ fn test_apply_migrations_on_empty_db() {
         "decision_links",          // Added in migration 004
         "profiles",                // Added in migration 005
         "approval_requests",       // Added in migration 006
+        "mcp_command_log",         // Added in migration 008
         "sqlite_sequence",         // Auto-created by SQLite for AUTOINCREMENT columns
     ];
 
@@ -72,7 +73,7 @@ fn test_migration_gap_fails() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 7, "Should have exactly 7 migrations applied");
+    assert_eq!(version_count, 8, "Should have exactly 8 migrations applied");
 }
 
 #[test]
@@ -94,7 +95,7 @@ fn test_migration_idempotency() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 7, "Should still have exactly 7 migrations");
+    assert_eq!(version_count, 8, "Should still have exactly 8 migrations");
 }
 
 #[test]

@@ -91,6 +91,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
             EngineCommandResult::SnapshotCommitRouted(r) => {
                 SnapshotCommitOutcome::RoutedForApproval(r)
             }
+            _ => unreachable!("unexpected EngineCommandResult variant in snapshot commit"),
         }
     } else if let Some(root_ettle_id) = args.root {
         // Resolve root → leaf, then delegate to apply_engine_command (canonical path)
@@ -112,6 +113,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
             EngineCommandResult::SnapshotCommitRouted(r) => {
                 SnapshotCommitOutcome::RoutedForApproval(r)
             }
+            _ => unreachable!("unexpected EngineCommandResult variant in snapshot commit"),
         }
     } else {
         unreachable!()

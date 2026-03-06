@@ -314,6 +314,116 @@ pub fn list_profiles_paginated(
         .collect()
 }
 
+/// Create a profile in the `profiles` table (idempotent on same canonical content).
+///
+/// Returns `Ok(())` if inserted or already exists with identical canonical content.
+/// Returns `Err(ProfileConflict)` if a row already exists with different content.
+pub fn create_profile(
+    conn: &Connection,
+    profile_ref: &str,
+    payload_json: &serde_json::Value,
+) -> Result<()> {
+    let canonical = serde_json::to_string(payload_json).map_err(|e| {
+        ExError::new(ExErrorKind::Serialization)
+            .with_op("create_profile")
+            .with_message(format!("Cannot serialise payload: {}", e))
+    })?;
+
+    // Check for existing row
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT payload_json FROM profiles WHERE profile_ref = ?1",
+            [profile_ref],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| {
+            ExError::new(ExErrorKind::Persistence)
+                .with_op("create_profile")
+                .with_message(format!("DB error: {}", e))
+        })?;
+
+    if let Some(existing_json) = existing {
+        // Compare canonical JSON
+        let existing_val: serde_json::Value =
+            serde_json::from_str(&existing_json).unwrap_or(serde_json::Value::Null);
+        let existing_canonical = serde_json::to_string(&existing_val).unwrap_or_default();
+        if existing_canonical == canonical {
+            return Ok(()); // idempotent
+        }
+        return Err(ExError::new(ExErrorKind::ProfileConflict)
+            .with_entity_id(profile_ref)
+            .with_message("Profile already exists with different content"));
+    }
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    conn.execute(
+        "INSERT INTO profiles (profile_ref, payload_json, is_default, created_at) VALUES (?1, ?2, 0, ?3)",
+        rusqlite::params![profile_ref, canonical, now_ms],
+    )
+    .map_err(|e| {
+        ExError::new(ExErrorKind::Persistence)
+            .with_op("create_profile")
+            .with_message(format!("DB insert error: {}", e))
+    })?;
+
+    Ok(())
+}
+
+/// Set a profile as the repository default.
+///
+/// Clears `is_default` on all other rows and sets it on `profile_ref`.
+/// Returns `Err(ProfileNotFound)` if the profile does not exist.
+pub fn set_default_profile(conn: &Connection, profile_ref: &str) -> Result<()> {
+    // Check profile exists
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM profiles WHERE profile_ref = ?1",
+            [profile_ref],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .map_err(|e| {
+            ExError::new(ExErrorKind::Persistence)
+                .with_op("set_default_profile")
+                .with_message(format!("DB error: {}", e))
+        })?;
+
+    if !exists {
+        return Err(ExError::new(ExErrorKind::ProfileNotFound)
+            .with_entity_id(profile_ref)
+            .with_message("Profile not found"));
+    }
+
+    // Clear existing default
+    conn.execute(
+        "UPDATE profiles SET is_default = 0 WHERE is_default = 1",
+        [],
+    )
+    .map_err(|e| {
+        ExError::new(ExErrorKind::Persistence)
+            .with_op("set_default_profile")
+            .with_message(format!("DB update error: {}", e))
+    })?;
+
+    // Set new default
+    conn.execute(
+        "UPDATE profiles SET is_default = 1 WHERE profile_ref = ?1",
+        [profile_ref],
+    )
+    .map_err(|e| {
+        ExError::new(ExErrorKind::Persistence)
+            .with_op("set_default_profile")
+            .with_message(format!("DB update error: {}", e))
+    })?;
+
+    Ok(())
+}
+
 /// Fetch an approval request row by token.
 ///
 /// Returns `None` if no row with the given `approval_token` exists.
