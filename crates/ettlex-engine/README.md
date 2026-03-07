@@ -323,6 +323,7 @@ It never acquires `&mut Connection` and never writes to the DB or CAS.
 | `EptComputeDecisionContext { leaf_ep_id }`                            | Full decision context for an EPT chain                                  |
 | `SnapshotGet { snapshot_id }`                                         | Single snapshot row                                                     |
 | `SnapshotList { ettle_id }`                                           | All snapshots, optionally filtered by root Ettle                        |
+| `SnapshotGetHead { realised_ettle_id }`                               | Manifest digest of the most recent committed snapshot (or null)         |
 | `ManifestGetBySnapshot { snapshot_id }`                               | Manifest bytes + digests for a snapshot                                 |
 | `ManifestGetByDigest { manifest_digest }`                             | Manifest bytes from CAS directly                                        |
 | `EptCompute { leaf_ep_id }`                                           | Compute the EPT for a leaf EP                                           |

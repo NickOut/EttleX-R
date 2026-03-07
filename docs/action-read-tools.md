@@ -267,6 +267,21 @@ EngineQuery::SnapshotList { ettle_id: Option<String> }
 
 Results ordered by `created_at, snapshot_id` ascending.
 
+#### `SnapshotGetHead`
+
+Manifest digest of the most recently committed snapshot for a given root Ettle.
+Returns `null` if no committed snapshot exists yet.
+
+```rust
+EngineQuery::SnapshotGetHead { realised_ettle_id: String }
+// → EngineQueryResult::SnapshotGetHead(Option<String>)
+// Errors: Persistence (DB failure)
+```
+
+The returned value is the `manifest_digest` string (SHA-256 hex), suitable for
+use as `expected_head` in a subsequent `SnapshotCommit` command to implement
+optimistic concurrency.
+
 #### `ManifestGetBySnapshot`
 
 Manifest bytes + both digests for a snapshot.
