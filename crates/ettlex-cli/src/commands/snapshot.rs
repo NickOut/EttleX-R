@@ -64,6 +64,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(std::path::Path::new(".ettlex")),
     )?;
     let mut conn = rusqlite::Connection::open(&args.db)?;
+    ettlex_store::migrations::apply_migrations(&mut conn)?;
     let cas = FsStore::new(&args.cas);
 
     let options = SnapshotOptions {

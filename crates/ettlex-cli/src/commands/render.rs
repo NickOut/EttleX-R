@@ -53,9 +53,10 @@ pub fn execute(args: RenderArgs) -> Result<(), Box<dyn std::error::Error>> {
 
 /// Execute render ettle command
 fn execute_render_ettle(args: RenderEttleArgs) -> Result<(), Box<dyn std::error::Error>> {
-    // Open database
+    // Open database and apply any pending migrations
     let db_path = ".ettlex/store.db";
-    let conn = rusqlite::Connection::open(db_path)?;
+    let mut conn = rusqlite::Connection::open(db_path)?;
+    ettlex_store::migrations::apply_migrations(&mut conn)?;
 
     // Load tree
     let store = ettlex_store::repo::hydration::load_tree(&conn)?;
@@ -76,9 +77,10 @@ fn execute_render_ettle(args: RenderEttleArgs) -> Result<(), Box<dyn std::error:
 
 /// Execute render bundle command
 fn execute_render_bundle(args: RenderBundleArgs) -> Result<(), Box<dyn std::error::Error>> {
-    // Open database
+    // Open database and apply any pending migrations
     let db_path = ".ettlex/store.db";
-    let conn = rusqlite::Connection::open(db_path)?;
+    let mut conn = rusqlite::Connection::open(db_path)?;
+    ettlex_store::migrations::apply_migrations(&mut conn)?;
 
     // Load tree
     let store = ettlex_store::repo::hydration::load_tree(&conn)?;
