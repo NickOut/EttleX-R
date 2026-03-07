@@ -643,10 +643,10 @@ fn test_ept_compute_deterministic() {
     // must have parent_id = root ettle.
     conn.execute_batch(
         r#"
-        INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-        VALUES ('ettle:rt', 'Root', NULL, 0, 0, 0, '{}');
-        INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-        VALUES ('ettle:lf', 'Leaf', 'ettle:rt', 0, 0, 0, '{}');
+        INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+        VALUES ('ettle:rt', 'Root', NULL, NULL, 0, 0, 0, '{}');
+        INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+        VALUES ('ettle:lf', 'Leaf', 'ettle:rt', 'ep:rt:0', 0, 0, 0, '{}');
 
         -- Root EP0 refines into leaf ettle (child_ettle_id = mapping EP)
         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id,
@@ -952,10 +952,10 @@ fn test_ept_compute_decision_context_deterministic() {
     // Two-level chain
     conn.execute_batch(
         r#"
-        INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-        VALUES ('ettle:ctx-r', 'Root', NULL, 0, 0, 0, '{}');
-        INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-        VALUES ('ettle:ctx-l', 'Leaf', 'ettle:ctx-r', 0, 0, 0, '{}');
+        INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+        VALUES ('ettle:ctx-r', 'Root', NULL, NULL, 0, 0, 0, '{}');
+        INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+        VALUES ('ettle:ctx-l', 'Leaf', 'ettle:ctx-r', 'ep:ctx-r:0', 0, 0, 0, '{}');
         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id,
                          content_digest, content_inline, deleted, created_at, updated_at)
         VALUES ('ep:ctx-r:0', 'ettle:ctx-r', 0, 1, 'ettle:ctx-l', NULL, 'c', 0, 0, 0);

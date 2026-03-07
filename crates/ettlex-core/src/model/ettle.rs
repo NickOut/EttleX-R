@@ -19,6 +19,9 @@ pub struct Ettle {
     /// Optional parent Ettle ID (None for root Ettles)
     pub parent_id: Option<String>,
 
+    /// Optional parent EP ID — the EP that this Ettle is a child of (authoritative join field)
+    pub parent_ep_id: Option<String>,
+
     /// List of EP IDs owned by this Ettle (in creation order, not necessarily ordinal order)
     pub ep_ids: Vec<String>,
 
@@ -50,6 +53,7 @@ impl Ettle {
             id,
             title,
             parent_id: None,
+            parent_ep_id: None,
             ep_ids: Vec::new(),
             metadata: Metadata::new(),
             created_at: now,

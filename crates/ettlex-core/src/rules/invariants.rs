@@ -61,15 +61,22 @@ pub fn find_children_without_ep_mapping(store: &Store) -> Vec<(String, String)> 
                 Err(_) => continue, // Parent doesn't exist - handled by find_orphans
             };
 
-            // Check if any of parent's ACTIVE EPs map to this child
+            // The authoritative join is child.parent_ep_id; it must be set and
+            // must belong to one of the parent's ACTIVE EPs.
+            let parent_ep_id = match &ettle.parent_ep_id {
+                Some(id) => id,
+                None => {
+                    missing_mappings.push((ettle.id.clone(), parent_id.clone()));
+                    continue;
+                }
+            };
+
             let active = match active_eps(store, parent) {
                 Ok(eps) => eps,
                 Err(_) => continue, // Skip if membership inconsistency (handled by other invariants)
             };
 
-            let has_mapping = active
-                .iter()
-                .any(|ep| ep.child_ettle_id.as_deref() == Some(&ettle.id));
+            let has_mapping = active.iter().any(|ep| &ep.id == parent_ep_id);
 
             if !has_mapping {
                 missing_mappings.push((ettle.id.clone(), parent_id.clone()));
@@ -111,36 +118,15 @@ pub fn find_duplicate_ordinals(store: &Store) -> Vec<(String, u32)> {
     duplicates
 }
 
-/// Find children that are mapped by multiple EPs (violation of one-to-one mapping)
+/// Find children that are mapped by multiple EPs
 ///
-/// Only checks active (non-deleted) EPs for mappings.
+/// With `parent_ep_id` as the authoritative join, each child belongs to exactly
+/// one EP by construction. Multiple children per EP are valid (fan-out).
+/// This function always returns empty — kept for API compatibility.
 ///
 /// Returns list of (child_id, vec![ep_ids]) tuples
-pub fn find_duplicate_child_mappings(store: &Store) -> Vec<(String, Vec<String>)> {
-    let mut child_to_eps: HashMap<String, Vec<String>> = HashMap::new();
-
-    // Collect all active EP -> child mappings
-    for ettle in store.list_ettles() {
-        let active = match active_eps(store, ettle) {
-            Ok(eps) => eps,
-            Err(_) => continue, // Skip if membership inconsistency
-        };
-
-        for ep in active {
-            if let Some(ref child_id) = ep.child_ettle_id {
-                child_to_eps
-                    .entry(child_id.clone())
-                    .or_default()
-                    .push(ep.id.clone());
-            }
-        }
-    }
-
-    // Find children mapped by multiple EPs
-    child_to_eps
-        .into_iter()
-        .filter(|(_, ep_ids)| ep_ids.len() > 1)
-        .collect()
+pub fn find_duplicate_child_mappings(_store: &Store) -> Vec<(String, Vec<String>)> {
+    Vec::new()
 }
 
 /// Find EPs that reference non-existent children
@@ -152,11 +138,11 @@ pub fn find_duplicate_child_mappings(store: &Store) -> Vec<(String, Vec<String>)
 pub fn find_eps_with_nonexistent_children(store: &Store) -> Vec<(String, String)> {
     let mut invalid_refs = Vec::new();
 
-    for ep in store.list_eps() {
-        if let Some(ref child_id) = ep.child_ettle_id {
-            // Check if child exists in raw store (not get_ettle which excludes deleted)
-            if !store.ettles.contains_key(child_id) {
-                invalid_refs.push((ep.id.clone(), child_id.clone()));
+    // Iterate non-deleted ettles that claim a parent_ep_id; verify that EP exists.
+    for ettle in store.list_ettles() {
+        if let Some(ref ep_id) = ettle.parent_ep_id {
+            if !store.eps.contains_key(ep_id) {
+                invalid_refs.push((ep_id.clone(), ettle.id.clone()));
             }
         }
     }
@@ -250,10 +236,14 @@ pub fn find_eps_with_unknown_ettle(store: &Store) -> Vec<(String, String)> {
 pub fn find_deleted_ep_mappings(store: &Store) -> Vec<String> {
     let mut deleted_with_mappings = Vec::new();
 
-    // Check all EPs (including tombstoned)
-    for ep in &store.eps {
-        if ep.1.deleted && ep.1.child_ettle_id.is_some() {
-            deleted_with_mappings.push(ep.1.id.clone());
+    // Find non-deleted ettles whose parent_ep_id points to a deleted EP.
+    for ettle in store.list_ettles() {
+        if let Some(ref ep_id) = ettle.parent_ep_id {
+            if let Some(ep) = store.eps.get(ep_id) {
+                if ep.deleted {
+                    deleted_with_mappings.push(ep_id.clone());
+                }
+            }
         }
     }
 
@@ -266,13 +256,12 @@ pub fn find_deleted_ep_mappings(store: &Store) -> Vec<String> {
 pub fn find_deleted_child_mappings(store: &Store) -> Vec<(String, String)> {
     let mut deleted_child_mappings = Vec::new();
 
-    for ep in store.list_eps() {
-        if let Some(ref child_id) = ep.child_ettle_id {
-            // Check if child exists and is deleted
-            if let Some(child) = store.ettles.get(child_id) {
-                if child.deleted {
-                    deleted_child_mappings.push((ep.id.clone(), child_id.clone()));
-                }
+    // Find deleted ettles that still have a parent_ep_id set.
+    // Returns (ep_id, child_ettle_id) tuples.
+    for ettle in store.ettles.values() {
+        if ettle.deleted {
+            if let Some(ref ep_id) = ettle.parent_ep_id {
+                deleted_child_mappings.push((ep_id.clone(), ettle.id.clone()));
             }
         }
     }
@@ -426,7 +415,7 @@ mod tests {
     fn test_find_deleted_ep_mappings() {
         let mut store = Store::new();
 
-        // Create deleted EP with child mapping
+        // Create a deleted EP
         let mut ep = Ep::new(
             "ep-1".to_string(),
             "ettle-1".to_string(),
@@ -436,10 +425,13 @@ mod tests {
             "What".to_string(),
             "How".to_string(),
         );
-        ep.child_ettle_id = Some("child-1".to_string());
         ep.deleted = true;
-
         store.insert_ep(ep);
+
+        // Create a non-deleted child ettle whose parent_ep_id points to the deleted EP
+        let mut child = Ettle::new("child-1".to_string(), "Child".to_string());
+        child.parent_ep_id = Some("ep-1".to_string());
+        store.insert_ettle(child);
 
         let deleted_mappings = find_deleted_ep_mappings(&store);
         assert_eq!(deleted_mappings.len(), 1);
@@ -450,24 +442,12 @@ mod tests {
     fn test_find_deleted_child_mappings() {
         let mut store = Store::new();
 
-        // Create child Ettle that's deleted
+        // Create a deleted child Ettle with parent_ep_id set
         let mut child = Ettle::new("child-1".to_string(), "Child".to_string());
         child.deleted = true;
-
-        // Create EP mapping to deleted child
-        let mut ep = Ep::new(
-            "ep-1".to_string(),
-            "ettle-1".to_string(),
-            0,
-            true,
-            "Why".to_string(),
-            "What".to_string(),
-            "How".to_string(),
-        );
-        ep.child_ettle_id = Some("child-1".to_string());
+        child.parent_ep_id = Some("ep-1".to_string());
 
         store.insert_ettle(child);
-        store.insert_ep(ep);
 
         let deleted_child_mappings = find_deleted_child_mappings(&store);
         assert_eq!(deleted_child_mappings.len(), 1);

@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 /// Load a single Ettle from the database into the Store
 pub fn load_ettle(conn: &Connection, ettle_id: &str, store: &mut Store) -> Result<()> {
     let mut stmt = conn
-        .prepare("SELECT id, title, parent_id, deleted, created_at, updated_at, metadata FROM ettles WHERE id = ?")
+        .prepare("SELECT id, title, parent_id, deleted, created_at, updated_at, metadata, parent_ep_id FROM ettles WHERE id = ?")
         .map_err(from_rusqlite)?;
 
     let ettle = stmt
@@ -26,9 +26,11 @@ pub fn load_ettle(conn: &Connection, ettle_id: &str, store: &mut Store) -> Resul
             let created_at: i64 = row.get(4)?;
             let updated_at: i64 = row.get(5)?;
             let metadata_json: String = row.get(6)?;
+            let parent_ep_id: Option<String> = row.get(7)?;
 
             let mut ettle = Ettle::new(id, title);
             ettle.parent_id = parent_id;
+            ettle.parent_ep_id = parent_ep_id;
             ettle.deleted = deleted != 0;
             ettle.created_at =
                 chrono::DateTime::from_timestamp(created_at, 0).unwrap_or_else(chrono::Utc::now);
@@ -67,7 +69,7 @@ pub fn load_ettle(conn: &Connection, ettle_id: &str, store: &mut Store) -> Resul
 /// Returns Ettles in deterministic order (sorted by ID)
 pub fn load_all_ettles(conn: &Connection, store: &mut Store) -> Result<()> {
     let mut stmt = conn
-        .prepare("SELECT id, title, parent_id, deleted, created_at, updated_at, metadata FROM ettles ORDER BY id")
+        .prepare("SELECT id, title, parent_id, deleted, created_at, updated_at, metadata, parent_ep_id FROM ettles ORDER BY id")
         .map_err(from_rusqlite)?;
 
     let ettles: Vec<Ettle> = stmt
@@ -79,9 +81,11 @@ pub fn load_all_ettles(conn: &Connection, store: &mut Store) -> Result<()> {
             let created_at: i64 = row.get(4)?;
             let updated_at: i64 = row.get(5)?;
             let metadata_json: String = row.get(6)?;
+            let parent_ep_id: Option<String> = row.get(7)?;
 
             let mut ettle = Ettle::new(id, title);
             ettle.parent_id = parent_id;
+            ettle.parent_ep_id = parent_ep_id;
             ettle.deleted = deleted != 0;
             ettle.created_at =
                 chrono::DateTime::from_timestamp(created_at, 0).unwrap_or_else(chrono::Utc::now);

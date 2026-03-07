@@ -295,6 +295,7 @@ fn test_scenario_24_include_ancestors_simple() {
     // Create child ettle
     let mut child_ettle = Ettle::new("child".to_string(), "Child".to_string());
     child_ettle.parent_id = Some("root".to_string());
+    child_ettle.parent_ep_id = Some("root:ep0".to_string()); // authoritative join
     let child_ep0 = Ep::new(
         "child:ep0".to_string(),
         "child".to_string(),
@@ -308,7 +309,7 @@ fn test_scenario_24_include_ancestors_simple() {
     store.insert_ettle(child_ettle);
     store.insert_ep(child_ep0.clone());
 
-    // Link root EP to child
+    // Link root EP to child (backward-compat field; not used by EPT traversal)
     {
         let root_ep = store.get_ep_mut("root:ep0").unwrap();
         root_ep.child_ettle_id = Some("child".to_string());
@@ -449,9 +450,13 @@ fn test_scenario_26_ept_context_simple() {
     assert_eq!(context.direct_by_ep["root:ep0"].len(), 1);
 }
 
-// Scenario 27: Rejects ambiguous graphs (simplified)
+// Scenario 27: EPT succeeds via parent_ep_id even if multiple child_ettle_id entries exist
+//
+// In the new model, child.parent_ep_id is the authoritative join field.
+// Two EPs may both have child_ettle_id pointing to the same child without creating
+// ambiguity — the child's parent_ep_id disambiguates.
 #[test]
-fn test_scenario_27_ambiguous_graph_simple() {
+fn test_scenario_27_parent_ep_id_disambiguates_multiple_child_ettle_id() {
     let mut store = Store::new();
 
     // Create parent ettle with TWO EPs
@@ -477,9 +482,10 @@ fn test_scenario_27_ambiguous_graph_simple() {
     parent.add_ep_id("parent:ep0".to_string());
     parent.add_ep_id("parent:ep1".to_string());
 
-    // Create child
+    // Create child: parent_ep_id is the authoritative join (ep0 owns this child)
     let mut child = Ettle::new("child".to_string(), "Child".to_string());
     child.parent_id = Some("parent".to_string());
+    child.parent_ep_id = Some("parent:ep0".to_string()); // authoritative
     let child_ep = Ep::new(
         "child:ep0".to_string(),
         "child".to_string(),
@@ -497,7 +503,7 @@ fn test_scenario_27_ambiguous_graph_simple() {
     store.insert_ep(parent_ep1.clone());
     store.insert_ep(child_ep);
 
-    // Make BOTH parent EPs map to the same child (ambiguous!)
+    // Set BOTH parent EPs' child_ettle_id to same child (legacy field — not authoritative)
     {
         let ep0 = store.get_ep_mut("parent:ep0").unwrap();
         ep0.child_ettle_id = Some("child".to_string());
@@ -507,7 +513,7 @@ fn test_scenario_27_ambiguous_graph_simple() {
         ep1.child_ettle_id = Some("child".to_string());
     }
 
-    // This should fail with EptDuplicateMapping
+    // EPT should SUCCEED: child.parent_ep_id = parent:ep0 is unambiguous
     let result = ep_list_decisions_with_ancestors(
         &store,
         "child:ep0",
@@ -519,9 +525,9 @@ fn test_scenario_27_ambiguous_graph_simple() {
         },
     );
 
-    assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::EptDuplicateMapping { .. })
-    ));
+    assert!(
+        result.is_ok(),
+        "EPT should succeed via parent_ep_id: {:?}",
+        result.err()
+    );
 }

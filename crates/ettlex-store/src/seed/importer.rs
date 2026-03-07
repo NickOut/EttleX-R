@@ -192,17 +192,11 @@ pub fn import_seed(path: &Path, conn: &mut Connection) -> Result<String> {
             }
         }
 
-        // Check if link already exists - skip if so (update mode support)
-        let parent_ep = store.get_ep(&link.parent_ep)?;
-        if parent_ep.child_ettle_id.is_some() {
-            // Link already exists - skip it (update mode)
-            // Verify it's the same child (safety check)
-            if parent_ep.child_ettle_id.as_ref() != Some(&link.child) {
-                // Conflicting link - this would be an error, let link_child handle it
-            } else {
-                // Link already exists and matches - skip
-                continue;
-            }
+        // Check if link already exists (idempotency) — use the authoritative parent_ep_id field.
+        let child_ettle = store.get_ettle(&link.child)?;
+        if child_ettle.parent_ep_id.as_ref() == Some(&link.parent_ep) {
+            // Link already exists and matches - skip
+            continue;
         }
 
         // Use core refinement operation (enforces EpAlreadyHasChild invariant)
@@ -754,10 +748,12 @@ links: []
     }
 
     #[test]
-    fn test_import_fails_when_ep_already_has_child() {
+    fn test_import_allows_multiple_children_per_ep() {
+        // An EP may have multiple child Ettles (fan-out). A second seed linking
+        // a different child to the same EP must succeed.
         let mut conn = setup_test_db();
 
-        // Import first seed that creates a link
+        // Import first seed that creates a link (ep:root:1 → ettle:store)
         let first_path = fixtures_dir().join("seed_full.yaml");
         let first_result = import_seed(&first_path, &mut conn);
         assert!(
@@ -766,7 +762,7 @@ links: []
             first_result.err()
         );
 
-        // Verify the link was created
+        // Verify the first link was created
         let ep_child: Option<String> = conn
             .query_row(
                 "SELECT child_ettle_id FROM eps WHERE id = 'ep:root:1'",
@@ -780,11 +776,11 @@ links: []
             "EP should already have a child"
         );
 
-        // Create a second seed that tries to link the SAME EP to a different child
-        let conflicting_yaml = r#"
+        // Create a second seed that links the SAME EP to a different child
+        let second_yaml = r#"
 schema_version: 0
 project:
-  name: conflict-test
+  name: fan-out-test
 ettles:
   - id: ettle:other_child
     title: "Other Child"
@@ -801,41 +797,19 @@ links:
     child: ettle:other_child
 "#;
 
-        // Write conflicting seed to temp file
         let temp_dir = std::env::temp_dir();
-        let conflict_path = temp_dir.join("seed_conflict_test.yaml");
-        std::fs::write(&conflict_path, conflicting_yaml).unwrap();
+        let second_path = temp_dir.join("seed_fan_out_test.yaml");
+        std::fs::write(&second_path, second_yaml).unwrap();
 
-        // Import should fail with EpAlreadyHasChild error
-        let conflict_result = import_seed(&conflict_path, &mut conn);
+        // Import should succeed — fan-out (multiple children per EP) is valid
+        let second_result = import_seed(&second_path, &mut conn);
         assert!(
-            conflict_result.is_err(),
-            "Import should fail when EP already has a child"
+            second_result.is_ok(),
+            "Second import should succeed (fan-out allowed): {:?}",
+            second_result.err()
         );
 
-        let err = conflict_result.unwrap_err();
-        let err_msg = format!("{:?}", err);
-        assert!(
-            err_msg.contains("DuplicateMapping") || err_msg.contains("already maps"),
-            "Error should indicate EP already has a child, got: {}",
-            err_msg
-        );
-
-        // Verify the original link is unchanged (rollback)
-        let ep_child_after: Option<String> = conn
-            .query_row(
-                "SELECT child_ettle_id FROM eps WHERE id = 'ep:root:1'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(
-            ep_child_after,
-            Some("ettle:store".to_string()),
-            "Original link should be unchanged after failed import"
-        );
-
-        // Verify the conflicting ettle was not created (rollback)
+        // Both children should exist
         let other_child_exists: bool = conn
             .query_row(
                 "SELECT 1 FROM ettles WHERE id = 'ettle:other_child'",
@@ -843,12 +817,23 @@ links:
                 |_| Ok(true),
             )
             .unwrap_or(false);
-        assert!(
-            !other_child_exists,
-            "Conflicting ettle should not exist after rollback"
+        assert!(other_child_exists, "Second child ettle should exist");
+
+        // The second child should have parent_ep_id set to ep:root:1
+        let other_child_parent_ep: Option<String> = conn
+            .query_row(
+                "SELECT parent_ep_id FROM ettles WHERE id = 'ettle:other_child'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            other_child_parent_ep,
+            Some("ep:root:1".to_string()),
+            "Second child should have parent_ep_id set"
         );
 
         // Cleanup
-        std::fs::remove_file(conflict_path).ok();
+        std::fs::remove_file(second_path).ok();
     }
 }

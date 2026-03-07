@@ -89,6 +89,7 @@ pub fn setup_simple_tree(store: &mut Store) -> (String, String, String) {
 
     let mid = store.get_ettle_mut(&mid_id).unwrap();
     mid.parent_id = Some(root_id.clone());
+    mid.parent_ep_id = Some(ep1_id.clone()); // authoritative join
 
     // Link Mid -> Leaf via EP1
     let ep2_id = create_test_ep(store, &mid_id, 1, true, "Why Leaf", "What Leaf", "How Leaf");
@@ -97,6 +98,7 @@ pub fn setup_simple_tree(store: &mut Store) -> (String, String, String) {
 
     let leaf = store.get_ettle_mut(&leaf_id).unwrap();
     leaf.parent_id = Some(mid_id.clone());
+    leaf.parent_ep_id = Some(ep2_id.clone()); // authoritative join
 
     (root_id, mid_id, leaf_id)
 }

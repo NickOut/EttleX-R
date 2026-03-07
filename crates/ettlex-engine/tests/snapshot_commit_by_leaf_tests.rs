@@ -87,8 +87,10 @@ fn test_snapshot_commit_rejects_non_leaf_ep() {
     let (_tmp, mut conn, cas) = setup_db();
 
     conn.execute_batch(r#"
-        INSERT INTO ettles VALUES ('ettle:root', 'Root', NULL, 0, 0, 0, '{}');
-        INSERT INTO ettles VALUES ('ettle:child', 'Child', 'ettle:root', 0, 0, 0, '{}');
+        INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+        VALUES ('ettle:root', 'Root', NULL, NULL, 0, 0, 0, '{}');
+        INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+        VALUES ('ettle:child', 'Child', 'ettle:root', 'ep:root:0', 0, 0, 0, '{}');
         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
         VALUES ('ep:root:0', 'ettle:root', 0, 1, 'ettle:child', 'Non-leaf', 0, 0, 0);
         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)

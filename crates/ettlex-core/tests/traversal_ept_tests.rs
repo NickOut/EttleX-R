@@ -70,8 +70,10 @@ fn test_ept_fails_on_missing_mapping() {
     assert!(matches!(result, Err(EttleXError::EptMissingMapping { .. })));
 }
 
+// With parent_ep_id as authoritative join, two child_ettle_id entries for the same
+// child do not create ambiguity. The child's parent_ep_id disambiguates.
 #[test]
-fn test_ept_fails_on_duplicate_mapping() {
+fn test_ept_succeeds_via_parent_ep_id_with_multiple_child_ettle_id_entries() {
     let mut store = new_store();
 
     let parent_id =
@@ -100,23 +102,31 @@ fn test_ept_fails_on_duplicate_mapping() {
     )
     .unwrap();
 
-    // Link child to both EPs (bypass refinement_ops which prevents this)
+    // Set child_ettle_id on both EPs (legacy, non-authoritative)
     let ep1_mut = store.get_ep_mut(&ep1).unwrap();
     ep1_mut.child_ettle_id = Some(child_id.clone());
 
     let ep2_mut = store.get_ep_mut(&ep2).unwrap();
     ep2_mut.child_ettle_id = Some(child_id.clone());
 
+    // parent_ep_id is the authoritative join — child belongs to ep1
     let child = store.get_ettle_mut(&child_id).unwrap();
     child.parent_id = Some(parent_id.clone());
+    child.parent_ep_id = Some(ep1.clone()); // ep1 is the authoritative mapping
 
     let result = ept::compute_ept(&store, &child_id, None);
 
-    assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::EptDuplicateMapping { .. })
-    ));
+    // EPT succeeds: the mapping is unambiguous via parent_ep_id
+    assert!(
+        result.is_ok(),
+        "EPT should succeed via parent_ep_id: {:?}",
+        result.err()
+    );
+    let ept_ids = result.unwrap();
+    assert!(
+        ept_ids.contains(&ep1),
+        "EPT should include ep1 (the authoritative mapping)"
+    );
 }
 
 #[test]

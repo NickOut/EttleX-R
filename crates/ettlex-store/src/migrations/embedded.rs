@@ -43,5 +43,9 @@ pub fn get_migrations() -> Vec<Migration> {
             id: "008_mcp_command_log",
             sql: include_str!("../../migrations/008_mcp_command_log.sql"),
         },
+        Migration {
+            id: "009_parent_ep_id",
+            sql: include_str!("../../migrations/009_parent_ep_id.sql"),
+        },
     ]
 }

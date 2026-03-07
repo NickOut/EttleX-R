@@ -101,11 +101,23 @@ fn collect_leaf_ep_ids_in_subtree(
     };
     let mut leaves = Vec::new();
     for ep_id in &ettle.ep_ids {
-        if let Ok(ep) = store.get_ep(ep_id) {
-            if ep.is_leaf() {
-                leaves.push(ep.id.clone());
-            } else if let Some(child_ettle_id) = &ep.child_ettle_id {
-                leaves.extend(collect_leaf_ep_ids_in_subtree(store, child_ettle_id));
+        if store.get_ep(ep_id).is_err() {
+            continue;
+        }
+        // Find child ettles that claim this EP as their parent (authoritative join via parent_ep_id).
+        let children: Vec<String> = store
+            .list_ettles()
+            .iter()
+            .filter(|e| e.parent_ep_id.as_deref() == Some(ep_id))
+            .map(|e| e.id.clone())
+            .collect();
+
+        if children.is_empty() {
+            // No children — this EP is a leaf.
+            leaves.push(ep_id.clone());
+        } else {
+            for child_id in children {
+                leaves.extend(collect_leaf_ep_ids_in_subtree(store, &child_id));
             }
         }
     }
@@ -116,7 +128,7 @@ fn collect_leaf_ep_ids_in_subtree(
 fn validate_leaf_ep(store: &ettlex_core::ops::store::Store, ep_id: &str) -> Result<()> {
     use ettlex_core::errors::EttleXError;
 
-    let ep = store.get_ep(ep_id).map_err(|e| match e {
+    store.get_ep(ep_id).map_err(|e| match e {
         EttleXError::EpNotFound { .. } | EttleXError::EpDeleted { .. } => {
             ExError::new(ExErrorKind::NotFound)
                 .with_op("validate_leaf_ep")
@@ -126,11 +138,17 @@ fn validate_leaf_ep(store: &ettlex_core::ops::store::Store, ep_id: &str) -> Resu
         _ => ExError::from(e),
     })?;
 
-    if !ep.is_leaf() {
+    // An EP is a leaf if no non-deleted ettle claims it as its parent_ep_id.
+    let has_children = store
+        .list_ettles()
+        .iter()
+        .any(|e| e.parent_ep_id.as_deref() == Some(ep_id));
+
+    if has_children {
         return Err(ExError::new(ExErrorKind::NotALeaf)
             .with_op("validate_leaf_ep")
             .with_ep_id(ep_id)
-            .with_message("EP is not a leaf (has child_ettle_id)"));
+            .with_message("EP is not a leaf (has child ettles)"));
     }
 
     Ok(())

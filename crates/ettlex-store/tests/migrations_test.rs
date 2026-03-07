@@ -73,7 +73,7 @@ fn test_migration_gap_fails() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 8, "Should have exactly 8 migrations applied");
+    assert_eq!(version_count, 9, "Should have exactly 9 migrations applied");
 }
 
 #[test]

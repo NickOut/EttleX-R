@@ -75,17 +75,22 @@ fn test_scenario_06_error_child_without_ep_mapping() {
 }
 
 #[test]
-fn test_scenario_06_error_duplicate_mappings() {
-    // GIVEN a child mapped by two EPs
+fn test_scenario_06_multiple_children_same_ep_is_valid() {
+    // Multiple child Ettles under the same EP is the correct fan-out behaviour.
     let mut store = Store::new();
     let parent_id =
         ettle_ops::create_ettle(&mut store, "Parent".to_string(), None, None, None, None)
             .expect("Should create parent");
 
-    let child_id = ettle_ops::create_ettle(&mut store, "Child".to_string(), None, None, None, None)
-        .expect("Should create child");
+    let child1_id =
+        ettle_ops::create_ettle(&mut store, "Child1".to_string(), None, None, None, None)
+            .expect("Should create child1");
 
-    let ep1_id = ep_ops::create_ep(
+    let child2_id =
+        ettle_ops::create_ettle(&mut store, "Child2".to_string(), None, None, None, None)
+            .expect("Should create child2");
+
+    let ep_id = ep_ops::create_ep(
         &mut store,
         &parent_id,
         1,
@@ -94,47 +99,26 @@ fn test_scenario_06_error_duplicate_mappings() {
         "EP1".to_string(),
         "".to_string(),
     )
-    .expect("Should create EP1");
+    .expect("Should create EP");
 
-    let ep2_id = ep_ops::create_ep(
-        &mut store,
-        &parent_id,
-        2,
-        false,
-        "".to_string(),
-        "EP2".to_string(),
-        "".to_string(),
-    )
-    .expect("Should create EP2");
-
-    // Link both EPs to same child (manually bypass validation)
-    refinement_ops::link_child(&mut store, &ep1_id, &child_id).expect("Should link to EP1");
-
-    // Manually set EP2's child (bypassing one-to-one validation for test)
-    {
-        let ep2 = store.get_ep_mut(&ep2_id).expect("EP2 exists");
-        ep2.child_ettle_id = Some(child_id.clone());
-    }
+    // Both links must succeed — fan-out is valid.
+    refinement_ops::link_child(&mut store, &ep_id, &child1_id).expect("Should link child1");
+    refinement_ops::link_child(&mut store, &ep_id, &child2_id).expect("Should link child2");
 
     // WHEN checking for duplicates
     let duplicates = invariants::find_duplicate_child_mappings(&store);
 
-    // THEN duplicate mapping is detected
-    assert_eq!(duplicates.len(), 1);
-    assert_eq!(duplicates[0].0, child_id);
+    // THEN no duplicate violation — multiple children per EP is valid
+    assert!(duplicates.is_empty());
 
-    // AND validate_tree fails
+    // AND validate_tree passes
     let result = validation::validate_tree(&store);
-    assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::ChildReferencedByMultipleEps { .. })
-    ));
+    assert!(result.is_ok());
 }
 
 #[test]
 fn test_scenario_06_error_mapping_references_deleted_ep() {
-    // GIVEN a deleted EP with a child mapping
+    // GIVEN a deleted EP that a non-deleted child still points to via parent_ep_id
     let mut store = Store::new();
     let parent_id =
         ettle_ops::create_ettle(&mut store, "Parent".to_string(), None, None, None, None)
@@ -143,7 +127,7 @@ fn test_scenario_06_error_mapping_references_deleted_ep() {
     let child_id = ettle_ops::create_ettle(&mut store, "Child".to_string(), None, None, None, None)
         .expect("Should create child");
 
-    // Create deleted EP with child mapping (manually)
+    // Create deleted EP (manually)
     let mut ep = Ep::new(
         "ep-deleted".to_string(),
         parent_id.clone(),
@@ -154,7 +138,6 @@ fn test_scenario_06_error_mapping_references_deleted_ep() {
         "".to_string(),
     );
     ep.deleted = true;
-    ep.child_ettle_id = Some(child_id.clone());
 
     {
         let parent = store.get_ettle_mut(&parent_id).expect("Parent exists");
@@ -163,10 +146,16 @@ fn test_scenario_06_error_mapping_references_deleted_ep() {
 
     store.insert_ep(ep);
 
+    // Manually set child's parent_ep_id to the deleted EP (simulates inconsistent state)
+    {
+        let child = store.get_ettle_mut(&child_id).expect("Child exists");
+        child.parent_ep_id = Some("ep-deleted".to_string());
+    }
+
     // WHEN checking for deleted EP mappings
     let deleted_mappings = invariants::find_deleted_ep_mappings(&store);
 
-    // THEN deleted EP with mapping is detected
+    // THEN deleted EP reference is detected
     assert_eq!(deleted_mappings.len(), 1);
     assert_eq!(deleted_mappings[0], "ep-deleted");
 

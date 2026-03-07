@@ -56,43 +56,23 @@ pub fn compute_ept(
 
     ept.push(root_ep0.id.clone());
 
-    // Step 2: For each transition (parent -> child), add the mapping EP
+    // Step 2: For each transition (parent -> child), add the mapping EP.
+    // The child's parent_ep_id is the authoritative join field — look it up directly.
     for i in 0..rt.len() - 1 {
         let current_id = &rt[i];
         let next_child_id = &rt[i + 1];
-        let current = store.get_ettle(current_id)?;
 
-        // Find EP(s) that map to next_child_id
-        let active = active_eps(store, current)?;
-        let mapping_eps: Vec<&str> = active
-            .iter()
-            .filter_map(|ep| {
-                if ep.child_ettle_id.as_deref() == Some(next_child_id) {
-                    Some(ep.id.as_str())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // Must have exactly one mapping
-        match mapping_eps.len() {
-            0 => {
-                return Err(EttleXError::EptMissingMapping {
+        let next_child = store.get_ettle(next_child_id)?;
+        let mapping_ep_id =
+            next_child
+                .parent_ep_id
+                .as_ref()
+                .ok_or_else(|| EttleXError::EptMissingMapping {
                     parent_id: current_id.clone(),
                     child_id: next_child_id.clone(),
-                });
-            }
-            1 => {
-                ept.push(mapping_eps[0].to_string());
-            }
-            _ => {
-                return Err(EttleXError::EptDuplicateMapping {
-                    parent_id: current_id.clone(),
-                    child_id: next_child_id.clone(),
-                });
-            }
-        }
+                })?;
+
+        ept.push(mapping_ep_id.clone());
     }
 
     // Step 3: Handle leaf EP

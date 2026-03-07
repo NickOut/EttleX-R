@@ -20,11 +20,12 @@ impl SqliteRepo {
     /// Takes an Ettle from the Store and saves it to the ettles table
     pub fn persist_ettle(conn: &Connection, ettle: &Ettle) -> Result<()> {
         conn.execute(
-            "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(id) DO UPDATE SET
                 title = excluded.title,
                 parent_id = excluded.parent_id,
+                parent_ep_id = excluded.parent_ep_id,
                 deleted = excluded.deleted,
                 updated_at = excluded.updated_at,
                 metadata = excluded.metadata",
@@ -32,6 +33,7 @@ impl SqliteRepo {
                 ettle.id,
                 ettle.title,
                 ettle.parent_id,
+                ettle.parent_ep_id,
                 if ettle.deleted { 1 } else { 0 },
                 ettle.created_at.timestamp(),
                 ettle.updated_at.timestamp(),
@@ -46,11 +48,12 @@ impl SqliteRepo {
     /// Persist an Ettle within a transaction
     pub fn persist_ettle_tx(tx: &Transaction, ettle: &Ettle) -> Result<()> {
         tx.execute(
-            "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(id) DO UPDATE SET
                 title = excluded.title,
                 parent_id = excluded.parent_id,
+                parent_ep_id = excluded.parent_ep_id,
                 deleted = excluded.deleted,
                 updated_at = excluded.updated_at,
                 metadata = excluded.metadata",
@@ -58,6 +61,7 @@ impl SqliteRepo {
                 ettle.id,
                 ettle.title,
                 ettle.parent_id,
+                ettle.parent_ep_id,
                 if ettle.deleted { 1 } else { 0 },
                 ettle.created_at.timestamp(),
                 ettle.updated_at.timestamp(),
@@ -146,7 +150,7 @@ impl SqliteRepo {
     /// Get an Ettle from the database by ID
     pub fn get_ettle(conn: &Connection, ettle_id: &str) -> Result<Option<Ettle>> {
         let mut stmt = conn
-            .prepare("SELECT id, title, parent_id, deleted, created_at, updated_at, metadata FROM ettles WHERE id = ?")
+            .prepare("SELECT id, title, parent_id, deleted, created_at, updated_at, metadata, parent_ep_id FROM ettles WHERE id = ?")
             .map_err(from_rusqlite)?;
 
         let result = stmt
@@ -158,9 +162,11 @@ impl SqliteRepo {
                 let created_at: i64 = row.get(4)?;
                 let updated_at: i64 = row.get(5)?;
                 let metadata_json: String = row.get(6)?;
+                let parent_ep_id: Option<String> = row.get(7)?;
 
                 let mut ettle = Ettle::new(id, title);
                 ettle.parent_id = parent_id;
+                ettle.parent_ep_id = parent_ep_id;
                 ettle.deleted = deleted != 0;
                 ettle.created_at = chrono::DateTime::from_timestamp(created_at, 0)
                     .unwrap_or_else(chrono::Utc::now);

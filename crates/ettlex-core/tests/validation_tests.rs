@@ -131,8 +131,11 @@ fn test_validate_tree_detects_duplicate_ordinal() {
     assert!(result.is_err());
 }
 
+// In the new model, multiple child_ettle_id entries pointing to the same child
+// via the legacy field do NOT create a violation. Each child has one authoritative
+// parent_ep_id. validate_tree should PASS in this scenario.
 #[test]
-fn test_validate_tree_detects_child_referenced_by_multiple_eps() {
+fn test_validate_tree_multiple_child_ettle_id_entries_are_valid() {
     let mut store = new_store();
 
     let parent_id =
@@ -161,37 +164,35 @@ fn test_validate_tree_detects_child_referenced_by_multiple_eps() {
     )
     .unwrap();
 
-    // Link child to ep1 properly
+    // Link child to ep1 properly (sets parent_ep_id = ep1_id, parent_id = parent_id)
     refinement_ops::link_child(&mut store, &ep1_id, &child_id).unwrap();
 
-    // Manually link same child to ep2 (bypass refinement_ops validation)
+    // Manually set ep2's child_ettle_id (legacy field, non-authoritative)
     let ep2 = store.get_ep_mut(&ep2_id).unwrap();
     ep2.child_ettle_id = Some(child_id.clone());
 
+    // validate_tree should PASS — child.parent_ep_id is ep1_id (unambiguous)
     let result = validation::validate_tree(&store);
-    assert!(result.is_err());
+    assert!(
+        result.is_ok(),
+        "Multiple child_ettle_id entries are now valid: {:?}",
+        result.err()
+    );
 }
 
 #[test]
-fn test_validate_tree_detects_ep_references_nonexistent_child() {
+fn test_validate_tree_detects_ettle_with_nonexistent_parent_ep_id() {
     let mut store = new_store();
 
     let parent_id =
         ettle_ops::create_ettle(&mut store, "Parent".to_string(), None, None, None, None).unwrap();
-    let ep_id = ep_ops::create_ep(
-        &mut store,
-        &parent_id,
-        1,
-        true,
-        String::new(),
-        String::new(),
-        String::new(),
-    )
-    .unwrap();
+    let child_id =
+        ettle_ops::create_ettle(&mut store, "Child".to_string(), None, None, None, None).unwrap();
 
-    // Set EP's child_ettle_id to nonexistent ettle (bypass refinement_ops)
-    let ep = store.get_ep_mut(&ep_id).unwrap();
-    ep.child_ettle_id = Some("nonexistent-child".to_string());
+    // Manually set child's parent_ep_id to a nonexistent EP (inconsistent state)
+    let child = store.get_ettle_mut(&child_id).unwrap();
+    child.parent_id = Some(parent_id.clone());
+    child.parent_ep_id = Some("nonexistent-ep".to_string());
 
     let result = validation::validate_tree(&store);
     assert!(result.is_err());

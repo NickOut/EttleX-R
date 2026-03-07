@@ -95,15 +95,7 @@ pub fn link_child(store: &mut Store, ep_id: &str, child_id: &str) -> Result<()> 
         });
     }
 
-    // Check if EP already has a child
-    if let Some(ref existing_child_id) = ep.child_ettle_id {
-        return Err(EttleXError::EpAlreadyHasChild {
-            ep_id: ep_id.to_string(),
-            current_child_id: existing_child_id.clone(),
-        });
-    }
-
-    // Check if child already has a parent
+    // Check if child already has a parent (a child can only belong to one EP)
     if let Some(ref existing_parent_id) = child.parent_id {
         return Err(EttleXError::ChildAlreadyHasParent {
             child_id: child_id.to_string(),
@@ -112,14 +104,15 @@ pub fn link_child(store: &mut Store, ep_id: &str, child_id: &str) -> Result<()> 
         });
     }
 
-    // Update EP's child_ettle_id
+    // Update EP's child_ettle_id (backward compat — not authoritative for fan-out)
     let ep = store.get_ep_mut(ep_id)?;
     ep.child_ettle_id = Some(child_id.to_string());
     ep.updated_at = Utc::now();
 
-    // Update child's parent_id
+    // Update child's parent_id (parent ettle) and parent_ep_id (authoritative join)
     let child = store.get_ettle_mut(child_id)?;
     child.parent_id = Some(parent_id);
+    child.parent_ep_id = Some(ep_id.to_string());
     child.updated_at = Utc::now();
 
     Ok(())
@@ -140,24 +133,34 @@ pub fn link_child(store: &mut Store, ep_id: &str, child_id: &str) -> Result<()> 
 /// * `EpNotFound` - If EP doesn't exist
 /// * `EpDeleted` - If EP was deleted
 pub fn unlink_child(store: &mut Store, ep_id: &str) -> Result<()> {
-    // Get EP
-    let ep = store.get_ep(ep_id)?;
+    // Validate EP exists and is not deleted; collect whether a legacy child exists
+    let has_legacy_child = store.get_ep(ep_id)?.child_ettle_id.is_some();
 
-    // If EP has no child, this is a no-op
-    let child_id = match &ep.child_ettle_id {
-        Some(id) => id.clone(),
-        None => return Ok(()), // No-op
-    };
+    // Find all child ettles that point to this EP via parent_ep_id
+    let child_ids: Vec<String> = store
+        .list_ettles()
+        .iter()
+        .filter(|e| e.parent_ep_id.as_deref() == Some(ep_id))
+        .map(|e| e.id.clone())
+        .collect();
 
-    // Clear EP's child_ettle_id
+    // No-op if no children at all
+    if child_ids.is_empty() && !has_legacy_child {
+        return Ok(());
+    }
+
+    // Clear EP's child_ettle_id (backward compat)
     let ep = store.get_ep_mut(ep_id)?;
     ep.child_ettle_id = None;
     ep.updated_at = Utc::now();
 
-    // Clear child's parent_id (if child still exists and is not deleted)
-    if let Ok(child) = store.get_ettle_mut(&child_id) {
-        child.parent_id = None;
-        child.updated_at = Utc::now();
+    // Clear parent_ep_id and parent_id for each child ettle
+    for child_id in child_ids {
+        if let Ok(child) = store.get_ettle_mut(&child_id) {
+            child.parent_ep_id = None;
+            child.parent_id = None;
+            child.updated_at = Utc::now();
+        }
     }
 
     Ok(())
@@ -181,14 +184,19 @@ pub fn unlink_child(store: &mut Store, ep_id: &str) -> Result<()> {
 pub fn list_children(store: &Store, ettle_id: &str) -> Result<Vec<String>> {
     let ettle = store.get_ettle(ettle_id)?;
 
-    // Get active EPs only
+    // Get active EPs only (already sorted by ordinal)
     let active = active_eps(store, ettle)?;
 
-    // Collect child_ids from active EPs (already sorted by ordinal)
-    let child_ids: Vec<String> = active
-        .iter()
-        .filter_map(|ep| ep.child_ettle_id.clone())
-        .collect();
+    // For each active EP, collect all child Ettles that claim it as their parent EP.
+    // This supports fan-out: multiple children may share the same EP.
+    let mut child_ids = Vec::new();
+    for ep in &active {
+        for child in store.list_ettles() {
+            if child.parent_ep_id.as_deref() == Some(&ep.id) {
+                child_ids.push(child.id.clone());
+            }
+        }
+    }
 
     Ok(child_ids)
 }

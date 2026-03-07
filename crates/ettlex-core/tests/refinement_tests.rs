@@ -118,11 +118,9 @@ fn test_link_child_maps_ep_to_child() {
 
     refinement_ops::link_child(&mut store, &ep_id, &child_id).unwrap();
 
-    let ep = store.get_ep(&ep_id).unwrap();
-    assert_eq!(ep.child_ettle_id, Some(child_id.clone()));
-
+    // The authoritative record is on the child: it knows which EP it belongs to.
     let child = store.get_ettle(&child_id).unwrap();
-    assert_eq!(child.parent_id, Some(parent_id));
+    assert_eq!(child.parent_ep_id, Some(ep_id));
 }
 
 #[test]
@@ -171,7 +169,9 @@ fn test_link_child_fails_when_child_already_has_parent() {
 }
 
 #[test]
-fn test_link_child_fails_when_ep_already_has_child() {
+fn test_link_child_allows_multiple_children_on_same_ep() {
+    // An EP may have multiple child Ettles. Each child knows its parent EP via
+    // child.parent_id; the EP itself does not restrict the number of children.
     let mut store = new_store();
     let parent_id =
         ettle_ops::create_ettle(&mut store, "Parent".to_string(), None, None, None, None).unwrap();
@@ -191,14 +191,49 @@ fn test_link_child_fails_when_ep_already_has_child() {
     )
     .unwrap();
 
-    // Link child1 to EP
+    // Both links must succeed.
     refinement_ops::link_child(&mut store, &ep_id, &child1_id).unwrap();
+    refinement_ops::link_child(&mut store, &ep_id, &child2_id).unwrap();
 
-    // Try to link child2 to same EP
-    let result = refinement_ops::link_child(&mut store, &ep_id, &child2_id);
+    // Both children record the same parent EP.
+    let child1 = store.get_ettle(&child1_id).unwrap();
+    assert_eq!(child1.parent_ep_id, Some(ep_id.clone()));
 
-    assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EpAlreadyHasChild { .. })));
+    let child2 = store.get_ettle(&child2_id).unwrap();
+    assert_eq!(child2.parent_ep_id, Some(ep_id.clone()));
+}
+
+#[test]
+fn test_list_children_returns_all_children_under_same_ep() {
+    // list_children must return all Ettles whose parent_id points to any of
+    // the parent's active EPs, including multiple children under the same EP.
+    let mut store = new_store();
+    let parent_id =
+        ettle_ops::create_ettle(&mut store, "Parent".to_string(), None, None, None, None).unwrap();
+    let child1_id =
+        ettle_ops::create_ettle(&mut store, "Child1".to_string(), None, None, None, None).unwrap();
+    let child2_id =
+        ettle_ops::create_ettle(&mut store, "Child2".to_string(), None, None, None, None).unwrap();
+
+    let ep_id = ep_ops::create_ep(
+        &mut store,
+        &parent_id,
+        1,
+        true,
+        String::new(),
+        String::new(),
+        String::new(),
+    )
+    .unwrap();
+
+    refinement_ops::link_child(&mut store, &ep_id, &child1_id).unwrap();
+    refinement_ops::link_child(&mut store, &ep_id, &child2_id).unwrap();
+
+    let children = refinement_ops::list_children(&store, &parent_id).unwrap();
+
+    assert_eq!(children.len(), 2);
+    assert!(children.contains(&child1_id));
+    assert!(children.contains(&child2_id));
 }
 
 // ===== UNLINK_CHILD TESTS =====
