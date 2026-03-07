@@ -139,6 +139,7 @@ SQL migration framework with automatic version tracking and application.
 - `007_approval_cas_schema.sql` - `request_digest` on approval_requests (CAS-backed)
 - `008_mcp_command_log.sql` - OCC log for MCP write commands
 - `009_parent_ep_id.sql` - `parent_ep_id TEXT` on ettles (authoritative EP→child join)
+- `010_backfill_parent_ep_id.sql` - Backfill `parent_ep_id` from `eps.child_ettle_id` for pre-migration rows
 
 **Public API**:
 
@@ -547,6 +548,7 @@ Planned enhancements:
 - [x] Migration 007: Approval CAS storage (`request_digest`) (completed)
 - [x] Migration 008: MCP command log for OCC (completed)
 - [x] Migration 009: `parent_ep_id` — authoritative EP→child join field (completed)
+- [x] Migration 010: Backfill `parent_ep_id` for existing rows via `eps.child_ettle_id` (completed)
 - [ ] Event sourcing for all CRUD operations
 - [ ] Read-optimized views (materialized EPT)
 - [ ] Multi-repository support

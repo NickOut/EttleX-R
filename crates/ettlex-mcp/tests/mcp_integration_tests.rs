@@ -784,10 +784,10 @@ fn test_s_snap_2_not_a_leaf() {
     let mut h = TestHarness::new();
     // Create a parent ettle with a child (so parent EP is not a leaf)
     h.conn.execute_batch(
-        "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-         VALUES ('ettle:parent', 'Parent', NULL, 0, 0, 0, '{}');
-         INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-         VALUES ('ettle:child', 'Child', 'ettle:parent', 0, 0, 0, '{}');
+        "INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+         VALUES ('ettle:parent', 'Parent', NULL, NULL, 0, 0, 0, '{}');
+         INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
+         VALUES ('ettle:child', 'Child', 'ettle:parent', 'ep:parent:0', 0, 0, 0, '{}');
          INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
          VALUES ('ep:parent:0', 'ettle:parent', 0, 1, 'ettle:child', 'content', 0, 0, 0);
          INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)

@@ -73,7 +73,10 @@ fn test_migration_gap_fails() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 9, "Should have exactly 9 migrations applied");
+    assert_eq!(
+        version_count, 10,
+        "Should have exactly 10 migrations applied"
+    );
 }
 
 #[test]
@@ -95,7 +98,7 @@ fn test_migration_idempotency() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 8, "Should still have exactly 8 migrations");
+    assert_eq!(version_count, 10, "Should still have exactly 10 migrations");
 }
 
 #[test]
