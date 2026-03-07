@@ -116,13 +116,15 @@ EngineQuery::EpGet { ep_id: String }
 
 #### `EpListChildren`
 
-EPs that live inside the child Ettle of this EP (the refinement).
-The child Ettle is identified via `ep.child_ettle_id`.
+EPs that live inside the child Ettles of this EP (fan-out refinement).
+Children are identified via `ettle.parent_ep_id == ep_id` (the authoritative join
+field). The legacy `ep.child_ettle_id` is kept for backward compatibility but is
+no longer the source of truth.
 
 ```rust
 EngineQuery::EpListChildren { ep_id: String }
 // → EngineQueryResult::EpListChildren(Vec<Ep>)
-// Returns empty vec if the EP has no child_ettle_id.
+// Returns empty vec if no Ettle has parent_ep_id pointing to this EP.
 ```
 
 #### `EpListParents`

@@ -143,7 +143,7 @@ let result = apply_engine_command(cmd, &mut conn, &cas)?;
 
 ### Leaf-scoped semantics
 
-- A **leaf EP** is an EP with no `child_ettle_id` (no refinement edge)
+- A **leaf EP** is an EP whose Ettle has no child Ettle with `parent_ep_id` pointing to it (no refinement edge)
 - Determined structurally, not by ordinal position
 - Validation enforced at entry point (returns `ConstraintViolation` if EP has child)
 
@@ -310,7 +310,7 @@ It never acquires `&mut Connection` and never writes to the DB or CAS.
 | `EttleList(opts)`                                                     | Paginated list of all Ettles                                            |
 | `EttleListEps { ettle_id }`                                           | All EPs for an Ettle (ordered by ordinal)                               |
 | `EpGet { ep_id }`                                                     | Single EP by ID                                                         |
-| `EpListChildren { ep_id }`                                            | EPs in the child Ettle of an EP (via `child_ettle_id`)                  |
+| `EpListChildren { ep_id }`                                            | EPs in child Ettles of an EP (children whose `parent_ep_id` = this EP)  |
 | `EpListParents { ep_id }`                                             | EPs whose Ettle is the parent of this EP's child Ettle                  |
 | `EpListConstraints { ep_id }`                                         | Constraints attached to an EP (ordered by `ep_constraint_refs.ordinal`) |
 | `EpListDecisions { ep_id, include_ancestors }`                        | Decisions for an EP; optionally walk parent Ettles                      |

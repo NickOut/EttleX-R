@@ -22,7 +22,7 @@ EttleX Core enforces five normative requirements:
 1. **R1: Bidirectional Membership** - Every EP's `ettle_id` must match the owning Ettle's `ep_ids` list
 2. **R2: Ordinal Immutability** - EP ordinals cannot be changed or reused (even from deleted EPs)
 3. **R3: Active EP Projection** - `active_eps()` returns only non-deleted EPs, sorted by ordinal
-4. **R4: Refinement Integrity** - Parent-child relationships must have valid EP mappings
+4. **R4: Refinement Integrity** - Each child Ettle must have a valid `parent_ep_id` pointing to an active EP in its parent; one EP may own multiple children (fan-out)
 5. **R5: Deletion Safety** - EP0 cannot be deleted; deleting an EP cannot strand children
 
 ## Features
@@ -36,7 +36,7 @@ EttleX Core enforces five normative requirements:
 ✅ **Refinement Graph**
 
 - Parent-child relationships with `set_parent()`
-- One-to-one EP→child mapping with `link_child()`
+- Fan-out EP→child mapping with `link_child()` — one EP may have multiple children; each child has exactly one parent EP recorded in `parent_ep_id`
 - DFS cycle detection prevents invalid trees
 - Deterministic child ordering by EP ordinal
 
@@ -439,7 +439,7 @@ This is standard Cargo behavior when an explicit build target is configured (ena
 ettlex-core/
 ├── errors.rs          # EttleXError enum (42 variants)
 ├── model/             # Data structures
-│   ├── ettle.rs       # Ettle: id, title, parent_id, ep_ids, metadata
+│   ├── ettle.rs       # Ettle: id, title, parent_id, parent_ep_id, ep_ids, metadata
 │   ├── ep.rs          # EP: id, ordinal, child_ettle_id, why/what/how
 │   ├── constraint.rs  # Constraint: family, kind, scope, payload_json, digest
 │   └── metadata.rs    # Extensible key-value storage
@@ -560,8 +560,7 @@ All operations return `Result<T, EttleXError>`. Key error categories:
 **Traversal Errors:**
 
 - `EptAmbiguousLeafEp`: Leaf has multiple EPs, ordinal required
-- `EptMissingMapping`: Parent has no EP mapping to child
-- `EptDuplicateMapping`: Multiple EPs map to same child
+- `EptMissingMapping`: Child Ettle has no `parent_ep_id` set
 
 See full error taxonomy (42 variants) in `errors.rs`.
 

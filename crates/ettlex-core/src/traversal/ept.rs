@@ -7,7 +7,8 @@ use crate::ops::{active_eps, Store};
 /// EPT is the sequence of EP IDs that form a complete refinement path from
 /// the root EP0 down to a leaf EP. It walks the RT, collecting:
 /// 1. EP0 from each Ettle in the RT (except the leaf)
-/// 2. The EP from each parent that maps to the next child in the RT
+/// 2. The EP from each parent that maps to the next child in the RT,
+///    determined via `child.parent_ep_id` (the authoritative join field)
 /// 3. The specified leaf EP (or EP0 if leaf has only one EP)
 ///
 /// # Arguments
@@ -22,8 +23,7 @@ use crate::ops::{active_eps, Store};
 ///
 /// # Errors
 /// * `EttleNotFound` - If leaf doesn't exist
-/// * `EptMissingMapping` - If parent has no EP mapping to child
-/// * `EptDuplicateMapping` - If parent has multiple EPs mapping to same child
+/// * `EptMissingMapping` - If a child Ettle has no `parent_ep_id` set
 /// * `EptAmbiguousLeafEp` - If leaf has multiple EPs and ordinal not specified
 /// * `EptLeafEpNotFound` - If specified leaf EP ordinal doesn't exist
 pub fn compute_ept(

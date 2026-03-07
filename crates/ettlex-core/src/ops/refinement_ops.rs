@@ -56,13 +56,17 @@ pub fn set_parent(store: &mut Store, child_id: &str, parent_id: Option<&str>) ->
 
 /// Link a child Ettle to an EP
 ///
-/// This creates a one-to-one mapping between an EP and a child Ettle.
-/// Both the EP's `child_ettle_id` and the child's `parent_id` are updated.
+/// Creates a fan-out refinement edge: one EP may have multiple child Ettles.
+/// Each child Ettle holds the authoritative join field `parent_ep_id` (which EP
+/// owns it) and `parent_id` (which parent Ettle it belongs to). The EP's
+/// `child_ettle_id` is also set for the first link (backward-compat; not
+/// authoritative for fan-out).
 ///
 /// Refinement constraints (R4):
 /// - EP must not be deleted (enforced by get_ep)
 /// - Child Ettle must not be deleted (enforced by get_ettle)
 /// - EP must be in parent's active EP set
+/// - Child must not already have a parent EP (`ChildAlreadyHasParent`)
 ///
 /// # Arguments
 /// * `store` - Mutable reference to the Store
@@ -74,8 +78,7 @@ pub fn set_parent(store: &mut Store, child_id: &str, parent_id: Option<&str>) ->
 /// * `EttleNotFound` - If child Ettle doesn't exist
 /// * `EpDeleted` - If EP was deleted
 /// * `EttleDeleted` - If child was deleted
-/// * `ChildAlreadyHasParent` - If child already has a parent
-/// * `EpAlreadyHasChild` - If EP already maps to a different child
+/// * `ChildAlreadyHasParent` - If child already has a parent EP
 pub fn link_child(store: &mut Store, ep_id: &str, child_id: &str) -> Result<()> {
     // Verify EP exists and is not deleted (R4: EP must not be deleted)
     let ep = store.get_ep(ep_id)?;
@@ -118,12 +121,12 @@ pub fn link_child(store: &mut Store, ep_id: &str, child_id: &str) -> Result<()> 
     Ok(())
 }
 
-/// Unlink a child Ettle from an EP
+/// Unlink all child Ettles from an EP
 ///
-/// This removes the one-to-one mapping by clearing the EP's `child_ettle_id`
-/// and the child's `parent_id`.
+/// Clears `parent_ep_id` and `parent_id` on every child Ettle that claims
+/// this EP as its parent, and clears the EP's backward-compat `child_ettle_id`.
 ///
-/// If the EP has no child, this is a no-op.
+/// If the EP has no children, this is a no-op.
 ///
 /// # Arguments
 /// * `store` - Mutable reference to the Store

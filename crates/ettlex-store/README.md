@@ -133,6 +133,12 @@ SQL migration framework with automatic version tracking and application.
 - `001_initial_schema.sql` - Ettles, EPs, provenance_events, facet_snapshots stub
 - `002_snapshots_ledger.sql` - Snapshots ledger for committed manifests
 - `003_constraints_schema.sql` - Constraints and EP-constraint attachment tables
+- `004_decisions_schema.sql` - Decisions and decision links
+- `005_profiles_schema.sql` - Profiles table
+- `006_approval_requests_schema.sql` - Approval requests
+- `007_approval_cas_schema.sql` - `request_digest` on approval_requests (CAS-backed)
+- `008_mcp_command_log.sql` - OCC log for MCP write commands
+- `009_parent_ep_id.sql` - `parent_ep_id TEXT` on ettles (authoritative EP→child join)
 
 **Public API**:
 
@@ -232,13 +238,20 @@ Stores Ettle entities (architectural concepts/decisions).
 CREATE TABLE ettles (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    deleted_at TEXT,
     parent_id TEXT,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    metadata TEXT,       -- JSON
+    parent_ep_id TEXT,   -- added by migration 009; authoritative EP→child join
     FOREIGN KEY (parent_id) REFERENCES ettles(id)
 );
 ```
+
+`parent_ep_id` is the authoritative field recording which EP a child Ettle belongs
+to. It is set by `refinement_ops::link_child()` and used by EPT traversal instead of
+scanning `eps.child_ettle_id`. One EP may own multiple children (fan-out); each child
+has exactly one `parent_ep_id`.
 
 ### `eps` Table
 
@@ -532,6 +545,8 @@ Planned enhancements:
 - [x] Migration 005: Profiles table (completed)
 - [x] Migration 006: Approval requests table (completed)
 - [x] Migration 007: Approval CAS storage (`request_digest`) (completed)
+- [x] Migration 008: MCP command log for OCC (completed)
+- [x] Migration 009: `parent_ep_id` — authoritative EP→child join field (completed)
 - [ ] Event sourcing for all CRUD operations
 - [ ] Read-optimized views (materialized EPT)
 - [ ] Multi-repository support
