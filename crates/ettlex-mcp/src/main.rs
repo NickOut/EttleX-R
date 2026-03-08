@@ -179,14 +179,14 @@ fn handle_tools_list() -> Value {
     let tools = vec![
         tool_def(
             "ettlex_apply",
-            "Apply a write command (EttleCreate, EpCreate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault).",
+            "Apply a write command (EttleCreate, EpCreate, EpUpdate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault).",
             json!({
                 "type": "object",
                 "required": ["command"],
                 "properties": {
                     "command": {
                         "type": "object",
-                        "description": "Tagged command object. Required field: tag (e.g. EttleCreate, EpCreate, SnapshotCommit)."
+                        "description": "Tagged command object. Required field: tag (e.g. EttleCreate, EpCreate, EpUpdate, SnapshotCommit). EpUpdate fields: ep_id (required), why/what/how/title/normative (at least one required)."
                     },
                     "expected_state_version": {
                         "type": "integer",
