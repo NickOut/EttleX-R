@@ -179,14 +179,14 @@ fn handle_tools_list() -> Value {
     let tools = vec![
         tool_def(
             "ettlex_apply",
-            "Apply a write command (EttleCreate, EpCreate, EpUpdate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault).",
+            "Apply a write command (EttleCreate, EpCreate, EpUpdate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault, PolicyCreate).",
             json!({
                 "type": "object",
                 "required": ["command"],
                 "properties": {
                     "command": {
                         "type": "object",
-                        "description": "Tagged command object. Required field: tag (e.g. EttleCreate, EpCreate, EpUpdate, SnapshotCommit). EpUpdate fields: ep_id (required), why/what/how/title/normative (at least one required)."
+                        "description": "Tagged command object. Required field: tag. Tags: EttleCreate {title}, EpCreate {ettle_id, ordinal, normative?, why?, what?, how?}, EpUpdate {ep_id, why?, what?, how?, title?, normative?}, SnapshotCommit {leaf_ep_id, policy_ref?}, ConstraintCreate {family, kind, scope, payload_json}, ConstraintAttachToEp {ep_id, constraint_id, ordinal}, ProfileCreate {profile_ref, payload_json}, ProfileSetDefault {profile_ref}, PolicyCreate {policy_ref, text}."
                     },
                     "expected_state_version": {
                         "type": "integer",
@@ -380,6 +380,203 @@ fn handle_tools_list() -> Value {
                         "type": "array",
                         "items": { "type": "string" }
                     }
+                }
+            }),
+        ),
+        // ── EP children / parents / constraints / decisions ──────────────
+        tool_def(
+            "ep_list_children",
+            "List the child EPs of an EP (EPs whose ettle is the child_ettle of this EP).",
+            json!({
+                "type": "object",
+                "required": ["ep_id"],
+                "properties": {
+                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" }
+                }
+            }),
+        ),
+        tool_def(
+            "ep_list_parents",
+            "List the parent EPs of an EP (EPs whose child_ettle_id equals this EP's ettle_id).",
+            json!({
+                "type": "object",
+                "required": ["ep_id"],
+                "properties": {
+                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" }
+                }
+            }),
+        ),
+        tool_def(
+            "ep_list_constraints",
+            "List constraints attached to an EP.",
+            json!({
+                "type": "object",
+                "required": ["ep_id"],
+                "properties": {
+                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" }
+                }
+            }),
+        ),
+        tool_def(
+            "ep_list_decisions",
+            "List decisions linked to an EP, optionally including ancestor EPs.",
+            json!({
+                "type": "object",
+                "required": ["ep_id"],
+                "properties": {
+                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" },
+                    "include_ancestors": { "type": "boolean", "description": "Include decisions from ancestor EPs (default false)" }
+                }
+            }),
+        ),
+        // ── Ettle decisions ──────────────────────────────────────────────
+        tool_def(
+            "ettle_list_decisions",
+            "List decisions linked to an ettle, optionally including EP-level decisions and ancestors.",
+            json!({
+                "type": "object",
+                "required": ["ettle_id"],
+                "properties": {
+                    "ettle_id": { "type": "string", "description": "Ettle ID (ettle:...)" },
+                    "include_eps": { "type": "boolean", "description": "Include decisions on EPs of this ettle (default false)" },
+                    "include_ancestors": { "type": "boolean", "description": "Include decisions from ancestor ettles (default false)" }
+                }
+            }),
+        ),
+        // ── Constraint ───────────────────────────────────────────────────
+        tool_def(
+            "constraint_get",
+            "Get a single constraint by ID.",
+            json!({
+                "type": "object",
+                "required": ["constraint_id"],
+                "properties": {
+                    "constraint_id": { "type": "string", "description": "Constraint ID" }
+                }
+            }),
+        ),
+        tool_def(
+            "constraint_list_by_family",
+            "List constraints by family, optionally including tombstoned constraints.",
+            json!({
+                "type": "object",
+                "required": ["family"],
+                "properties": {
+                    "family": { "type": "string", "description": "Constraint family name (e.g. ABB)" },
+                    "include_tombstoned": { "type": "boolean", "description": "Include deleted constraints (default false)" }
+                }
+            }),
+        ),
+        // ── Decision ─────────────────────────────────────────────────────
+        tool_def(
+            "decision_get",
+            "Get a single decision by ID.",
+            json!({
+                "type": "object",
+                "required": ["decision_id"],
+                "properties": {
+                    "decision_id": { "type": "string", "description": "Decision ID (d:...)" }
+                }
+            }),
+        ),
+        tool_def(
+            "decision_list",
+            "List decisions with pagination.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "limit": { "type": "integer", "description": "Max results (default 100)" },
+                    "cursor": { "type": "string", "description": "Opaque pagination cursor" }
+                }
+            }),
+        ),
+        tool_def(
+            "decision_list_by_target",
+            "List decisions linked to a specific target (EP or ettle).",
+            json!({
+                "type": "object",
+                "required": ["target_kind", "target_id"],
+                "properties": {
+                    "target_kind": { "type": "string", "description": "Target kind: 'ep' or 'ettle'" },
+                    "target_id": { "type": "string", "description": "Target ID" },
+                    "include_tombstoned": { "type": "boolean", "description": "Include tombstoned decisions (default false)" }
+                }
+            }),
+        ),
+        // ── EPT ──────────────────────────────────────────────────────────
+        tool_def(
+            "ept_compute",
+            "Compute the EP tree (EPT) rooted at a leaf EP, returning ordered EP IDs and a stability digest.",
+            json!({
+                "type": "object",
+                "required": ["leaf_ep_id"],
+                "properties": {
+                    "leaf_ep_id": { "type": "string", "description": "Leaf EP ID (ep:...)" }
+                }
+            }),
+        ),
+        tool_def(
+            "ept_compute_decision_context",
+            "Compute the decision context for a leaf EP across the full EPT.",
+            json!({
+                "type": "object",
+                "required": ["leaf_ep_id"],
+                "properties": {
+                    "leaf_ep_id": { "type": "string", "description": "Leaf EP ID (ep:...)" }
+                }
+            }),
+        ),
+        // ── State ─────────────────────────────────────────────────────────
+        tool_def(
+            "state_get_version",
+            "Get the current state version (count of committed write commands) and semantic head digest.",
+            json!({ "type": "object", "properties": {} }),
+        ),
+        // ── Manifest ──────────────────────────────────────────────────────
+        tool_def(
+            "manifest_get_by_digest",
+            "Retrieve a snapshot manifest directly by its CAS digest.",
+            json!({
+                "type": "object",
+                "required": ["manifest_digest"],
+                "properties": {
+                    "manifest_digest": { "type": "string", "description": "SHA-256 hex digest of the manifest" }
+                }
+            }),
+        ),
+        // ── Policy export ─────────────────────────────────────────────────
+        tool_def(
+            "policy_export",
+            "Export a policy in a specific format (e.g. codegen_handoff).",
+            json!({
+                "type": "object",
+                "required": ["policy_ref", "export_kind"],
+                "properties": {
+                    "policy_ref": { "type": "string", "description": "Policy reference (e.g. policy/name@version)" },
+                    "export_kind": { "type": "string", "description": "Export format: 'codegen_handoff'" }
+                }
+            }),
+        ),
+        // ── Profile resolve ───────────────────────────────────────────────
+        tool_def(
+            "profile_resolve",
+            "Resolve a profile by reference, or resolve the default profile if no reference is given.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "profile_ref": { "type": ["string", "null"], "description": "Profile reference, or null for default" }
+                }
+            }),
+        ),
+        // ── Approval list ─────────────────────────────────────────────────
+        tool_def(
+            "approval_list",
+            "List approval requests with pagination.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "limit": { "type": "integer", "description": "Max results (default 100)" },
+                    "cursor": { "type": "string", "description": "Opaque pagination cursor" }
                 }
             }),
         ),
