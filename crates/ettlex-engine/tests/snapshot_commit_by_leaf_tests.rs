@@ -36,7 +36,7 @@ fn test_snapshot_commit_succeeds_via_action_command() {
 
     let cmd = EngineCommand::SnapshotCommit {
         leaf_ep_id: "ep:root:0".to_string(),
-        policy_ref: "policy/default@0".to_string(),
+        policy_ref: Some("policy/default@0".to_string()),
         profile_ref: None,
         options: SnapshotOptions {
             expected_head: None,
@@ -99,7 +99,7 @@ fn test_snapshot_commit_rejects_non_leaf_ep() {
 
     let cmd = EngineCommand::SnapshotCommit {
         leaf_ep_id: "ep:root:0".to_string(),
-        policy_ref: "policy/default@0".to_string(),
+        policy_ref: Some("policy/default@0".to_string()),
         profile_ref: None,
         options: SnapshotOptions {
             expected_head: None,
@@ -138,7 +138,7 @@ fn test_snapshot_commit_rejects_unknown_ep() {
 
     let cmd = EngineCommand::SnapshotCommit {
         leaf_ep_id: "ep:missing:0".to_string(),
-        policy_ref: "policy/default@0".to_string(),
+        policy_ref: Some("policy/default@0".to_string()),
         profile_ref: None,
         options: SnapshotOptions {
             expected_head: None,

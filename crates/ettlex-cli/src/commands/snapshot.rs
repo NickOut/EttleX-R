@@ -76,7 +76,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
     let outcome = if let Some(leaf_ep_id) = args.leaf {
         let cmd = EngineCommand::SnapshotCommit {
             leaf_ep_id,
-            policy_ref: args.policy,
+            policy_ref: Some(args.policy),
             profile_ref: args.profile,
             options,
         };
@@ -99,7 +99,7 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
         let leaf_ep_id = resolve_root_to_leaf_ep(&mut conn, &root_ettle_id)?;
         let cmd = EngineCommand::SnapshotCommit {
             leaf_ep_id,
-            policy_ref: args.policy,
+            policy_ref: Some(args.policy),
             profile_ref: args.profile,
             options,
         };

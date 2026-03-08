@@ -18,7 +18,10 @@ pub enum EngineCommand {
     /// Commit a snapshot for a leaf EP.
     SnapshotCommit {
         leaf_ep_id: String,
-        policy_ref: String,
+        /// Optional policy ref. If `None`, the action layer resolves via
+        /// `PolicyProvider::get_default_policy_ref()`; if that also returns `None`,
+        /// a permissive pass-through (empty string recorded in the manifest) is used.
+        policy_ref: Option<String>,
         /// Optional profile ref; None triggers deterministic defaulting.
         profile_ref: Option<String>,
         options: SnapshotOptions,
@@ -63,7 +66,7 @@ pub fn apply_engine_command(
         } => {
             let outcome = crate::commands::snapshot::snapshot_commit_by_leaf(
                 &leaf_ep_id,
-                &policy_ref,
+                policy_ref.as_deref(),
                 profile_ref.as_deref(),
                 options,
                 conn,

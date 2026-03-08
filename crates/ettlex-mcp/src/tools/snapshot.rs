@@ -249,5 +249,49 @@ pub fn handle_snapshot_diff(
     }
 }
 
+/// Handle `manifest_get_by_digest`.
+///
+/// Params: `{ manifest_digest: String }`
+pub fn handle_manifest_get_by_digest(
+    params: &Value,
+    conn: &Connection,
+    cas: &FsStore,
+    policy_provider: &dyn PolicyProvider,
+) -> McpResult {
+    let manifest_digest = match params.get("manifest_digest").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            return McpResult::Err(McpError::new(
+                MCP_INVALID_INPUT,
+                "missing 'manifest_digest' param",
+            ))
+        }
+    };
+
+    match apply_engine_query(
+        EngineQuery::ManifestGetByDigest { manifest_digest },
+        conn,
+        cas,
+        Some(policy_provider),
+    ) {
+        Ok(result) => {
+            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            if let EngineQueryResult::ManifestGet(r) = result {
+                let manifest_json: Value =
+                    serde_json::from_slice(&r.manifest_bytes).unwrap_or(Value::Null);
+                McpResult::Ok(json!({
+                    "snapshot_id": r.snapshot_id,
+                    "manifest_digest": r.manifest_digest,
+                    "semantic_manifest_digest": r.semantic_manifest_digest,
+                    "manifest": manifest_json,
+                }))
+            } else {
+                McpResult::Err(McpError::new("Internal", "unexpected result variant"))
+            }
+        }
+        Err(e) => McpResult::Err(McpError::from_ex_error(e)),
+    }
+}
+
 /// Unused import suppressor for ListOptions
 fn _use_list_opts(_: ListOptions) {}

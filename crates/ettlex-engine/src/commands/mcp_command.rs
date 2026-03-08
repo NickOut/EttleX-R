@@ -35,7 +35,11 @@ pub enum McpCommand {
     /// Commit a snapshot for a leaf EP.
     SnapshotCommit {
         leaf_ep_id: String,
-        policy_ref: String,
+        /// Optional. If absent/null the action layer resolves the policy ref via
+        /// `PolicyProvider::get_default_policy_ref()`; if that also returns `None`,
+        /// permissive pass-through is used (empty string recorded in the manifest).
+        #[serde(default)]
+        policy_ref: Option<String>,
         profile_ref: Option<String>,
         #[serde(default)]
         dry_run: bool,
@@ -44,10 +48,21 @@ pub enum McpCommand {
 
     // ── Ettle ────────────────────────────────────────────────────────────────
     /// Create a new Ettle.
-    EttleCreate { title: String },
+    ///
+    /// `ettle_id` MUST be `None` (or absent from JSON). If a caller supplies
+    /// an `ettle_id`, the command is rejected with `InvalidInput`.
+    EttleCreate {
+        title: String,
+        /// Must not be supplied — ID is auto-generated.
+        #[serde(default)]
+        ettle_id: Option<String>,
+    },
 
     // ── EP ───────────────────────────────────────────────────────────────────
     /// Create a new EP.
+    ///
+    /// `ep_id` MUST be `None` (or absent from JSON). If a caller supplies an
+    /// `ep_id`, the command is rejected with `InvalidInput`.
     EpCreate {
         ettle_id: String,
         ordinal: u32,
@@ -59,6 +74,9 @@ pub enum McpCommand {
         what: String,
         #[serde(default)]
         how: String,
+        /// Must not be supplied — ID is auto-generated.
+        #[serde(default)]
+        ep_id: Option<String>,
     },
 
     /// Update an existing EP's content fields.
@@ -103,6 +121,13 @@ pub enum McpCommand {
     },
     /// Set the repository default profile.
     ProfileSetDefault { profile_ref: String },
+
+    // ── Policy ───────────────────────────────────────────────────────────────
+    /// Create a new policy document in the policy provider.
+    ///
+    /// `policy_ref` must be non-empty and contain `@` separator.
+    /// `text` must be non-empty.
+    PolicyCreate { policy_ref: String, text: String },
 }
 
 fn default_true() -> bool {
@@ -139,6 +164,9 @@ pub enum McpCommandResult {
     ConstraintAttachToEp,
     ProfileCreate,
     ProfileSetDefault,
+    PolicyCreate {
+        policy_ref: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -252,11 +280,25 @@ fn dispatch_mcp_command(
             }
         }
 
-        McpCommand::EttleCreate { title } => {
-            let ettle_id = format!("ettle:{}", uuid::Uuid::now_v7());
-            let ettle = Ettle::new(ettle_id.clone(), title);
+        McpCommand::EttleCreate { title, ettle_id } => {
+            // Identity contract: caller must not supply an ettle_id
+            if ettle_id.is_some() {
+                return Err(ExError::new(ExErrorKind::InvalidInput)
+                    .with_op("ettle_create")
+                    .with_message("ettle_id must not be supplied; it is auto-generated"));
+            }
+            // Validate title is non-empty
+            if title.trim().is_empty() {
+                return Err(ExError::new(ExErrorKind::InvalidInput)
+                    .with_op("ettle_create")
+                    .with_message("title must not be empty"));
+            }
+            let generated_id = format!("ettle:{}", uuid::Uuid::now_v7());
+            let ettle = Ettle::new(generated_id.clone(), title);
             SqliteRepo::persist_ettle(conn, &ettle)?;
-            Ok(McpCommandResult::EttleCreate { ettle_id })
+            Ok(McpCommandResult::EttleCreate {
+                ettle_id: generated_id,
+            })
         }
 
         McpCommand::EpCreate {
@@ -266,11 +308,35 @@ fn dispatch_mcp_command(
             why,
             what,
             how,
+            ep_id,
         } => {
-            let ep_id = format!("ep:{}:{}", uuid::Uuid::now_v7(), ordinal);
-            let ep = Ep::new(ep_id.clone(), ettle_id, ordinal, normative, why, what, how);
+            // Identity contract: caller must not supply an ep_id
+            if ep_id.is_some() {
+                return Err(ExError::new(ExErrorKind::InvalidInput)
+                    .with_op("ep_create")
+                    .with_message("ep_id must not be supplied; it is auto-generated"));
+            }
+            // Validate that the referenced ettle exists
+            if SqliteRepo::get_ettle(conn, &ettle_id)?.is_none() {
+                return Err(ExError::new(ExErrorKind::NotFound)
+                    .with_op("ep_create")
+                    .with_entity_id(&ettle_id)
+                    .with_message(format!("Ettle not found: {}", ettle_id)));
+            }
+            let generated_ep_id = format!("ep:{}:{}", uuid::Uuid::now_v7(), ordinal);
+            let ep = Ep::new(
+                generated_ep_id.clone(),
+                ettle_id,
+                ordinal,
+                normative,
+                why,
+                what,
+                how,
+            );
             SqliteRepo::persist_ep(conn, &ep)?;
-            Ok(McpCommandResult::EpCreate { ep_id })
+            Ok(McpCommandResult::EpCreate {
+                ep_id: generated_ep_id,
+            })
         }
 
         McpCommand::EpUpdate {
@@ -400,6 +466,29 @@ fn dispatch_mcp_command(
             let engine_cmd = EngineCommand::ProfileSetDefault { profile_ref };
             apply_engine_command(engine_cmd, conn, cas, policy_provider, approval_router)?;
             Ok(McpCommandResult::ProfileSetDefault)
+        }
+
+        McpCommand::PolicyCreate { policy_ref, text } => {
+            // Validate at the action layer (also validated inside FilePolicyProvider)
+            if policy_ref.is_empty() {
+                return Err(ExError::new(ExErrorKind::InvalidInput)
+                    .with_op("policy_create")
+                    .with_message("policy_ref must not be empty"));
+            }
+            if !policy_ref.contains('@') {
+                return Err(ExError::new(ExErrorKind::InvalidInput)
+                    .with_op("policy_create")
+                    .with_message("policy_ref must contain '@' version separator"));
+            }
+            if text.is_empty() {
+                return Err(ExError::new(ExErrorKind::InvalidInput)
+                    .with_op("policy_create")
+                    .with_message("policy text must not be empty"));
+            }
+            policy_provider.policy_create(&policy_ref, &text)?;
+            Ok(McpCommandResult::PolicyCreate {
+                policy_ref: policy_ref.clone(),
+            })
         }
     }
 }

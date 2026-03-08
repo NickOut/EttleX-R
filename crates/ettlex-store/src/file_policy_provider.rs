@@ -95,6 +95,49 @@ impl FilePolicyProvider {
 
 impl PolicyProvider for FilePolicyProvider {
     #[allow(clippy::result_large_err)]
+    fn policy_create(&self, policy_ref: &str, text: &str) -> Result<(), ExError> {
+        // Validate policy_ref: non-empty, must contain '@' separator
+        if policy_ref.is_empty() {
+            return Err(ExError::new(ExErrorKind::InvalidInput)
+                .with_entity_id(policy_ref)
+                .with_message("policy_ref must not be empty"));
+        }
+        if !policy_ref.contains('@') {
+            return Err(ExError::new(ExErrorKind::InvalidInput)
+                .with_entity_id(policy_ref)
+                .with_message("policy_ref must contain '@' version separator"));
+        }
+        // Validate text: non-empty
+        if text.is_empty() {
+            return Err(ExError::new(ExErrorKind::InvalidInput)
+                .with_entity_id(policy_ref)
+                .with_message("policy text must not be empty"));
+        }
+        // Check if file already exists → PolicyConflict
+        let dest = self.policy_path(policy_ref);
+        if dest.exists() {
+            return Err(ExError::new(ExErrorKind::PolicyConflict)
+                .with_entity_id(policy_ref)
+                .with_message(format!("Policy already exists: {}", policy_ref)));
+        }
+        // Write atomically: write to a temp file, then rename
+        let tmp_path = dest.with_extension("md.tmp");
+        std::fs::write(&tmp_path, text).map_err(|e| {
+            ExError::new(ExErrorKind::Io)
+                .with_entity_id(policy_ref)
+                .with_message(format!("Failed to write policy file: {}", e))
+        })?;
+        std::fs::rename(&tmp_path, &dest).map_err(|e| {
+            // Clean up temp file on rename failure
+            let _ = std::fs::remove_file(&tmp_path);
+            ExError::new(ExErrorKind::Io)
+                .with_entity_id(policy_ref)
+                .with_message(format!("Failed to rename policy file: {}", e))
+        })?;
+        Ok(())
+    }
+
+    #[allow(clippy::result_large_err)]
     fn policy_check(
         &self,
         policy_ref: &str,

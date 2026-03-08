@@ -250,7 +250,11 @@ fn get_seed_digest(conn: &Connection) -> Result<Option<String>> {
 /// Commit a snapshot for a leaf EP — CANONICAL entry point.
 ///
 /// Runs the full policy pipeline:
-/// 1. `PolicyRefMissing` guard — reject empty `policy_ref` immediately
+/// 1. Resolve policy_ref:
+///    - If `Some(ref)` → use directly
+///    - If `None` → call `policy_provider.get_default_policy_ref()`
+///      - `Some(default)` → use default
+///      - `None` → permissive pass-through (empty string recorded in manifest)
 /// 2. Policy provider check — allow/deny (hard stop, no writes, no routing)
 /// 3. Hydrate store
 /// 4. Validate leaf EP (NotFound / NotALeaf)
@@ -261,7 +265,8 @@ fn get_seed_digest(conn: &Connection) -> Result<Option<String>> {
 ///
 /// ## Arguments
 /// - `leaf_ep_id`: Leaf EP identifier (must exist and have no child_ettle_id)
-/// - `policy_ref`: Policy identifier recorded in manifest (must not be empty)
+/// - `policy_ref`: Optional policy identifier. If `None`, the provider default is used;
+///   if no default exists, permissive pass-through (empty string) is applied.
 /// - `profile_ref`: Optional profile ref; if None, defaults to "profile/default@0"
 /// - `options`: expected_head / dry_run / allow_dedup
 /// - `conn`: Database connection
@@ -271,7 +276,7 @@ fn get_seed_digest(conn: &Connection) -> Result<Option<String>> {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn snapshot_commit_by_leaf(
     leaf_ep_id: &str,
-    policy_ref: &str,
+    policy_ref: Option<&str>,
     profile_ref: Option<&str>,
     options: SnapshotOptions,
     conn: &mut Connection,
@@ -281,21 +286,24 @@ pub(crate) fn snapshot_commit_by_leaf(
 ) -> Result<SnapshotCommitOutcome> {
     let effective_profile_ref = profile_ref.unwrap_or("profile/default@0");
 
-    // Step 1a: PolicyRefMissing guard (fires before policy check, before any writes)
-    if policy_ref.is_empty() {
-        return Err(ExError::new(ExErrorKind::PolicyRefMissing)
-            .with_op("snapshot_commit_by_leaf")
-            .with_ep_id(leaf_ep_id)
-            .with_message("policy_ref must not be empty"));
-    }
+    // Step 1: Resolve policy_ref
+    // - Some(ref) → use directly
+    // - None → ask provider for default; if also None → permissive pass-through ("")
+    let resolved_policy_ref: String = match policy_ref {
+        Some(r) => r.to_string(),
+        None => policy_provider.get_default_policy_ref().unwrap_or_default(),
+    };
 
     // Step 1b: Policy provider check (hard stop, no writes, no routing)
-    policy_provider.policy_check(
-        policy_ref,
-        Some(effective_profile_ref),
-        "snapshot_commit",
-        Some(leaf_ep_id),
-    )?;
+    // Skip check only when permissive pass-through (empty resolved ref)
+    if !resolved_policy_ref.is_empty() {
+        policy_provider.policy_check(
+            &resolved_policy_ref,
+            Some(effective_profile_ref),
+            "snapshot_commit",
+            Some(leaf_ep_id),
+        )?;
+    }
 
     // Step 2: Hydrate store
     let store = ettlex_store::repo::hydration::load_tree(conn).map_err(|e| {
@@ -346,7 +354,7 @@ pub(crate) fn snapshot_commit_by_leaf(
 
         let manifest = generate_manifest(
             ept,
-            policy_ref.to_string(),
+            resolved_policy_ref.clone(),
             effective_profile_ref.to_string(),
             root_ettle_id.clone(),
             store_schema_version,
@@ -399,7 +407,7 @@ pub(crate) fn snapshot_commit_by_leaf(
 
     let manifest = generate_manifest(
         ept,
-        policy_ref.to_string(),
+        resolved_policy_ref.clone(),
         effective_profile_ref.to_string(),
         root_ettle_id.clone(),
         store_schema_version,
@@ -447,7 +455,7 @@ pub(crate) fn snapshot_commit_by_root_legacy(
     let leaf_ep_id = resolve_root_to_leaf(&store, root_ettle_id)?;
     snapshot_commit_by_leaf(
         &leaf_ep_id,
-        policy_ref,
+        Some(policy_ref),
         profile_ref,
         options,
         conn,

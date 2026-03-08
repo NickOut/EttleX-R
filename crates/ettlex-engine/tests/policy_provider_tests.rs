@@ -64,7 +64,11 @@ fn snapshot_count(conn: &Connection) -> i64 {
 fn commit_cmd(leaf_ep_id: &str, policy_ref: &str, dry_run: bool) -> EngineCommand {
     EngineCommand::SnapshotCommit {
         leaf_ep_id: leaf_ep_id.to_string(),
-        policy_ref: policy_ref.to_string(),
+        policy_ref: if policy_ref.is_empty() {
+            None
+        } else {
+            Some(policy_ref.to_string())
+        },
         profile_ref: None,
         options: SnapshotOptions {
             expected_head: None,
@@ -483,53 +487,36 @@ fn test_s12_manifest_policy_ref_from_committed_snapshot() {
 }
 
 // ---------------------------------------------------------------------------
-// S13 — PolicyRefMissing when empty policy_ref passed to snapshot commit
+// S13 — Absent/empty policy_ref uses permissive pass-through (updated per EP actions_refactor)
 //
-// Spec: If policy_ref is an empty string, apply_engine_command must return
-// PolicyRefMissing immediately — before any policy check, before any writes.
-// This applies in both dry_run=false and dry_run=true modes.
+// Spec (updated): policy_ref is now Option<String>. None (or empty string mapped
+// to None in the helper) → permissive pass-through → commit succeeds.
+// PolicyRefMissing guard was removed in ettle:snapshot_commit_actions_refactor ordinal 1.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_s13_empty_policy_ref_returns_policy_ref_missing() {
+fn test_s13_absent_policy_ref_permissive_pass_through() {
     let (_dir, mut conn, cas) = setup();
     seed_single_leaf(&conn);
 
-    // Normal commit mode
-    let err = apply_engine_command(
+    // Empty string in helper converts to None → permissive pass-through → succeeds
+    let result = apply_engine_command(
         commit_cmd("ep:root:0", "", false),
         &mut conn,
         &cas,
         &NoopPolicyProvider,
         &NoopApprovalRouter,
-    )
-    .unwrap_err();
+    );
 
-    assert_eq!(
-        err.kind(),
-        ExErrorKind::PolicyRefMissing,
-        "empty policy_ref must produce PolicyRefMissing"
+    assert!(
+        result.is_ok(),
+        "absent policy_ref must succeed (permissive pass-through): {:?}",
+        result.err()
     );
     assert_eq!(
         snapshot_count(&conn),
-        0,
-        "no snapshot must be written when policy_ref is missing"
-    );
-
-    // Also enforced in dry_run mode (policy gate fires before dry_run short-circuit)
-    let err_dry = apply_engine_command(
-        commit_cmd("ep:root:0", "", true),
-        &mut conn,
-        &cas,
-        &NoopPolicyProvider,
-        &NoopApprovalRouter,
-    )
-    .unwrap_err();
-
-    assert_eq!(
-        err_dry.kind(),
-        ExErrorKind::PolicyRefMissing,
-        "empty policy_ref must produce PolicyRefMissing even in dry_run mode"
+        1,
+        "snapshot must be written when policy_ref is absent (permissive)"
     );
 }
 

@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::error::{McpError, McpResult, MCP_INVALID_INPUT};
+use crate::tools::ettle::parse_list_opts;
 
 /// Handle `approval.get`.
 ///
@@ -42,6 +43,55 @@ pub fn handle_approval_get(
                     "semantic_request_digest": r.semantic_request_digest,
                     "payload": r.payload_json,
                 }))
+            } else {
+                McpResult::Err(McpError::new("Internal", "unexpected result variant"))
+            }
+        }
+        Err(e) => McpResult::Err(McpError::from_ex_error(e)),
+    }
+}
+
+/// Handle `approval_list`.
+///
+/// Params: `{ limit?: u64, cursor?: String }`
+pub fn handle_approval_list(
+    params: &Value,
+    conn: &Connection,
+    cas: &FsStore,
+    policy_provider: &dyn PolicyProvider,
+) -> McpResult {
+    let opts = match parse_list_opts(params) {
+        Ok(o) => o,
+        Err(e) => return e,
+    };
+
+    match apply_engine_query(
+        EngineQuery::ApprovalList(opts),
+        conn,
+        cas,
+        Some(policy_provider),
+    ) {
+        Ok(result) => {
+            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            if let EngineQueryResult::ApprovalList(page) = result {
+                let items: Vec<Value> = page
+                    .items
+                    .iter()
+                    .map(|a| {
+                        json!({
+                            "approval_token": a.approval_token,
+                            "reason_code": a.reason_code,
+                            "semantic_request_digest": a.semantic_request_digest,
+                            "status": a.status,
+                            "created_at": a.created_at,
+                        })
+                    })
+                    .collect();
+                let mut resp = json!({ "items": items });
+                if let Some(cursor) = page.cursor {
+                    resp["cursor"] = Value::String(cursor);
+                }
+                McpResult::Ok(resp)
             } else {
                 McpResult::Err(McpError::new("Internal", "unexpected result variant"))
             }

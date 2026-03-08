@@ -141,6 +141,62 @@ pub fn handle_ettle_list_eps(
     }
 }
 
+/// Handle `ettle_list_decisions`.
+///
+/// Params: `{ ettle_id: String, include_eps?: bool, include_ancestors?: bool }`
+pub fn handle_ettle_list_decisions(
+    params: &Value,
+    conn: &Connection,
+    cas: &FsStore,
+    policy_provider: &dyn PolicyProvider,
+) -> McpResult {
+    let ettle_id = match params.get("ettle_id").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            return McpResult::Err(McpError::new(MCP_INVALID_INPUT, "missing 'ettle_id' param"))
+        }
+    };
+    let include_eps = params
+        .get("include_eps")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let include_ancestors = params
+        .get("include_ancestors")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    match apply_engine_query(
+        EngineQuery::EttleListDecisions {
+            ettle_id,
+            include_eps,
+            include_ancestors,
+        },
+        conn,
+        cas,
+        Some(policy_provider),
+    ) {
+        Ok(result) => {
+            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            if let EngineQueryResult::EttleListDecisions(ds) = result {
+                let items: Vec<Value> = ds
+                    .iter()
+                    .map(|d| {
+                        json!({
+                            "decision_id": d.decision_id,
+                            "title": d.title,
+                            "status": d.status,
+                        })
+                    })
+                    .collect();
+                McpResult::Ok(json!({ "items": items }))
+            } else {
+                McpResult::Err(McpError::new("Internal", "unexpected result variant"))
+            }
+        }
+        Err(e) => McpResult::Err(McpError::from_ex_error(e)),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------

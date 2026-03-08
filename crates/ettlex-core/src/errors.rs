@@ -88,6 +88,8 @@ pub enum ExErrorKind {
     PolicyExportTooLarge,
     /// Policy file contains invalid UTF-8 or cannot be decoded
     PolicyParseError,
+    /// A PolicyCreate was attempted with a policy_ref that already exists
+    PolicyConflict,
 
     // Diff / manifest parsing
     /// Manifest bytes are not valid UTF-8 JSON, or `manifest_schema_version` is the wrong type
@@ -169,6 +171,7 @@ impl ExErrorKind {
             ExErrorKind::PolicyRefMissing => "ERR_POLICY_REF_MISSING",
             ExErrorKind::PolicyExportTooLarge => "ERR_POLICY_EXPORT_TOO_LARGE",
             ExErrorKind::PolicyParseError => "ERR_POLICY_PARSE_ERROR",
+            ExErrorKind::PolicyConflict => "ERR_POLICY_CONFLICT",
             ExErrorKind::InvalidManifest => "ERR_INVALID_MANIFEST",
             ExErrorKind::MissingField => "ERR_MISSING_FIELD",
             ExErrorKind::MissingBlob => "ERR_MISSING_BLOB",

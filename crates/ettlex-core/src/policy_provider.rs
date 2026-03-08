@@ -93,6 +93,31 @@ pub trait PolicyProvider: Send + Sync {
     #[allow(clippy::result_large_err)]
     fn policy_list(&self) -> Result<Vec<PolicyListEntry>, ExError>;
 
+    /// Return the default `policy_ref` for this provider, if one is configured.
+    ///
+    /// Returns `None` when no default policy is configured (Phase 1 behaviour).
+    /// When `None` is returned and the caller supplied no explicit `policy_ref`,
+    /// the snapshot commit uses a permissive pass-through (empty string).
+    fn get_default_policy_ref(&self) -> Option<String> {
+        None
+    }
+
+    /// Create a new policy document in this provider.
+    ///
+    /// `policy_ref` must be non-empty and contain an `@` separator.
+    /// `text` must be non-empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if `policy_ref` or `text` is invalid.
+    /// Returns `PolicyConflict` if `policy_ref` already exists.
+    /// Returns `Io` if the write fails.
+    #[allow(clippy::result_large_err)]
+    fn policy_create(&self, _policy_ref: &str, _text: &str) -> Result<(), ExError> {
+        Err(ExError::new(ExErrorKind::NotImplemented)
+            .with_message("policy_create is not implemented by this provider"))
+    }
+
     /// Produce a deterministic byte projection of a policy document for handoff.
     ///
     /// Extracts the HANDOFF block content from the policy identified by `policy_ref`

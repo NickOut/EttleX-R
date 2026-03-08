@@ -86,7 +86,7 @@ fn commit_leaf(conn: &mut Connection, cas: &FsStore) -> EngineCommandResult {
     apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -114,7 +114,7 @@ fn test_policy_denied_no_writes_no_routing() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -145,7 +145,7 @@ fn test_not_found_ep_fails_fast() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:missing".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -186,7 +186,7 @@ fn test_not_a_leaf_fails_fast() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -217,7 +217,7 @@ fn test_unknown_profile_ref_fails() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/missing@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -251,7 +251,7 @@ fn test_missing_profile_ref_uses_default() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -297,7 +297,7 @@ fn test_ept_ambiguous_not_waivable() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/route@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -346,7 +346,7 @@ fn test_constraint_ambiguity_fail_fast() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/ff@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -382,7 +382,7 @@ fn test_constraint_ambiguity_choose_deterministic() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/cd@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -425,7 +425,7 @@ fn test_constraint_ambiguity_routed() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/rfa@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -471,7 +471,7 @@ fn test_constraint_ambiguity_router_unavailable() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/rfa@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -511,7 +511,7 @@ fn test_expected_head_mismatch() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: Some("wrong-head-digest".to_string()),
@@ -552,7 +552,7 @@ fn test_expected_head_match_advances_head() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: Some(head_after_first.clone()),
@@ -587,7 +587,7 @@ fn test_expected_head_rejected_no_prior() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: Some("some-expected-head".to_string()),
@@ -618,7 +618,7 @@ fn test_first_commit_no_expected_head() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -662,7 +662,7 @@ fn test_concurrent_head_race() {
     let client_a = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: Some(head_h.clone()),
@@ -694,7 +694,7 @@ fn test_concurrent_head_race() {
         let client_b = apply_engine_command(
             EngineCommand::SnapshotCommit {
                 leaf_ep_id: "ep:root:0".to_string(),
-                policy_ref: "policy/default@0".to_string(),
+                policy_ref: Some("policy/default@0".to_string()),
                 profile_ref: None,
                 options: SnapshotOptions {
                     expected_head: Some(head_h.clone()),
@@ -728,7 +728,7 @@ fn test_dry_run_no_writes() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -786,7 +786,7 @@ fn test_dry_run_no_routing() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/rfa@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -842,7 +842,7 @@ fn test_created_at_manifest_digest_differs_semantic_same() {
     let result2 = match apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -885,7 +885,7 @@ fn test_semantic_digest_differs_on_different_inputs() {
     let r1 = match apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/v1@0".to_string(),
+            policy_ref: Some("policy/v1@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -908,7 +908,7 @@ fn test_semantic_digest_differs_on_different_inputs() {
     let r2 = match apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/v2@0".to_string(), // different policy_ref
+            policy_ref: Some("policy/v2@0".to_string()), // different policy_ref
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -952,7 +952,7 @@ fn test_routed_no_ledger_no_manifest() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/rfa@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -997,7 +997,7 @@ fn test_approval_request_deterministic_excl_created_at() {
     let result1 = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/rfa@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -1025,7 +1025,7 @@ fn test_approval_request_deterministic_excl_created_at() {
     let result2 = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/rfa@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -1074,7 +1074,7 @@ fn test_dry_run_computes_resolved_constraint_resolution() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/ff@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -1119,7 +1119,7 @@ fn test_dry_run_yields_uncomputed_when_predicate_evaluation_disabled() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: Some("profile/no-eval@0".to_string()),
             options: SnapshotOptions {
                 expected_head: None,
@@ -1183,7 +1183,7 @@ fn test_snapshot_commit_cas_failure_surfaces_persistence_error() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,

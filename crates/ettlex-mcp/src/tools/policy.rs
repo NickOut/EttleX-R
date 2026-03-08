@@ -85,6 +85,59 @@ pub fn handle_policy_list(
     }
 }
 
+/// Handle `policy_export`.
+///
+/// Params: `{ policy_ref: String, export_kind: String }`
+pub fn handle_policy_export(
+    params: &Value,
+    conn: &Connection,
+    cas: &FsStore,
+    policy_provider: &dyn PolicyProvider,
+) -> McpResult {
+    let policy_ref = match params.get("policy_ref").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            return McpResult::Err(McpError::new(
+                MCP_INVALID_INPUT,
+                "missing 'policy_ref' param",
+            ))
+        }
+    };
+    let export_kind = match params.get("export_kind").and_then(Value::as_str) {
+        Some(s) => s.to_string(),
+        None => {
+            return McpResult::Err(McpError::new(
+                MCP_INVALID_INPUT,
+                "missing 'export_kind' param",
+            ))
+        }
+    };
+
+    match apply_engine_query(
+        EngineQuery::PolicyExport {
+            policy_ref,
+            export_kind,
+        },
+        conn,
+        cas,
+        Some(policy_provider),
+    ) {
+        Ok(result) => {
+            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            if let EngineQueryResult::PolicyExport(r) = result {
+                McpResult::Ok(json!({
+                    "policy_ref": r.policy_ref,
+                    "export_kind": r.export_kind,
+                    "text": r.text,
+                }))
+            } else {
+                McpResult::Err(McpError::new("Internal", "unexpected result variant"))
+            }
+        }
+        Err(e) => McpResult::Err(McpError::from_ex_error(e)),
+    }
+}
+
 /// Handle `policy.project_for_handoff`.
 ///
 /// Params: `{ policy_ref: String, profile_ref?: String }`

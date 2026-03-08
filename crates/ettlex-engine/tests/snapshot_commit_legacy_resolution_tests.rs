@@ -45,7 +45,7 @@ fn test_legacy_root_resolves_when_exactly_one_leaf() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id,
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,

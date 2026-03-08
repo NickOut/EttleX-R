@@ -41,7 +41,7 @@ fn commit(conn: &mut Connection, cas: &FsStore, allow_dedup: bool) -> EngineComm
     apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:root:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,
@@ -149,7 +149,7 @@ fn test_snapshot_commit_large_manifest() {
     let result = apply_engine_command(
         EngineCommand::SnapshotCommit {
             leaf_ep_id: "ep:large:0".to_string(),
-            policy_ref: "policy/default@0".to_string(),
+            policy_ref: Some("policy/default@0".to_string()),
             profile_ref: None,
             options: SnapshotOptions {
                 expected_head: None,

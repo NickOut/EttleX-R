@@ -129,4 +129,40 @@ pub fn handle_profile_get_default(
     }
 }
 
+/// Handle `profile_resolve`.
+///
+/// Params: `{ profile_ref?: String }`
+pub fn handle_profile_resolve(
+    params: &Value,
+    conn: &Connection,
+    cas: &FsStore,
+    policy_provider: &dyn PolicyProvider,
+) -> McpResult {
+    let profile_ref = params
+        .get("profile_ref")
+        .and_then(Value::as_str)
+        .map(String::from);
+
+    match apply_engine_query(
+        EngineQuery::ProfileResolve { profile_ref },
+        conn,
+        cas,
+        Some(policy_provider),
+    ) {
+        Ok(result) => {
+            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            if let EngineQueryResult::ProfileResolve(r) = result {
+                McpResult::Ok(json!({
+                    "profile_ref": r.profile_ref,
+                    "profile_digest": r.profile_digest,
+                    "payload": r.parsed_profile,
+                }))
+            } else {
+                McpResult::Err(McpError::new("Internal", "unexpected result variant"))
+            }
+        }
+        Err(e) => McpResult::Err(McpError::from_ex_error(e)),
+    }
+}
+
 fn _use_opts(_: ListOptions) {}

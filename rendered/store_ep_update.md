@@ -62,6 +62,8 @@ Background:
 Given a repository with SQLite + CAS store initialised
 And at least one Ettle with one EP exists
 
+# --- Happy path ---
+
 Scenario: EpUpdate replaces why field only
 Given EP "ep:store:0" exists with why "original why text"
 When I apply Command::EpUpdate{ep_id="ep:store:0", why="updated why text"}
@@ -82,13 +84,33 @@ When I apply Command::EpUpdate{ep_id="ep:store:0", title="Storage Spine Anchor"}
 Then ep.get("ep:store:0").title equals "Storage Spine Anchor"
 And why/what/how are unchanged
 
+# --- Negative cases ---
+
 Scenario: EpUpdate rejects empty update
 When I apply Command::EpUpdate{ep_id="ep:store:0"} with no fields supplied
 Then a typed error EmptyUpdate is returned
+And state_version is unchanged
 
 Scenario: EpUpdate on non-existent EP returns NotFound
 When I apply Command::EpUpdate{ep_id="ep:missing", why="x"}
 Then a typed error NotFound is returned
+And state_version is unchanged
+
+# --- Explicit error paths ---
+
+Scenario: EpUpdate with all fields null is rejected as EmptyUpdate
+When I apply Command::EpUpdate{ep_id="ep:store:0", why=null, what=null, how=null, title=null}
+Then a typed error EmptyUpdate is returned
+And the EP is unchanged
+
+# --- Boundary conditions ---
+
+Scenario: EpUpdate with large content fields succeeds
+When I apply Command::EpUpdate{ep_id="ep:store:0", how=<50KB Gherkin text>}
+Then ep.get("ep:store:0").how equals the supplied text
+And state_version increments
+
+# --- Invariants ---
 
 Scenario: EpUpdate increments state_version
 Given the current state_version is N
@@ -100,6 +122,37 @@ Given EP "ep:store:0" has updated_at "T1"
 When I apply Command::EpUpdate{ep_id="ep:store:0", why="new"}
 Then ep.get("ep:store:0").updated_at is greater than or equal to "T1"
 
+Scenario: EpUpdate preserves omitted fields exactly
+Given EP "ep:store:0" exists with why="original", what="w", how="h", title="t"
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="updated"}
+Then ep.get("ep:store:0").what equals "w"
+And ep.get("ep:store:0").how equals "h"
+And ep.get("ep:store:0").title equals "t"
+
+Scenario: EpUpdate does not change the EP's ordinal, ettle_id, or child_ettle_id
+Given EP "ep:store:0" has ordinal 0, ettle_id "ettle:store", child_ettle_id null
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="new"}
+Then ep.get("ep:store:0").ordinal equals 0
+And ep.get("ep:store:0").ettle_id equals "ettle:store"
+And ep.get("ep:store:0").child_ettle_id is unchanged
+
+# --- Idempotency ---
+
+Scenario: EpUpdate is NOT idempotent by design — repeated identical updates each increment state_version
+Given state_version is V
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="same"} twice
+Then state_version is V+2
+And ep.get("ep:store:0").why equals "same" after both calls
+
+# --- Determinism ---
+
+Scenario: EpUpdate result is deterministic — same inputs produce same stored state
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="deterministic"}
+Then ep.get("ep:store:0").why equals "deterministic"
+And the stored bytes are identical to a second application with the same input
+
+# --- State transitions ---
+
 Scenario: EpUpdate is reflected in next snapshot manifest
 Given EP "ep:store:0" exists and a snapshot S1 has been committed
 When I apply Command::EpUpdate{ep_id="ep:store:0", why="amended"}
@@ -107,9 +160,79 @@ And I commit snapshot S2 for the same leaf
 Then snapshot.diff(S1, S2) shows ep_changes including "ep:store:0"
 And the ep_digest for "ep:store:0" differs between S1 and S2
 
+Scenario: EpUpdate between two snapshots is visible in diff
+Given snapshot S1 was committed when EP "ep:store:0" had why="before"
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="after"}
+And I commit snapshot S2
+Then snapshot.diff(S1, S2).ep_changes includes a record for "ep:store:0"
+And the a_digest and b_digest differ
+
+# --- Concurrency ---
+
+Scenario: Concurrent EpUpdate calls on the same EP with expected_state_version produce exactly one success
+Given state_version is V
+And two concurrent callers A and B both have expected_state_version=V
+When both call Command::EpUpdate{ep_id="ep:store:0", why="A"} and {why="B"} simultaneously
+Then exactly one succeeds and state_version becomes V+1
+And the other returns HeadMismatch
+And ep.get("ep:store:0").why is the value from the successful caller
+
+Scenario: Sequential EpUpdate calls without expected_state_version both succeed
+Given state_version is V
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="first"}
+And I apply Command::EpUpdate{ep_id="ep:store:0", why="second"}
+Then state_version is V+2
+And ep.get("ep:store:0").why equals "second"
+
+# --- Security / authorisation ---
+
+# Auth enforcement is governed by ep:mcp_thin_slice. No command-level auth for EpUpdate.
+
+# --- Observability ---
+
+Scenario: EpUpdate success is reflected in state.get_version
+Given state_version is V
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="obs"}
+Then state.get_version() returns V+1
+
+# --- Compatibility / migration ---
+
 Scenario: eps schema migration adds title column if absent
 Given the database was initialised before title was introduced
 When migrations are applied
 Then the eps table has a title column of type TEXT nullable
 And existing EP rows have title as null
 And EpUpdate can set title on those rows
+
+Scenario: EpUpdate on EPs created before title field was introduced succeeds
+Given EP "ep:store:0" was created before the title column existed and has title null
+When I apply Command::EpUpdate{ep_id="ep:store:0", title="Backfilled Title"}
+Then ep.get("ep:store:0").title equals "Backfilled Title"
+
+# --- Resource / performance ---
+
+# No specific performance obligations defined for EpUpdate.
+
+# --- Explicit prohibition ---
+
+Scenario: EpUpdate MUST NOT create a new EP
+Given EP "ep:store:0" exists
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="new"}
+Then ettle.list_eps("ettle:store") returns the same number of EPs as before
+And no new ep_id is generated
+
+Scenario: EpUpdate MUST NOT silently discard supplied fields
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="explicit"}
+Then ep.get("ep:store:0").why equals "explicit"
+And the implementation does not apply a default value in place of the supplied value
+
+# --- Byte-level equivalence ---
+
+Scenario: ep.get after EpUpdate returns byte-identical results for identical canonical state
+When I apply Command::EpUpdate{ep_id="ep:store:0", why="stable"}
+And I call ep.get("ep:store:0") twice without intervening mutations
+Then both responses are byte-identical after canonical JSON serialization
+
+# --- Concurrency conflict ---
+
+# Covered under Concurrency above via expected_state_version HeadMismatch scenario.

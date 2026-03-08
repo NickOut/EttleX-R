@@ -53,7 +53,7 @@ fn test_snapshot_output_deterministic_across_paths() {
     // Action-command path (allow_dedup=true: deduplicates against the row just written)
     let cmd = EngineCommand::SnapshotCommit {
         leaf_ep_id: "ep:root:0".to_string(),
-        policy_ref: "policy/default@0".to_string(),
+        policy_ref: Some("policy/default@0".to_string()),
         profile_ref: None,
         options: SnapshotOptions {
             expected_head: None,
@@ -152,7 +152,7 @@ fn test_no_extra_mutation_during_commit() {
 
     let cmd = EngineCommand::SnapshotCommit {
         leaf_ep_id: "ep:root:0".to_string(),
-        policy_ref: "policy/default@0".to_string(),
+        policy_ref: Some("policy/default@0".to_string()),
         profile_ref: None,
         options: SnapshotOptions {
             expected_head: None,

@@ -10,7 +10,10 @@ use crate::auth::AuthConfig;
 use crate::context::RequestContext;
 use crate::error::{McpError, MCP_AUTH_REQUIRED, MCP_REQUEST_TOO_LARGE, MCP_TOOL_NOT_FOUND};
 pub use crate::error::{McpResponse, McpResult};
-use crate::tools::{apply, approval, ep, ettle, policy, predicate, profile, snapshot};
+use crate::tools::{
+    apply, approval, constraint, decision, ep, ept, ettle, policy, predicate, profile, snapshot,
+    state,
+};
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -107,6 +110,37 @@ impl McpServer {
 
             // ── EP ─────────────────────────────────────────────────────────
             "ep_get" => ep::handle_ep_get(p, conn, cas, policy_provider),
+            "ep_list_children" => ep::handle_ep_list_children(p, conn, cas, policy_provider),
+            "ep_list_parents" => ep::handle_ep_list_parents(p, conn, cas, policy_provider),
+            "ep_list_constraints" => ep::handle_ep_list_constraints(p, conn, cas, policy_provider),
+            "ep_list_decisions" => ep::handle_ep_list_decisions(p, conn, cas, policy_provider),
+
+            // ── Ettle (decisions) ──────────────────────────────────────────
+            "ettle_list_decisions" => {
+                ettle::handle_ettle_list_decisions(p, conn, cas, policy_provider)
+            }
+
+            // ── Constraint ─────────────────────────────────────────────────
+            "constraint_get" => constraint::handle_constraint_get(p, conn, cas, policy_provider),
+            "constraint_list_by_family" => {
+                constraint::handle_constraint_list_by_family(p, conn, cas, policy_provider)
+            }
+
+            // ── Decision ───────────────────────────────────────────────────
+            "decision_get" => decision::handle_decision_get(p, conn, cas, policy_provider),
+            "decision_list" => decision::handle_decision_list(p, conn, cas, policy_provider),
+            "decision_list_by_target" => {
+                decision::handle_decision_list_by_target(p, conn, cas, policy_provider)
+            }
+
+            // ── EPT ────────────────────────────────────────────────────────
+            "ept_compute" => ept::handle_ept_compute(p, conn, cas, policy_provider),
+            "ept_compute_decision_context" => {
+                ept::handle_ept_compute_decision_context(p, conn, cas, policy_provider)
+            }
+
+            // ── State ──────────────────────────────────────────────────────
+            "state_get_version" => state::handle_state_get_version(p, conn, cas, policy_provider),
 
             // ── Snapshot ───────────────────────────────────────────────────
             "snapshot_list" => snapshot::handle_snapshot_list(p, conn, cas, policy_provider),
@@ -118,10 +152,14 @@ impl McpServer {
                 snapshot::handle_snapshot_get_manifest(p, conn, cas, policy_provider)
             }
             "snapshot_diff" => snapshot::handle_snapshot_diff(p, conn, cas, policy_provider),
+            "manifest_get_by_digest" => {
+                snapshot::handle_manifest_get_by_digest(p, conn, cas, policy_provider)
+            }
 
             // ── Policy ─────────────────────────────────────────────────────
             "policy_get" => policy::handle_policy_get(p, conn, cas, policy_provider),
             "policy_list" => policy::handle_policy_list(p, conn, cas, policy_provider),
+            "policy_export" => policy::handle_policy_export(p, conn, cas, policy_provider),
             "policy_project_for_handoff" => {
                 policy::handle_policy_project_for_handoff(p, conn, cas, policy_provider)
             }
@@ -132,9 +170,11 @@ impl McpServer {
             "profile_get_default" => {
                 profile::handle_profile_get_default(p, conn, cas, policy_provider)
             }
+            "profile_resolve" => profile::handle_profile_resolve(p, conn, cas, policy_provider),
 
             // ── Approval ───────────────────────────────────────────────────
             "approval_get" => approval::handle_approval_get(p, conn, cas, policy_provider),
+            "approval_list" => approval::handle_approval_list(p, conn, cas, policy_provider),
 
             // ── Predicate ──────────────────────────────────────────────────
             "constraint_predicates_preview" => {
