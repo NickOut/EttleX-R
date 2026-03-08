@@ -61,15 +61,16 @@ if it differs.
 
 #### Commands
 
-| Tag                    | Required fields                                            | Optional fields                                  |
-| ---------------------- | ---------------------------------------------------------- | ------------------------------------------------ |
-| `SnapshotCommit`       | `leaf_ep_id`, `policy_ref`                                 | `profile_ref`, `dry_run`, `expected_head`        |
-| `EttleCreate`          | `title`                                                    | —                                                |
-| `EpCreate`             | `ettle_id`, `ordinal`                                      | `normative` (default true), `why`, `what`, `how` |
-| `ConstraintCreate`     | `constraint_id`, `family`, `kind`, `scope`, `payload_json` | —                                                |
-| `ConstraintAttachToEp` | `ep_id`, `constraint_id`, `ordinal`                        | —                                                |
-| `ProfileCreate`        | `profile_ref`, `payload_json`                              | `source`                                         |
-| `ProfileSetDefault`    | `profile_ref`                                              | —                                                |
+| Tag                    | Required fields                                            | Optional fields                                           |
+| ---------------------- | ---------------------------------------------------------- | --------------------------------------------------------- |
+| `SnapshotCommit`       | `leaf_ep_id`, `policy_ref`                                 | `profile_ref`, `dry_run`, `expected_head`                 |
+| `EttleCreate`          | `title`                                                    | —                                                         |
+| `EpCreate`             | `ettle_id`, `ordinal`                                      | `normative` (default true), `why`, `what`, `how`, `title` |
+| `EpUpdate`             | `ep_id`                                                    | `why`, `what`, `how`, `title` (at least one required)     |
+| `ConstraintCreate`     | `constraint_id`, `family`, `kind`, `scope`, `payload_json` | —                                                         |
+| `ConstraintAttachToEp` | `ep_id`, `constraint_id`, `ordinal`                        | —                                                         |
+| `ProfileCreate`        | `profile_ref`, `payload_json`                              | `source`                                                  |
+| `ProfileSetDefault`    | `profile_ref`                                              | —                                                         |
 
 ---
 
@@ -109,7 +110,7 @@ Get a single EP.
 
 **Params:** `{ "ep_id": "ep:..." }`
 
-**Response:** `{ "id", "ettle_id", "ordinal", "normative", "why", "what", "how", "child_ettle_id" }`
+**Response:** `{ "id", "ettle_id", "ordinal", "normative", "why", "what", "how", "title", "child_ettle_id" }`
 
 ---
 
@@ -196,26 +197,27 @@ Preview constraint predicate resolution without any side-effects.
 
 ## Error Contract
 
-| Code                      | HTTP analogue | Description                     |
-| ------------------------- | ------------- | ------------------------------- |
-| `AuthRequired`            | 401           | Missing or invalid bearer token |
-| `ToolNotFound`            | 404           | Unknown tool name               |
-| `RequestTooLarge`         | 413           | Payload exceeds 1 MB            |
-| `InvalidCursor`           | 400           | Malformed pagination cursor     |
-| `InvalidCommand`          | 400           | Unknown command tag             |
-| `InvalidInput`            | 400           | Missing required fields         |
-| `HeadMismatch`            | 409           | OCC state_version mismatch      |
-| `NotFound`                | 404           | Entity not found                |
-| `NotALeaf`                | 422           | SnapshotCommit on a non-leaf EP |
-| `PolicyDenied`            | 403           | Policy rejected the operation   |
-| `PolicyNotFound`          | 404           | Unknown policy reference        |
-| `ProfileNotFound`         | 404           | Unknown profile reference       |
-| `ProfileConflict`         | 409           | ProfileCreate content mismatch  |
-| `ApprovalNotFound`        | 404           | Unknown approval token          |
-| `InvalidConstraintFamily` | 400           | Empty constraint family         |
-| `DuplicateAttachment`     | 409           | Constraint already attached     |
-| `MissingBlob`             | 500           | CAS blob not found              |
-| `ResponseTooLarge`        | 413           | Response exceeds size limit     |
+| Code                      | HTTP analogue | Description                       |
+| ------------------------- | ------------- | --------------------------------- |
+| `AuthRequired`            | 401           | Missing or invalid bearer token   |
+| `ToolNotFound`            | 404           | Unknown tool name                 |
+| `RequestTooLarge`         | 413           | Payload exceeds 1 MB              |
+| `InvalidCursor`           | 400           | Malformed pagination cursor       |
+| `InvalidCommand`          | 400           | Unknown command tag               |
+| `InvalidInput`            | 400           | Missing required fields           |
+| `HeadMismatch`            | 409           | OCC state_version mismatch        |
+| `NotFound`                | 404           | Entity not found                  |
+| `NotALeaf`                | 422           | SnapshotCommit on a non-leaf EP   |
+| `PolicyDenied`            | 403           | Policy rejected the operation     |
+| `PolicyNotFound`          | 404           | Unknown policy reference          |
+| `ProfileNotFound`         | 404           | Unknown profile reference         |
+| `ProfileConflict`         | 409           | ProfileCreate content mismatch    |
+| `ApprovalNotFound`        | 404           | Unknown approval token            |
+| `InvalidConstraintFamily` | 400           | Empty constraint family           |
+| `DuplicateAttachment`     | 409           | Constraint already attached       |
+| `EmptyUpdate`             | 400           | EpUpdate with no fields to change |
+| `MissingBlob`             | 500           | CAS blob not found                |
+| `ResponseTooLarge`        | 413           | Response exceeds size limit       |
 
 ---
 

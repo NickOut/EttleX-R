@@ -29,7 +29,7 @@ doc:
 	cargo doc --workspace --no-deps --target aarch64-apple-darwin
 
 test:
-	cargo test --workspace -- --test-threads=1
+	cargo nextest run --workspace
 
 build:
 	cargo build --workspace
@@ -39,7 +39,8 @@ clean:
 
 coverage-check:
 	@echo "Running tests with coverage (minimum threshold: $(COVERAGE_MIN)%)..."
-	@cargo tarpaulin --workspace --out Xml --output-dir coverage --timeout 300 --exclude-files 'target/*' --exclude-files 'tests/*' -- --test-threads=1
+	@mkdir -p coverage
+	@cargo llvm-cov nextest --workspace --cobertura --output-path coverage/cobertura.xml
 	@echo "Coverage report generated: coverage/cobertura.xml"
 	@echo "Checking coverage threshold..."
 	@COVERAGE=$$(grep -o 'line-rate="[^"]*"' coverage/cobertura.xml | head -1 | sed 's/line-rate="\([^"]*\)"/\1/' | awk '{print int($$1 * 100)}'); \
@@ -55,6 +56,7 @@ coverage-check:
 
 coverage-html:
 	@echo "Generating HTML coverage report..."
-	@cargo tarpaulin --workspace --out Html --output-dir coverage --timeout 300 --exclude-files 'target/*' -- --test-threads=1
-	@echo "✅ HTML coverage report generated: coverage/tarpaulin-report.html"
-	@echo "Open with: open coverage/tarpaulin-report.html"
+	@mkdir -p coverage
+	@cargo llvm-cov nextest --workspace --html --output-dir coverage
+	@echo "✅ HTML coverage report generated: coverage/html/index.html"
+	@echo "Open with: open coverage/html/index.html"

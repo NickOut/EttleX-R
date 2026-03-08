@@ -99,6 +99,9 @@ pub enum ExErrorKind {
     /// The constraints envelope disagrees with its own recorded digest (non-fatal: diff still returns)
     InvariantViolation,
 
+    /// Update command supplied no fields to update
+    EmptyUpdate,
+
     // Integration/IO (future)
     Io,
     Serialization,
@@ -170,6 +173,7 @@ impl ExErrorKind {
             ExErrorKind::MissingField => "ERR_MISSING_FIELD",
             ExErrorKind::MissingBlob => "ERR_MISSING_BLOB",
             ExErrorKind::InvariantViolation => "ERR_INVARIANT_VIOLATION",
+            ExErrorKind::EmptyUpdate => "ERR_EMPTY_UPDATE",
             ExErrorKind::Io => "ERR_IO",
             ExErrorKind::Serialization => "ERR_SERIALIZATION",
             ExErrorKind::Persistence => "ERR_PERSISTENCE",
@@ -625,6 +629,11 @@ pub enum EttleXError {
     #[error("Cannot delete EP {ep_id}: it's the only active mapping to child {child_id}")]
     TombstoneStrandsChild { ep_id: String, child_id: String },
 
+    // ===== Update Errors =====
+    /// EpUpdate command supplied no fields to update
+    #[error("EpUpdate for EP {ep_id} requires at least one field to update")]
+    EmptyUpdate { ep_id: String },
+
     // ===== Apply/Command Errors =====
     /// Apply function atomicity breach (internal assertion failure)
     #[error("Apply atomicity breach: {message}")]
@@ -1030,6 +1039,11 @@ impl From<EttleXError> for ExError {
                     .with_entity_id(entity_id)
                     .with_message("Entity already exists")
             }
+
+            // Update Errors
+            EttleXError::EmptyUpdate { ep_id } => ExError::new(ExErrorKind::EmptyUpdate)
+                .with_ep_id(ep_id)
+                .with_message("EpUpdate requires at least one field to update"),
         }
     }
 }
@@ -1110,5 +1124,628 @@ mod tests {
             ExErrorKind::PolicyParseError.code(),
             "ERR_POLICY_PARSE_ERROR"
         );
+    }
+
+    // ===== From<EttleXError> for ExError bridge coverage =====
+
+    #[test]
+    fn test_bridge_not_found_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::ParentNotFound {
+                    ettle_id: "e1".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::EttleNotFound {
+                    ettle_id: "e2".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::EpNotFound {
+                    ep_id: "ep1".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::OrphanedEttle {
+                    ettle_id: "e3".into(),
+                    parent_id: "e0".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::ConstraintNotFound {
+                    constraint_id: "c1".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::ConstraintNotAttached {
+                    constraint_id: "c2".into(),
+                    ep_id: "ep2".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::EptLeafEpNotFound {
+                    leaf_id: "l1".into(),
+                    ordinal: 2,
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::DecisionNotFound {
+                    decision_id: "d1".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+            (
+                EttleXError::DecisionLinkNotFound {
+                    decision_id: "d2".into(),
+                    target_kind: "ep".into(),
+                    target_id: "ep3".into(),
+                    relation_kind: "supports".into(),
+                },
+                ExErrorKind::NotFound,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_deleted_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::EttleDeleted {
+                    ettle_id: "e1".into(),
+                },
+                ExErrorKind::Deleted,
+            ),
+            (
+                EttleXError::EpDeleted {
+                    ep_id: "ep1".into(),
+                },
+                ExErrorKind::Deleted,
+            ),
+            (
+                EttleXError::ConstraintDeleted {
+                    constraint_id: "c1".into(),
+                },
+                ExErrorKind::Deleted,
+            ),
+            (
+                EttleXError::MappingReferencesDeletedEp {
+                    ep_id: "ep2".into(),
+                },
+                ExErrorKind::Deleted,
+            ),
+            (
+                EttleXError::MappingReferencesDeletedChild {
+                    ep_id: "ep3".into(),
+                    child_id: "e2".into(),
+                },
+                ExErrorKind::Deleted,
+            ),
+            (
+                EttleXError::DecisionDeleted {
+                    decision_id: "d1".into(),
+                },
+                ExErrorKind::Deleted,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_constraint_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::ConstraintAlreadyExists {
+                    constraint_id: "c1".into(),
+                },
+                ExErrorKind::AlreadyExists,
+            ),
+            (
+                EttleXError::ConstraintTombstoned {
+                    constraint_id: "c2".into(),
+                },
+                ExErrorKind::ConstraintTombstoned,
+            ),
+            (
+                EttleXError::InvalidConstraintFamily {
+                    constraint_id: "c3".into(),
+                },
+                ExErrorKind::InvalidConstraintFamily,
+            ),
+            (
+                EttleXError::ConstraintAlreadyAttached {
+                    constraint_id: "c4".into(),
+                    ep_id: "ep1".into(),
+                },
+                ExErrorKind::DuplicateAttachment,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_validation_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::InvalidTitle {
+                    reason: "empty".into(),
+                },
+                ExErrorKind::InvalidTitle,
+            ),
+            (
+                EttleXError::InvalidWhat {
+                    ep_id: "ep1".into(),
+                },
+                ExErrorKind::InvalidInput,
+            ),
+            (
+                EttleXError::InvalidHow {
+                    ep_id: "ep2".into(),
+                },
+                ExErrorKind::InvalidInput,
+            ),
+            (
+                EttleXError::OrdinalAlreadyExists {
+                    ettle_id: "e1".into(),
+                    ordinal: 2,
+                },
+                ExErrorKind::InvalidOrdinal,
+            ),
+            (
+                EttleXError::EpOrdinalReuseForbidden {
+                    ettle_id: "e2".into(),
+                    ordinal: 3,
+                    tombstoned_ep_id: "ep-old".into(),
+                },
+                ExErrorKind::InvalidOrdinal,
+            ),
+            (EttleXError::OrdinalImmutable, ExErrorKind::InvalidOrdinal),
+            (
+                EttleXError::MultipleParents {
+                    ettle_id: "e3".into(),
+                },
+                ExErrorKind::MultipleParents,
+            ),
+            (
+                EttleXError::CycleDetected {
+                    ettle_id: "e4".into(),
+                },
+                ExErrorKind::CycleDetected,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_constraint_violation_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::ChildWithoutEpMapping {
+                    child_id: "c1".into(),
+                    parent_id: "p1".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::DuplicateEpOrdinal {
+                    ettle_id: "e1".into(),
+                    ordinal: 1,
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::ChildReferencedByMultipleEps {
+                    child_id: "c2".into(),
+                    ep_ids: vec!["ep1".into(), "ep2".into()],
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::EpReferencesNonExistentChild {
+                    ep_id: "ep3".into(),
+                    child_id: "c3".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::MembershipInconsistent {
+                    ep_id: "ep4".into(),
+                    ep_ettle_id: "e2".into(),
+                    owner_ettle_id: "e3".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::EpOrphaned {
+                    ep_id: "ep5".into(),
+                    ettle_id: "e4".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::EpListContainsUnknownId {
+                    ettle_id: "e5".into(),
+                    ep_id: "ep6".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::EpOwnershipPointsToUnknownEttle {
+                    ep_id: "ep7".into(),
+                    ettle_id: "e6".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::InvalidParentPointer {
+                    ettle_id: "e7".into(),
+                    reason: "points to deleted".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+            (
+                EttleXError::AlreadyExists {
+                    entity_id: "x1".into(),
+                },
+                ExErrorKind::ConstraintViolation,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_traversal_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::ActiveEpOrderNonDeterministic {
+                    ettle_id: "e1".into(),
+                },
+                ExErrorKind::DeterminismViolation,
+            ),
+            (
+                EttleXError::RtParentChainBroken {
+                    ettle_id: "e2".into(),
+                },
+                ExErrorKind::TraversalBroken,
+            ),
+            (
+                EttleXError::EptMissingMapping {
+                    parent_id: "p1".into(),
+                    child_id: "c1".into(),
+                },
+                ExErrorKind::MissingMapping,
+            ),
+            (
+                EttleXError::EptDuplicateMapping {
+                    parent_id: "p2".into(),
+                    child_id: "c2".into(),
+                },
+                ExErrorKind::DuplicateMapping,
+            ),
+            (
+                EttleXError::EptAmbiguousLeafEp {
+                    leaf_id: "l1".into(),
+                },
+                ExErrorKind::AmbiguousLeafSelection,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_mutation_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::DeleteWithChildren {
+                    ettle_id: "e1".into(),
+                    child_count: 3,
+                },
+                ExErrorKind::CannotDelete,
+            ),
+            (
+                EttleXError::DeleteReferencedEp {
+                    ep_id: "ep1".into(),
+                    child_id: "c1".into(),
+                },
+                ExErrorKind::CannotDelete,
+            ),
+            (
+                EttleXError::CannotDeleteEp0 {
+                    ettle_id: "e2".into(),
+                },
+                ExErrorKind::CannotDelete,
+            ),
+            (
+                EttleXError::HardDeleteForbiddenAnchoredEp {
+                    ep_id: "ep2".into(),
+                },
+                ExErrorKind::CannotDelete,
+            ),
+            (
+                EttleXError::DeleteReferencesMissingEpInOwningEttle {
+                    ep_id: "ep3".into(),
+                    ettle_id: "e3".into(),
+                },
+                ExErrorKind::CannotDelete,
+            ),
+            (
+                EttleXError::TombstoneStrandsChild {
+                    ep_id: "ep4".into(),
+                    child_id: "c2".into(),
+                },
+                ExErrorKind::StrandsChild,
+            ),
+            (
+                EttleXError::IllegalReparent {
+                    reason: "no reparenting".into(),
+                },
+                ExErrorKind::IllegalReparent,
+            ),
+            (
+                EttleXError::ChildAlreadyHasParent {
+                    child_id: "c3".into(),
+                    ep_id: "ep5".into(),
+                    current_parent_id: "p1".into(),
+                },
+                ExErrorKind::IllegalReparent,
+            ),
+            (
+                EttleXError::EpAlreadyHasChild {
+                    ep_id: "ep6".into(),
+                    current_child_id: "c4".into(),
+                },
+                ExErrorKind::DuplicateMapping,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_internal_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::Serialization {
+                    message: "bad json".into(),
+                },
+                ExErrorKind::Serialization,
+            ),
+            (
+                EttleXError::Internal {
+                    message: "bug".into(),
+                },
+                ExErrorKind::Internal,
+            ),
+            (
+                EttleXError::ApplyAtomicityBreach {
+                    message: "state mismatch".into(),
+                },
+                ExErrorKind::Internal,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_decision_variants() {
+        let cases: Vec<(EttleXError, ExErrorKind)> = vec![
+            (
+                EttleXError::InvalidDecision {
+                    reason: "bad".into(),
+                },
+                ExErrorKind::InvalidDecision,
+            ),
+            (
+                EttleXError::InvalidEvidence {
+                    reason: "missing".into(),
+                },
+                ExErrorKind::InvalidEvidence,
+            ),
+            (
+                EttleXError::InvalidEvidencePath {
+                    reason: "absolute path".into(),
+                },
+                ExErrorKind::InvalidEvidencePath,
+            ),
+            (
+                EttleXError::DecisionTombstoned {
+                    decision_id: "d1".into(),
+                },
+                ExErrorKind::DecisionTombstoned,
+            ),
+            (
+                EttleXError::DuplicateDecisionLink {
+                    decision_id: "d2".into(),
+                    target_kind: "ep".into(),
+                    target_id: "ep1".into(),
+                    relation_kind: "supports".into(),
+                },
+                ExErrorKind::DuplicateLink,
+            ),
+            (
+                EttleXError::InvalidTargetKind {
+                    target_kind: "unknown".into(),
+                },
+                ExErrorKind::InvalidTargetKind,
+            ),
+        ];
+        for (err, expected_kind) in cases {
+            let ex: ExError = err.into();
+            assert_eq!(ex.kind(), expected_kind);
+        }
+    }
+
+    #[test]
+    fn test_bridge_empty_update_variant() {
+        let err = EttleXError::EmptyUpdate {
+            ep_id: "ep:test:1".into(),
+        };
+        let ex: ExError = err.into();
+        assert_eq!(ex.kind(), ExErrorKind::EmptyUpdate);
+        assert_eq!(ex.ep_id(), Some("ep:test:1"));
+    }
+
+    #[test]
+    fn test_bridge_from_serde_json_error() {
+        let json_err: Result<serde_json::Value> =
+            serde_json::from_str("{invalid json}").map_err(EttleXError::from);
+        assert!(json_err.is_err());
+        assert!(matches!(json_err, Err(EttleXError::Serialization { .. })));
+    }
+
+    #[test]
+    fn test_ex_error_display_with_all_fields() {
+        let err = ExError::new(ExErrorKind::NotFound)
+            .with_op("find_ep")
+            .with_message("EP not found")
+            .with_entity_id("ettle:1")
+            .with_ep_id("ep:1")
+            .with_ordinal(3);
+        let s = format!("{}", err);
+        assert!(s.contains("ERR_NOT_FOUND"));
+        assert!(s.contains("find_ep"));
+        assert!(s.contains("EP not found"));
+        assert!(s.contains("ettle:1"));
+        assert!(s.contains("ep:1"));
+        assert!(s.contains("3"));
+    }
+
+    #[test]
+    fn test_ex_error_accessors() {
+        use std::error::Error as StdError;
+        let rid = ettlex_core_types::RequestId::new();
+        let tid = ettlex_core_types::TraceId::new();
+        let source = ExError::new(ExErrorKind::Internal).with_message("root cause");
+        let err = ExError::new(ExErrorKind::NotFound)
+            .with_request_id(rid)
+            .with_trace_id(tid)
+            .with_source(source);
+        assert!(err.request_id().is_some());
+        assert!(err.trace_id().is_some());
+        assert!(err.source_error().is_some());
+        assert_eq!(err.message(), "");
+        assert_eq!(err.code(), "ERR_NOT_FOUND");
+        assert!(err.op().is_none());
+        assert!(err.entity_id().is_none());
+        assert!(err.ep_id().is_none());
+        assert!(err.ordinal().is_none());
+        // Covers std::error::Error trait impl
+        assert!(StdError::source(&err).is_none());
+    }
+
+    #[test]
+    fn test_error_kind_codes_structural() {
+        // Covers all ExErrorKind::code() match arms not tested elsewhere
+        let cases = [
+            (ExErrorKind::InvalidInput, "ERR_INVALID_INPUT"),
+            (ExErrorKind::InvalidTitle, "ERR_INVALID_TITLE"),
+            (ExErrorKind::InvalidOrdinal, "ERR_INVALID_ORDINAL"),
+            (ExErrorKind::NotFound, "ERR_NOT_FOUND"),
+            (ExErrorKind::Deleted, "ERR_DELETED"),
+            (ExErrorKind::ConstraintViolation, "ERR_CONSTRAINT_VIOLATION"),
+            (ExErrorKind::IllegalReparent, "ERR_ILLEGAL_REPARENT"),
+            (ExErrorKind::CycleDetected, "ERR_CYCLE_DETECTED"),
+            (ExErrorKind::MultipleParents, "ERR_MULTIPLE_PARENTS"),
+            (ExErrorKind::DuplicateMapping, "ERR_DUPLICATE_MAPPING"),
+            (ExErrorKind::MissingMapping, "ERR_MISSING_MAPPING"),
+            (ExErrorKind::AmbiguousSelection, "ERR_AMBIGUOUS_SELECTION"),
+            (ExErrorKind::TraversalBroken, "ERR_TRAVERSAL_BROKEN"),
+            (
+                ExErrorKind::DeletedNodeInTraversal,
+                "ERR_DELETED_NODE_IN_TRAVERSAL",
+            ),
+            (
+                ExErrorKind::AmbiguousLeafSelection,
+                "ERR_AMBIGUOUS_LEAF_SELECTION",
+            ),
+            (
+                ExErrorKind::DeterminismViolation,
+                "ERR_DETERMINISM_VIOLATION",
+            ),
+            (ExErrorKind::CannotDelete, "ERR_CANNOT_DELETE"),
+            (ExErrorKind::StrandsChild, "ERR_STRANDS_CHILD"),
+            (ExErrorKind::InvalidDecision, "ERR_INVALID_DECISION"),
+            (ExErrorKind::InvalidEvidence, "ERR_INVALID_EVIDENCE"),
+            (
+                ExErrorKind::InvalidEvidencePath,
+                "ERR_INVALID_EVIDENCE_PATH",
+            ),
+            (ExErrorKind::DecisionTombstoned, "ERR_DECISION_TOMBSTONED"),
+            (ExErrorKind::DuplicateLink, "ERR_DUPLICATE_LINK"),
+            (ExErrorKind::InvalidTargetKind, "ERR_INVALID_TARGET_KIND"),
+            (
+                ExErrorKind::ProfileDefaultMissing,
+                "ERR_PROFILE_DEFAULT_MISSING",
+            ),
+            (ExErrorKind::ProfileConflict, "ERR_PROFILE_CONFLICT"),
+            (ExErrorKind::ApprovalNotFound, "ERR_APPROVAL_NOT_FOUND"),
+            (
+                ExErrorKind::ApprovalStorageCorrupt,
+                "ERR_APPROVAL_STORAGE_CORRUPT",
+            ),
+            (
+                ExErrorKind::RefinementIntegrityViolation,
+                "ERR_REFINEMENT_INTEGRITY_VIOLATION",
+            ),
+            (ExErrorKind::NotImplemented, "ERR_NOT_IMPLEMENTED"),
+            (
+                ExErrorKind::InvalidConstraintFamily,
+                "ERR_INVALID_CONSTRAINT_FAMILY",
+            ),
+            (ExErrorKind::AlreadyExists, "ERR_ALREADY_EXISTS"),
+            (
+                ExErrorKind::ConstraintTombstoned,
+                "ERR_CONSTRAINT_TOMBSTONED",
+            ),
+            (ExErrorKind::DuplicateAttachment, "ERR_DUPLICATE_ATTACHMENT"),
+            (ExErrorKind::InvalidManifest, "ERR_INVALID_MANIFEST"),
+            (ExErrorKind::MissingField, "ERR_MISSING_FIELD"),
+            (ExErrorKind::MissingBlob, "ERR_MISSING_BLOB"),
+            (ExErrorKind::InvariantViolation, "ERR_INVARIANT_VIOLATION"),
+            (ExErrorKind::EmptyUpdate, "ERR_EMPTY_UPDATE"),
+            (ExErrorKind::Io, "ERR_IO"),
+            (ExErrorKind::Serialization, "ERR_SERIALIZATION"),
+            (ExErrorKind::Persistence, "ERR_PERSISTENCE"),
+            (ExErrorKind::ExternalService, "ERR_EXTERNAL_SERVICE"),
+            (ExErrorKind::Timeout, "ERR_TIMEOUT"),
+            (ExErrorKind::Concurrency, "ERR_CONCURRENCY"),
+            (ExErrorKind::Unauthorised, "ERR_UNAUTHORISED"),
+            (ExErrorKind::Forbidden, "ERR_FORBIDDEN"),
+            (ExErrorKind::Internal, "ERR_INTERNAL"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(kind.code(), expected, "Wrong code for {:?}", kind);
+        }
     }
 }
