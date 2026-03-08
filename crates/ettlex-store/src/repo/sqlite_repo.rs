@@ -87,11 +87,13 @@ impl SqliteRepo {
         .to_string();
 
         conn.execute(
-            "INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_digest, content_inline, deleted, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_digest, content_inline, title, deleted, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
                 child_ettle_id = excluded.child_ettle_id,
+                content_digest = excluded.content_digest,
                 content_inline = excluded.content_inline,
+                title = excluded.title,
                 deleted = excluded.deleted,
                 updated_at = excluded.updated_at",
             rusqlite::params![
@@ -100,8 +102,9 @@ impl SqliteRepo {
                 ep.ordinal,
                 if ep.normative { 1 } else { 0 },
                 ep.child_ettle_id,
-                Some(ep.content_digest.clone()), // content_digest
+                Some(ep.content_digest.clone()),
                 content_inline,
+                ep.title,
                 if ep.deleted { 1 } else { 0 },
                 ep.created_at.timestamp(),
                 ep.updated_at.timestamp(),
@@ -122,11 +125,13 @@ impl SqliteRepo {
         .to_string();
 
         tx.execute(
-            "INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_digest, content_inline, deleted, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_digest, content_inline, title, deleted, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
                 child_ettle_id = excluded.child_ettle_id,
+                content_digest = excluded.content_digest,
                 content_inline = excluded.content_inline,
+                title = excluded.title,
                 deleted = excluded.deleted,
                 updated_at = excluded.updated_at",
             rusqlite::params![
@@ -135,8 +140,9 @@ impl SqliteRepo {
                 ep.ordinal,
                 if ep.normative { 1 } else { 0 },
                 ep.child_ettle_id,
-                Some(ep.content_digest.clone()), // content_digest
+                Some(ep.content_digest.clone()),
                 content_inline,
+                ep.title,
                 if ep.deleted { 1 } else { 0 },
                 ep.created_at.timestamp(),
                 ep.updated_at.timestamp(),
@@ -185,7 +191,7 @@ impl SqliteRepo {
     /// Get an EP from the database by ID
     pub fn get_ep(conn: &Connection, ep_id: &str) -> Result<Option<Ep>> {
         let mut stmt = conn
-            .prepare("SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at FROM eps WHERE id = ?")
+            .prepare("SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline, title, deleted, created_at, updated_at FROM eps WHERE id = ?")
             .map_err(from_rusqlite)?;
 
         let result = stmt
@@ -196,9 +202,10 @@ impl SqliteRepo {
                 let normative: i32 = row.get(3)?;
                 let child_ettle_id: Option<String> = row.get(4)?;
                 let content_inline: String = row.get(5)?;
-                let deleted: i32 = row.get(6)?;
-                let created_at: i64 = row.get(7)?;
-                let updated_at: i64 = row.get(8)?;
+                let title: Option<String> = row.get(6)?;
+                let deleted: i32 = row.get(7)?;
+                let created_at: i64 = row.get(8)?;
+                let updated_at: i64 = row.get(9)?;
 
                 // Parse content
                 let content: serde_json::Value =
@@ -209,6 +216,7 @@ impl SqliteRepo {
 
                 let mut ep = Ep::new(id, ettle_id, ordinal, normative != 0, why, what, how);
                 ep.child_ettle_id = child_ettle_id;
+                ep.title = title;
                 ep.deleted = deleted != 0;
                 ep.created_at = chrono::DateTime::from_timestamp(created_at, 0)
                     .unwrap_or_else(chrono::Utc::now);

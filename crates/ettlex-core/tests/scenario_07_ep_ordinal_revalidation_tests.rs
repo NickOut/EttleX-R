@@ -124,6 +124,7 @@ fn test_scenario_07_ordinal_immutability() {
         Some("New what".to_string()),
         Some("New how".to_string()),
         None,
+        None,
     )
     .expect("Should update EP");
 

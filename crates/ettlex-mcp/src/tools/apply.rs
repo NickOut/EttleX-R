@@ -105,6 +105,7 @@ fn mcp_command_result_to_json(r: &McpCommandResult) -> Value {
             "tag": "ConstraintCreate",
             "constraint_id": constraint_id,
         }),
+        McpCommandResult::EpUpdate { ep_id } => json!({ "tag": "EpUpdate", "ep_id": ep_id }),
         McpCommandResult::ConstraintAttachToEp => json!({ "tag": "ConstraintAttachToEp" }),
         McpCommandResult::ProfileCreate => json!({ "tag": "ProfileCreate" }),
         McpCommandResult::ProfileSetDefault => json!({ "tag": "ProfileSetDefault" }),

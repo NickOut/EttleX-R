@@ -61,6 +61,23 @@ pub enum McpCommand {
         how: String,
     },
 
+    /// Update an existing EP's content fields.
+    ///
+    /// At least one field must be supplied; omitted fields are preserved.
+    /// Increments `state_version` and sets `updated_at`.
+    EpUpdate {
+        /// EP to update
+        ep_id: String,
+        /// New WHY text (preserved if absent)
+        why: Option<String>,
+        /// New WHAT text (preserved if absent)
+        what: Option<String>,
+        /// New HOW text (preserved if absent)
+        how: Option<String>,
+        /// New display title (preserved if absent)
+        title: Option<String>,
+    },
+
     // ── Constraint ───────────────────────────────────────────────────────────
     /// Create a constraint.
     ConstraintCreate {
@@ -111,6 +128,9 @@ pub enum McpCommandResult {
         ettle_id: String,
     },
     EpCreate {
+        ep_id: String,
+    },
+    EpUpdate {
         ep_id: String,
     },
     ConstraintCreate {
@@ -251,6 +271,53 @@ fn dispatch_mcp_command(
             let ep = Ep::new(ep_id.clone(), ettle_id, ordinal, normative, why, what, how);
             SqliteRepo::persist_ep(conn, &ep)?;
             Ok(McpCommandResult::EpCreate { ep_id })
+        }
+
+        McpCommand::EpUpdate {
+            ep_id,
+            why,
+            what,
+            how,
+            title,
+        } => {
+            // Reject empty update (at least one field must be supplied)
+            if why.is_none() && what.is_none() && how.is_none() && title.is_none() {
+                return Err(ExError::new(ExErrorKind::EmptyUpdate)
+                    .with_ep_id(&ep_id)
+                    .with_op("ep_update")
+                    .with_message("EpUpdate requires at least one field"));
+            }
+
+            // Fetch existing EP
+            let mut ep = SqliteRepo::get_ep(conn, &ep_id)?.ok_or_else(|| {
+                ExError::new(ExErrorKind::NotFound)
+                    .with_ep_id(&ep_id)
+                    .with_op("ep_update")
+                    .with_message(format!("EP not found: {}", ep_id))
+            })?;
+
+            // Apply supplied fields; omitted fields are preserved
+            if let Some(new_why) = why {
+                ep.why = new_why;
+            }
+            if let Some(new_what) = what {
+                ep.what = new_what;
+            }
+            if let Some(new_how) = how {
+                ep.how = new_how;
+            }
+            if let Some(new_title) = title {
+                ep.title = Some(new_title);
+            }
+
+            // Recompute content digest and set updated_at
+            ep.recompute_content_digest();
+            ep.updated_at = chrono::Utc::now();
+
+            SqliteRepo::persist_ep(conn, &ep)?;
+            Ok(McpCommandResult::EpUpdate {
+                ep_id: ep_id.clone(),
+            })
         }
 
         McpCommand::ConstraintCreate {

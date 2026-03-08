@@ -110,7 +110,7 @@ pub fn load_all_ettles(conn: &Connection, store: &mut Store) -> Result<()> {
 /// Load a single EP from the database into the Store
 pub fn load_ep(conn: &Connection, ep_id: &str, store: &mut Store) -> Result<()> {
     let mut stmt = conn
-        .prepare("SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at FROM eps WHERE id = ?")
+        .prepare("SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline, title, deleted, created_at, updated_at FROM eps WHERE id = ?")
         .map_err(from_rusqlite)?;
 
     let ep = stmt
@@ -121,9 +121,10 @@ pub fn load_ep(conn: &Connection, ep_id: &str, store: &mut Store) -> Result<()> 
             let normative: i32 = row.get(3)?;
             let child_ettle_id: Option<String> = row.get(4)?;
             let content_inline: String = row.get(5)?;
-            let deleted: i32 = row.get(6)?;
-            let created_at: i64 = row.get(7)?;
-            let updated_at: i64 = row.get(8)?;
+            let title: Option<String> = row.get(6)?;
+            let deleted: i32 = row.get(7)?;
+            let created_at: i64 = row.get(8)?;
+            let updated_at: i64 = row.get(9)?;
 
             // Parse content
             let content: serde_json::Value =
@@ -134,6 +135,7 @@ pub fn load_ep(conn: &Connection, ep_id: &str, store: &mut Store) -> Result<()> 
 
             let mut ep = Ep::new(id, ettle_id, ordinal, normative != 0, why, what, how);
             ep.child_ettle_id = child_ettle_id;
+            ep.title = title;
             ep.deleted = deleted != 0;
             ep.created_at =
                 chrono::DateTime::from_timestamp(created_at, 0).unwrap_or_else(chrono::Utc::now);
@@ -154,7 +156,7 @@ pub fn load_ep(conn: &Connection, ep_id: &str, store: &mut Store) -> Result<()> 
 /// Returns EPs in deterministic order (sorted by ettle_id, then ordinal)
 pub fn load_all_eps(conn: &Connection, store: &mut Store) -> Result<()> {
     let mut stmt = conn
-        .prepare("SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at FROM eps ORDER BY ettle_id, ordinal")
+        .prepare("SELECT id, ettle_id, ordinal, normative, child_ettle_id, content_inline, title, deleted, created_at, updated_at FROM eps ORDER BY ettle_id, ordinal")
         .map_err(from_rusqlite)?;
 
     let eps: Vec<Ep> = stmt
@@ -165,9 +167,10 @@ pub fn load_all_eps(conn: &Connection, store: &mut Store) -> Result<()> {
             let normative: i32 = row.get(3)?;
             let child_ettle_id: Option<String> = row.get(4)?;
             let content_inline: String = row.get(5)?;
-            let deleted: i32 = row.get(6)?;
-            let created_at: i64 = row.get(7)?;
-            let updated_at: i64 = row.get(8)?;
+            let title: Option<String> = row.get(6)?;
+            let deleted: i32 = row.get(7)?;
+            let created_at: i64 = row.get(8)?;
+            let updated_at: i64 = row.get(9)?;
 
             // Parse content
             let content: serde_json::Value =
@@ -178,6 +181,7 @@ pub fn load_all_eps(conn: &Connection, store: &mut Store) -> Result<()> {
 
             let mut ep = Ep::new(id, ettle_id, ordinal, normative != 0, why, what, how);
             ep.child_ettle_id = child_ettle_id;
+            ep.title = title;
             ep.deleted = deleted != 0;
             ep.created_at =
                 chrono::DateTime::from_timestamp(created_at, 0).unwrap_or_else(chrono::Utc::now);

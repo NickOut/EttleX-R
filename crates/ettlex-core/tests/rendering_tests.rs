@@ -119,6 +119,7 @@ fn test_render_leaf_bundle_aggregates_ept() {
         Some("Root What".to_string()),
         Some("Root How".to_string()),
         None,
+        None,
     )
     .unwrap();
 
@@ -132,6 +133,7 @@ fn test_render_leaf_bundle_aggregates_ept() {
         Some("Mid Why".to_string()),
         Some("Mid What".to_string()),
         Some("Mid How".to_string()),
+        None,
         None,
     )
     .unwrap();

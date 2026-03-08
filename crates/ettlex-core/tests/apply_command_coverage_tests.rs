@@ -168,6 +168,7 @@ fn test_command_ep_update() {
         why: Some("Updated why".to_string()),
         what: Some("Updated what".to_string()),
         how: Some("Updated how".to_string()),
+        title: None,
         normative: Some(false),
     };
 
@@ -203,6 +204,7 @@ fn test_command_ep_update_partial() {
         why: None,
         what: Some("Updated what".to_string()),
         how: None,
+        title: None,
         normative: None,
     };
 

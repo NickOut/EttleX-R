@@ -102,6 +102,7 @@ fn test_apply_surfaces_typed_errors_never_panics() {
         why: Some("New why".to_string()),
         what: None,
         how: None,
+        title: None,
         normative: None,
     };
     let result = apply(state.clone(), cmd, &NeverAnchoredPolicy);

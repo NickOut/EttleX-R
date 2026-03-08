@@ -58,7 +58,7 @@ This table MUST be updated after each scenario.
 ## STEP 2 --- Sequential TDD Loop (One Scenario at a Time)
 
 For each scenario in plan order:
-
+ conforman
 ### 2A --- RED
 
 -   Write ONLY the declared test.
@@ -595,10 +595,6 @@ Do not finish unless all of the following are true:
 -   product docs under `ettlex/docs/` for cross-cutting behaviour
     (preferred for user-facing workflows).
 -   Completion report produced in `handoff/completed/`.
-
-------------------------------------------------------------------------
-
-End of prompt.
 
 ------------------------------------------------------------------------
 

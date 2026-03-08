@@ -163,6 +163,7 @@ fn test_update_ep_updates_text_fields() {
         Some("Updated What".to_string()),
         Some("Updated How".to_string()),
         None,
+        None,
     )
     .unwrap();
 
@@ -189,7 +190,7 @@ fn test_update_ep_updates_normative_flag() {
     )
     .unwrap();
 
-    ep_ops::update_ep(&mut store, &ep_id, None, None, None, Some(false)).unwrap();
+    ep_ops::update_ep(&mut store, &ep_id, None, None, None, None, Some(false)).unwrap();
 
     let ep = store.get_ep(&ep_id).unwrap();
     assert!(!ep.normative);
@@ -212,9 +213,18 @@ fn test_update_ep_fails_on_ordinal_change() {
     )
     .unwrap();
 
-    // EP ordinals are immutable - we don't expose ordinal in update_ep signature
-    // This test verifies that the ordinal remains unchanged
-    ep_ops::update_ep(&mut store, &ep_id, None, None, None, None).unwrap();
+    // EP ordinals are immutable — update_ep has no ordinal parameter, so ordinal is always
+    // preserved.  Perform a real field update and verify the ordinal remains unchanged.
+    ep_ops::update_ep(
+        &mut store,
+        &ep_id,
+        Some("changed why".to_string()),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
 
     let ep = store.get_ep(&ep_id).unwrap();
     assert_eq!(ep.ordinal, 1); // unchanged

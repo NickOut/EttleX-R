@@ -125,9 +125,10 @@ pub fn apply(mut state: Store, cmd: Command, policy: &dyn AnchorPolicy) -> Resul
             why,
             what,
             how,
+            title,
             normative,
         } => {
-            ep_ops::update_ep(&mut state, &ep_id, why, what, how, normative)?;
+            ep_ops::update_ep(&mut state, &ep_id, why, what, how, title, normative)?;
             Ok(state)
         }
 

@@ -147,8 +147,16 @@ pub fn update_ep(
     why: Option<String>,
     what: Option<String>,
     how: Option<String>,
+    title: Option<String>,
     normative: Option<bool>,
 ) -> Result<()> {
+    // Reject empty update: at least one field must be supplied
+    if why.is_none() && what.is_none() && how.is_none() && title.is_none() && normative.is_none() {
+        return Err(EttleXError::EmptyUpdate {
+            ep_id: id.to_string(),
+        });
+    }
+
     // Validate WHAT if provided (cannot be empty string)
     if let Some(ref w) = what {
         if !w.is_empty() && w.trim().is_empty() {
@@ -183,9 +191,16 @@ pub fn update_ep(
         ep.how = new_how;
     }
 
+    if let Some(new_title) = title {
+        ep.title = Some(new_title);
+    }
+
     if let Some(new_normative) = normative {
         ep.normative = new_normative;
     }
+
+    // Recompute content digest after field updates
+    ep.recompute_content_digest();
 
     // Update timestamp
     ep.updated_at = Utc::now();

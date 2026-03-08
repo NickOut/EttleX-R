@@ -74,8 +74,8 @@ fn test_migration_gap_fails() {
         .unwrap();
 
     assert_eq!(
-        version_count, 10,
-        "Should have exactly 10 migrations applied"
+        version_count, 11,
+        "Should have exactly 11 migrations applied"
     );
 }
 
@@ -98,7 +98,7 @@ fn test_migration_idempotency() {
         .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
         .unwrap();
 
-    assert_eq!(version_count, 10, "Should still have exactly 10 migrations");
+    assert_eq!(version_count, 11, "Should still have exactly 11 migrations");
 }
 
 #[test]
@@ -121,6 +121,55 @@ fn test_checksum_mismatch() {
     // Then: The checksum should exist and not be empty
     assert!(!checksum.is_empty(), "Checksum should be stored");
     assert_eq!(checksum.len(), 64, "SHA256 checksum should be 64 hex chars");
+}
+
+// ---------------------------------------------------------------------------
+// S-SU-9: Migration 011 adds title column (TEXT, nullable) to eps table
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_migration_011_eps_title_column() {
+    let mut conn = setup_test_db();
+    ettlex_store::migrations::apply_migrations(&mut conn).unwrap();
+
+    // Verify title column exists in eps table
+    let columns: Vec<(String, String, i64)> = {
+        let mut stmt = conn.prepare("PRAGMA table_info(eps)").unwrap();
+        stmt.query_map([], |row| {
+            let name: String = row.get(1)?;
+            let col_type: String = row.get(2)?;
+            let notnull: i64 = row.get(3)?;
+            Ok((name, col_type, notnull))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+    };
+
+    let title_col = columns.iter().find(|(name, _, _)| name == "title");
+    assert!(
+        title_col.is_some(),
+        "eps table must have a 'title' column after migration 011"
+    );
+    let (_, col_type, notnull) = title_col.unwrap();
+    assert_eq!(col_type.to_uppercase(), "TEXT", "title column must be TEXT");
+    assert_eq!(*notnull, 0, "title column must be nullable (notnull=0)");
+
+    // Insert an EP row without title and verify null title
+    conn.execute_batch(
+        "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
+         VALUES ('ettle:s9', 'S9 Ettle', NULL, 0, 0, 0, '{}');
+         INSERT INTO eps (id, ettle_id, ordinal, normative, content_inline, deleted, created_at, updated_at)
+         VALUES ('ep:s9:0', 'ettle:s9', 0, 1, '{\"why\":\"\",\"what\":\"\",\"how\":\"\"}', 0, 0, 0);",
+    )
+    .unwrap();
+
+    let title: Option<String> = conn
+        .query_row("SELECT title FROM eps WHERE id = 'ep:s9:0'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert!(title.is_none(), "Existing EP row must have null title");
 }
 
 // Helper function to get all table names from the database

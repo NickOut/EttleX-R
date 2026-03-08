@@ -36,6 +36,9 @@ pub struct Ep {
     /// HOW: Implementation or operational details
     pub how: String,
 
+    /// Optional display title for this EP (separate from WHY/WHAT/HOW content)
+    pub title: Option<String>,
+
     /// SHA-256 hex digest of canonical WHY+WHAT+HOW JSON (alphabetical keys)
     pub content_digest: String,
 
@@ -80,6 +83,7 @@ impl Ep {
             why,
             what,
             how,
+            title: None,
             content_digest,
             created_at: now,
             updated_at: now,
@@ -87,7 +91,14 @@ impl Ep {
         }
     }
 
-    fn compute_content_digest(why: &str, what: &str, how: &str) -> String {
+    /// Recompute `content_digest` from current `why`, `what`, `how` fields.
+    ///
+    /// Call this after mutating any content field to keep the digest in sync.
+    pub fn recompute_content_digest(&mut self) {
+        self.content_digest = Self::compute_content_digest(&self.why, &self.what, &self.how);
+    }
+
+    pub(crate) fn compute_content_digest(why: &str, what: &str, how: &str) -> String {
         let mut map = std::collections::BTreeMap::new();
         map.insert("how", how);
         map.insert("what", what);

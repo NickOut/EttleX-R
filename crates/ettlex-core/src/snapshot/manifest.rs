@@ -292,8 +292,8 @@ pub fn generate_manifest(
         .map(|(idx, ep_id)| EpEntry {
             ep_id: ep_id.clone(),
             ordinal: idx as u32,
-            normative: true,                     // All EPs are normative in v0
-            ep_digest: compute_ep_digest(ep_id), // Stub for now
+            normative: true,
+            ep_digest: ep_content_digest(ep_id, store),
         })
         .collect();
 
@@ -331,11 +331,16 @@ pub fn generate_manifest(
     Ok(manifest)
 }
 
-/// Compute EP content digest.
+/// Derive the ep_digest for a manifest entry.
 ///
-/// Stub implementation - will be replaced with actual EP content hashing
-/// when EP persistence is implemented.
-fn compute_ep_digest(ep_id: &str) -> String {
+/// Uses the EP's `content_digest` (SHA-256 of WHY+WHAT+HOW) when the EP is
+/// present in `store`.  Falls back to a SHA-256 of the ep_id string for EPs
+/// not yet hydrated into the in-memory store (legacy/test compatibility).
+fn ep_content_digest(ep_id: &str, store: &Store) -> String {
+    if let Ok(ep) = store.get_ep(ep_id) {
+        return ep.content_digest.clone();
+    }
+    // Fallback: hash the ep_id so callers always get a 64-char hex string.
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(ep_id.as_bytes());

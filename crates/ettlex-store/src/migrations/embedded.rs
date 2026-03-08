@@ -51,5 +51,9 @@ pub fn get_migrations() -> Vec<Migration> {
             id: "010_backfill_parent_ep_id",
             sql: include_str!("../../migrations/010_backfill_parent_ep_id.sql"),
         },
+        Migration {
+            id: "011_eps_title",
+            sql: include_str!("../../migrations/011_eps_title.sql"),
+        },
     ]
 }

@@ -49,6 +49,7 @@ pub enum Command {
         why: Option<String>,
         what: Option<String>,
         how: Option<String>,
+        title: Option<String>,
         normative: Option<bool>,
     },
 
