@@ -31,7 +31,7 @@
 //! - `seed_digest`: Optional seed digest
 
 use crate::constraint_engine::{ConstraintEvalCtx, ConstraintFamilyStatus};
-use crate::errors::Result;
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::ops::Store;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -85,7 +85,7 @@ impl ConstraintsEnvelope {
     ///
     /// # Errors
     ///
-    /// Returns `EttleXError::Serialization` if JSON serialization fails during digest computation.
+    /// Returns `Serialization` error if JSON serialization fails during digest computation.
     pub fn from_ept(ept: &[String], store: &Store) -> Result<Self> {
         use crate::constraint_engine;
 
@@ -100,9 +100,8 @@ impl ConstraintsEnvelope {
         };
 
         let eval = constraint_engine::evaluate(&ctx, store).map_err(|e| {
-            crate::errors::EttleXError::Serialization {
-                message: format!("constraint_engine::evaluate failed: {}", e),
-            }
+            ExError::new(ExErrorKind::Serialization)
+                .with_message(format!("constraint_engine::evaluate failed: {}", e))
         })?;
 
         // Build declared_refs as plain constraint IDs (ordinal-ordered, deduplicated)
@@ -255,7 +254,7 @@ pub struct EpEntry {
 ///
 /// ## Errors
 ///
-/// Returns `EttleXError::Serialization` if digest computation fails.
+/// Returns `Serialization` error if digest computation fails.
 ///
 /// ## Example
 ///

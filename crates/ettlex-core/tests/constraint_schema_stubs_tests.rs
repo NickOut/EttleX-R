@@ -5,6 +5,7 @@
 //! - Negative cases (malformed payload, large payloads, empty lists)
 //! - Decision isolation
 
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::model::{Constraint, Ep, EpConstraintRef, Ettle};
 use ettlex_core::ops::constraint_ops;
 use ettlex_core::ops::Store;
@@ -411,10 +412,7 @@ fn test_edge_case_attach_to_nonexistent_ep() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::EpNotFound { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 // Edge case: Constraint operations with non-existent constraints
@@ -425,10 +423,7 @@ fn test_edge_case_nonexistent_constraint() {
     let result = constraint_ops::get_constraint(&store, "nonexistent");
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::ConstraintNotFound { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 // Edge case: Update deleted constraint
@@ -451,10 +446,7 @@ fn test_edge_case_update_deleted_constraint() {
     let result = constraint_ops::update_constraint(&mut store, "c1", json!({"new": "data"}));
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::ConstraintDeleted { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 // Edge case: Detach non-attached constraint
@@ -486,10 +478,7 @@ fn test_edge_case_detach_non_attached() {
     let result = constraint_ops::detach_constraint_from_ep(&mut store, &ep_id, "c1");
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::ConstraintNotAttached { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 // Performance: Multiple constraints on single EP

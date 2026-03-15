@@ -1,6 +1,8 @@
 [workspace]
 members = [
   "crates/ettlex-core-types",
+  "crates/ettlex-errors",
+  "crates/ettlex-logging",
   "crates/ettlex-core",
   "crates/ettlex-store",
   "crates/ettlex-projection",
@@ -12,6 +14,9 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
+ettlex-core-types = { path = "crates/ettlex-core-types" }
+ettlex-errors = { path = "crates/ettlex-errors" }
+ettlex-logging = { path = "crates/ettlex-logging" }
 tokio = { version = "1.0", features = [
   "full",
 ] } # Async runtime (de facto standard)
@@ -60,5 +65,5 @@ mockall = "0.12" # Mocking framework
 unused_must_use = "warn"
 
 [workspace.lints.clippy]
-result_large_err = "warn"
+result_large_err = "allow"
 missing_errors_doc = "warn"

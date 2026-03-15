@@ -50,6 +50,11 @@ fn test_ettle_create_generates_id() {
     let cmd = McpCommand::EttleCreate {
         title: "My Ettle".to_string(),
         ettle_id: None,
+        why: None,
+        what: None,
+        how: None,
+        reasoning_link_id: None,
+        reasoning_link_type: None,
     };
     let (result, _sv) = apply_mcp_command(
         cmd,
@@ -77,6 +82,11 @@ fn test_ep_create_generates_id() {
     let create_ettle = McpCommand::EttleCreate {
         title: "Parent Ettle".to_string(),
         ettle_id: None,
+        why: None,
+        what: None,
+        how: None,
+        reasoning_link_id: None,
+        reasoning_link_type: None,
     };
     let (ettle_result, _) = apply_mcp_command(
         create_ettle,
@@ -125,6 +135,11 @@ fn test_ettle_create_rejects_supplied_ettle_id() {
     let cmd = McpCommand::EttleCreate {
         title: "My Ettle".to_string(),
         ettle_id: Some("ettle:caller-supplied:0".to_string()),
+        why: None,
+        what: None,
+        how: None,
+        reasoning_link_id: None,
+        reasoning_link_type: None,
     };
     let result = apply_mcp_command(
         cmd,
@@ -153,6 +168,11 @@ fn test_ep_create_rejects_supplied_ep_id() {
         McpCommand::EttleCreate {
             title: "Ettle".to_string(),
             ettle_id: None,
+            why: None,
+            what: None,
+            how: None,
+            reasoning_link_id: None,
+            reasoning_link_type: None,
         },
         None,
         &mut conn,
@@ -196,6 +216,11 @@ fn test_ettle_create_empty_title_fails() {
     let cmd = McpCommand::EttleCreate {
         title: String::new(),
         ettle_id: None,
+        why: None,
+        what: None,
+        how: None,
+        reasoning_link_id: None,
+        reasoning_link_type: None,
     };
     let result = apply_mcp_command(
         cmd,
@@ -206,7 +231,7 @@ fn test_ettle_create_empty_title_fails() {
         &NoopApprovalRouter,
     );
     assert!(result.is_err(), "EttleCreate with empty title must fail");
-    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidInput);
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidTitle);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +273,11 @@ fn test_ettle_create_max_length_title_succeeds() {
     let cmd = McpCommand::EttleCreate {
         title,
         ettle_id: None,
+        why: None,
+        what: None,
+        how: None,
+        reasoning_link_id: None,
+        reasoning_link_type: None,
     };
     let result = apply_mcp_command(
         cmd,
@@ -276,6 +306,11 @@ fn test_ep_create_ordinal_conflict_fails() {
         McpCommand::EttleCreate {
             title: "Ettle".to_string(),
             ettle_id: None,
+            why: None,
+            what: None,
+            how: None,
+            reasoning_link_id: None,
+            reasoning_link_type: None,
         },
         None,
         &mut conn,
@@ -337,6 +372,11 @@ fn test_ettle_create_id_ulid_format() {
     let cmd = McpCommand::EttleCreate {
         title: "Format Check".to_string(),
         ettle_id: None,
+        why: None,
+        what: None,
+        how: None,
+        reasoning_link_id: None,
+        reasoning_link_type: None,
     };
     let (result, _) = apply_mcp_command(
         cmd,
@@ -368,6 +408,11 @@ fn test_ep_create_id_ulid_format() {
         McpCommand::EttleCreate {
             title: "E".to_string(),
             ettle_id: None,
+            why: None,
+            what: None,
+            how: None,
+            reasoning_link_id: None,
+            reasoning_link_type: None,
         },
         None,
         &mut conn,
@@ -417,6 +462,11 @@ fn test_ettle_create_successive_calls_distinct_ids() {
     let mk_cmd = || McpCommand::EttleCreate {
         title: "Same Title".to_string(),
         ettle_id: None,
+        why: None,
+        what: None,
+        how: None,
+        reasoning_link_id: None,
+        reasoning_link_type: None,
     };
 
     let (r1, _) = apply_mcp_command(
@@ -458,6 +508,11 @@ fn test_ettle_create_identical_title_distinct_ids() {
         McpCommand::EttleCreate {
             title: "Dup Title".to_string(),
             ettle_id: None,
+            why: None,
+            what: None,
+            how: None,
+            reasoning_link_id: None,
+            reasoning_link_type: None,
         },
         None,
         &mut conn,
@@ -470,6 +525,11 @@ fn test_ettle_create_identical_title_distinct_ids() {
         McpCommand::EttleCreate {
             title: "Dup Title".to_string(),
             ettle_id: None,
+            why: None,
+            what: None,
+            how: None,
+            reasoning_link_id: None,
+            reasoning_link_type: None,
         },
         None,
         &mut conn,
@@ -506,6 +566,11 @@ fn test_ettle_create_then_get_consistent() {
         McpCommand::EttleCreate {
             title: title.clone(),
             ettle_id: None,
+            why: None,
+            what: None,
+            how: None,
+            reasoning_link_id: None,
+            reasoning_link_type: None,
         },
         None,
         &mut conn,

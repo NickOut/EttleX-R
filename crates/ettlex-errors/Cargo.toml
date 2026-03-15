@@ -1,0 +1,16 @@
+[package]
+name = "ettlex-errors"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+ettlex-core-types = { workspace = true }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+ettlex-core-types = { workspace = true }
+serde_json = { workspace = true }

@@ -1,5 +1,5 @@
 use super::rt::compute_rt;
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::ops::{active_eps, Store};
 
 /// Compute EP Traversal (EPT) from root to leaf
@@ -45,14 +45,12 @@ pub fn compute_ept(
     let root = store.get_ettle(root_id)?;
 
     let active = active_eps(store, root)?;
-    let root_ep0 =
-        active
-            .iter()
-            .find(|ep| ep.ordinal == 0)
-            .ok_or_else(|| EttleXError::EptLeafEpNotFound {
-                leaf_id: root_id.clone(),
-                ordinal: 0,
-            })?;
+    let root_ep0 = active.iter().find(|ep| ep.ordinal == 0).ok_or_else(|| {
+        ExError::new(ExErrorKind::NotFound)
+            .with_entity_id(root_id.clone())
+            .with_ordinal(0)
+            .with_message("Leaf EP with ordinal not found")
+    })?;
 
     ept.push(root_ep0.id.clone());
 
@@ -63,21 +61,21 @@ pub fn compute_ept(
         let next_child_id = &rt[i + 1];
 
         let next_child = store.get_ettle(next_child_id)?;
-        let mapping_ep_id =
-            next_child
-                .parent_ep_id
-                .as_ref()
-                .ok_or_else(|| EttleXError::EptMissingMapping {
-                    parent_id: current_id.clone(),
-                    child_id: next_child_id.clone(),
-                })?;
+        let mapping_ep_id = next_child.parent_ep_id.as_ref().ok_or_else(|| {
+            ExError::new(ExErrorKind::MissingMapping)
+                .with_entity_id(next_child_id.clone())
+                .with_message(format!(
+                    "No EP in parent {} maps to child",
+                    current_id.clone()
+                ))
+        })?;
 
         ept.push(mapping_ep_id.clone());
     }
 
     // Step 3: Handle leaf EP
-    let leaf_ettle_id = rt.last().ok_or_else(|| EttleXError::Internal {
-        message: "RT should never be empty".to_string(),
+    let leaf_ettle_id = rt.last().ok_or_else(|| {
+        ExError::new(ExErrorKind::Internal).with_message("RT should never be empty")
     })?;
     let leaf_ettle = store.get_ettle(leaf_ettle_id)?;
 
@@ -95,9 +93,9 @@ pub fn compute_ept(
     } else {
         // No ordinal specified - check if leaf has multiple EPs
         if leaf_ep_count > 1 {
-            return Err(EttleXError::EptAmbiguousLeafEp {
-                leaf_id: leaf_ettle_id.clone(),
-            });
+            return Err(ExError::new(ExErrorKind::AmbiguousLeafSelection)
+                .with_entity_id(leaf_ettle_id.clone())
+                .with_message("Leaf ettle has multiple EPs, must specify ordinal"));
         }
         // Leaf has exactly 1 EP - add it if not already present
         if leaf_ep_count == 1 {
@@ -120,9 +118,11 @@ fn find_specific_ep(store: &Store, ettle_id: &str, ordinal: u32) -> Result<Strin
         .iter()
         .find(|ep| ep.ordinal == ordinal)
         .map(|ep| ep.id.clone())
-        .ok_or_else(|| EttleXError::EptLeafEpNotFound {
-            leaf_id: ettle_id.to_string(),
-            ordinal,
+        .ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(ettle_id)
+                .with_ordinal(ordinal)
+                .with_message("Leaf EP with ordinal not found")
         })
 }
 

@@ -112,5 +112,7 @@ fn mcp_command_result_to_json(r: &McpCommandResult) -> Value {
         McpCommandResult::PolicyCreate { policy_ref } => {
             json!({ "tag": "PolicyCreate", "policy_ref": policy_ref })
         }
+        McpCommandResult::EttleUpdate => json!({ "tag": "EttleUpdate" }),
+        McpCommandResult::EttleTombstone => json!({ "tag": "EttleTombstone" }),
     }
 }

@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::collections::HashSet;
 
 use super::{active_eps, store::Store};
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 
 /// Set the parent of an Ettle
 ///
@@ -26,23 +26,28 @@ pub fn set_parent(store: &mut Store, child_id: &str, parent_id: Option<&str>) ->
 
     // If setting parent (not making root), verify parent exists and check for cycles
     if let Some(pid) = parent_id {
-        store.get_ettle(pid).map_err(|e| match e {
-            EttleXError::EttleNotFound { ettle_id } => EttleXError::ParentNotFound { ettle_id },
-            other => other,
+        store.get_ettle(pid).map_err(|mut e| {
+            // Remap NotFound to indicate it's the parent that's missing
+            if e.kind() == ExErrorKind::NotFound {
+                e = ExError::new(ExErrorKind::NotFound)
+                    .with_op("find_parent")
+                    .with_message("Parent ettle not found");
+            }
+            e
         })?;
 
         // Check for direct cycle (child == parent)
         if child_id == pid {
-            return Err(EttleXError::CycleDetected {
-                ettle_id: child_id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::CycleDetected)
+                .with_entity_id(child_id.to_string())
+                .with_message("Setting parent would create a cycle"));
         }
 
         // Check for indirect cycle (parent is ancestor of child)
         if would_create_cycle(store, child_id, pid)? {
-            return Err(EttleXError::CycleDetected {
-                ettle_id: child_id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::CycleDetected)
+                .with_entity_id(child_id.to_string())
+                .with_message("Setting parent would create a cycle"));
         }
     }
 
@@ -93,18 +98,17 @@ pub fn link_child(store: &mut Store, ep_id: &str, child_id: &str) -> Result<()> 
     let parent = store.get_ettle(&parent_id)?;
     let active = active_eps(store, parent)?;
     if !active.iter().any(|e| e.id == ep_id) {
-        return Err(EttleXError::EpDeleted {
-            ep_id: ep_id.to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::Deleted)
+            .with_ep_id(ep_id.to_string())
+            .with_message("EP was deleted"));
     }
 
     // Check if child already has a parent (a child can only belong to one EP)
     if let Some(ref existing_parent_id) = child.parent_id {
-        return Err(EttleXError::ChildAlreadyHasParent {
-            child_id: child_id.to_string(),
-            ep_id: ep_id.to_string(),
-            current_parent_id: existing_parent_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::IllegalReparent)
+            .with_entity_id(child_id)
+            .with_ep_id(ep_id)
+            .with_message(format!("Child already has parent {}", existing_parent_id)));
     }
 
     // Update EP's child_ettle_id (backward compat — not authoritative for fan-out)

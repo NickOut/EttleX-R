@@ -6,6 +6,7 @@
 pub mod decision;
 pub mod engine_command;
 pub mod engine_query;
+pub mod ettle;
 pub mod mcp_command;
 pub mod read_tools;
 pub mod snapshot;

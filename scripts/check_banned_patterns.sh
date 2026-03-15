@@ -20,7 +20,7 @@ fi
 
 # Check for ad-hoc tracing initialization
 echo "Checking for ad-hoc logging initialization..."
-INIT_VIOLATIONS=$(git grep -n 'tracing_subscriber::.*\.init()' -- 'crates/*/src/**/*.rs' ':!crates/*/src/logging_facility/**' || true)
+INIT_VIOLATIONS=$(git grep -n 'tracing_subscriber::.*\.init()' -- 'crates/*/src/**/*.rs' ':!crates/ettlex-logging/src/**' || true)
 
 if [ -n "$INIT_VIOLATIONS" ]; then
     echo -e "${RED}ERROR: Found ad-hoc tracing initialization outside logging facility:${NC}"

@@ -16,6 +16,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 sha2 = "0.10"  # For digests
 hex = "0.4"    # For hex encoding
+base64 = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.0"

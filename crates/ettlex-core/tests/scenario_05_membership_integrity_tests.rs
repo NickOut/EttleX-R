@@ -1,7 +1,7 @@
 /// Scenario 5: Membership Integrity
 ///
 /// Tests bidirectional membership consistency between Ettle.ep_ids and EP.ettle_id.
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::model::{Ep, Ettle};
 use ettlex_core::ops::{active_eps, ettle_ops, Store};
 use ettlex_core::rules::{invariants, validation};
@@ -65,10 +65,7 @@ fn test_scenario_05_error_ep_listed_but_ownership_mismatch() {
     // AND validate_tree fails
     let result = validation::validate_tree(&store);
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::MembershipInconsistent { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::ConstraintViolation);
 }
 
 #[test]
@@ -103,7 +100,7 @@ fn test_scenario_05_error_ep_orphaned_not_listed() {
     // AND validate_tree fails
     let result = validation::validate_tree(&store);
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EpOrphaned { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::ConstraintViolation);
 }
 
 #[test]
@@ -126,8 +123,5 @@ fn test_scenario_05_unknown_ep_ref_detected() {
     // AND validate_tree fails
     let result = validation::validate_tree(&store);
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::EpListContainsUnknownId { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::ConstraintViolation);
 }

@@ -2,7 +2,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use super::{active_eps, store::Store};
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::{Ep, Ettle, Metadata};
 
 /// Create a new Ettle with the given title and optional EP0 content
@@ -35,9 +35,8 @@ pub fn create_ettle(
 ) -> Result<String> {
     // Validate title
     if title.trim().is_empty() {
-        return Err(EttleXError::InvalidTitle {
-            reason: "Title cannot be empty or whitespace-only".to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::InvalidTitle)
+            .with_message("Title cannot be empty or whitespace-only".to_string()));
     }
 
     // Generate UUID v7 for deterministic time-ordered IDs
@@ -47,9 +46,9 @@ pub fn create_ettle(
     // Validate WHAT content (cannot be empty string)
     let what_content = if let Some(w) = what {
         if w.is_empty() {
-            return Err(EttleXError::InvalidWhat {
-                ep_id: ep0_id.clone(),
-            });
+            return Err(ExError::new(ExErrorKind::InvalidInput)
+                .with_ep_id(ep0_id.clone())
+                .with_message("Invalid WHAT content: cannot be empty string"));
         }
         w
     } else {
@@ -59,9 +58,9 @@ pub fn create_ettle(
     // Validate HOW content (cannot be empty string)
     let how_content = if let Some(h) = how {
         if h.is_empty() {
-            return Err(EttleXError::InvalidHow {
-                ep_id: ep0_id.clone(),
-            });
+            return Err(ExError::new(ExErrorKind::InvalidInput)
+                .with_ep_id(ep0_id.clone())
+                .with_message("Invalid HOW content: cannot be empty string"));
         }
         h
     } else {
@@ -137,9 +136,8 @@ pub fn update_ettle(
     // Validate title if provided
     if let Some(ref t) = title {
         if t.trim().is_empty() {
-            return Err(EttleXError::InvalidTitle {
-                reason: "Title cannot be empty or whitespace-only".to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::InvalidTitle)
+                .with_message("Title cannot be empty or whitespace-only".to_string()));
         }
     }
 
@@ -188,10 +186,9 @@ pub fn delete_ettle(store: &mut Store, id: &str) -> Result<()> {
         .count();
 
     if children_count > 0 {
-        return Err(EttleXError::DeleteWithChildren {
-            ettle_id: id.to_string(),
-            child_count: children_count,
-        });
+        return Err(ExError::new(ExErrorKind::CannotDelete)
+            .with_entity_id(id)
+            .with_message(format!("Has {} children", children_count)));
     }
 
     // Get mutable reference and set deleted flag
@@ -263,7 +260,9 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::InvalidWhat { .. })));
+        assert!(
+            result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::InvalidInput
+        );
     }
 
     #[test]
@@ -279,6 +278,8 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::InvalidHow { .. })));
+        assert!(
+            result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::InvalidInput
+        );
     }
 }

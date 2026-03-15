@@ -871,10 +871,8 @@ pub fn apply_engine_query(
                 })?;
 
                 let store = load_tree(conn)?;
-                let ept_ids = compute_ept(&store, &ep.ettle_id, None).map_err(|e| {
-                    let ex: ExError = e.into();
-                    ex.with_op("ept_compute_decision_context")
-                })?;
+                let ept_ids = compute_ept(&store, &ep.ettle_id, None)
+                    .map_err(|e| e.with_op("ept_compute_decision_context"))?;
 
                 let mut by_ep: BTreeMap<String, Vec<ettlex_core::model::Decision>> =
                     BTreeMap::new();
@@ -1049,10 +1047,8 @@ pub fn apply_engine_query(
                 })?;
 
                 let store = load_tree(conn)?;
-                let ept_ids = compute_ept(&store, &ep.ettle_id, None).map_err(|e| {
-                    let ex: ExError = e.into();
-                    ex.with_op("ept_compute")
-                })?;
+                let ept_ids = compute_ept(&store, &ep.ettle_id, None)
+                    .map_err(|e| e.with_op("ept_compute"))?;
 
                 // ept_digest = SHA256 of EP IDs joined with \n
                 let joined = ept_ids.join("\n");

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ettlex-mcp": {
+      "type": "stdio",
+      "command": "/Users/nick/Development/EttleX/EttleX-Project/Rust/target/aarch64-apple-darwin/release/ettlex-mcp",
+      "args": ["--db", "/Users/nick/Development/EttleX/EttleX-Project/Rust/.ettlex/store.db"],
+      "env": {}
+    }
+  }
+}

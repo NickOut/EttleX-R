@@ -2,9 +2,9 @@ mod common;
 
 use common::{new_store, setup_simple_tree};
 use ettlex_core::{
+    errors::ExErrorKind,
     ops::{ep_ops, ettle_ops},
     traversal::ept,
-    EttleXError,
 };
 
 // ===== EPT COMPUTATION TESTS =====
@@ -67,7 +67,7 @@ fn test_ept_fails_on_missing_mapping() {
     let result = ept::compute_ept(&store, &child_id, None);
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EptMissingMapping { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::MissingMapping);
 }
 
 // With parent_ep_id as authoritative join, two child_ettle_id entries for the same
@@ -198,10 +198,10 @@ fn test_ept_fails_when_leaf_has_multiple_eps_and_no_ordinal() {
     let result = ept::compute_ept(&store, &root_id, None);
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::EptAmbiguousLeafEp { .. })
-    ));
+    assert_eq!(
+        result.unwrap_err().kind(),
+        ExErrorKind::AmbiguousLeafSelection
+    );
 }
 
 #[test]
@@ -214,7 +214,7 @@ fn test_ept_fails_when_specified_leaf_ep_not_found() {
     let result = ept::compute_ept(&store, &root_id, Some(99));
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EptLeafEpNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 #[test]

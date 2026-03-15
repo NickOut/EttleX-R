@@ -1,4 +1,4 @@
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::ops::Store;
 
 /// Compute Refinement Traversal (RT) from root to leaf
@@ -30,11 +30,11 @@ pub fn compute_rt(store: &Store, leaf_id: &str) -> Result<Vec<String>> {
         path.push(id.to_string());
 
         // Get current Ettle
-        let ettle = store
-            .get_ettle(id)
-            .map_err(|_| EttleXError::RtParentChainBroken {
-                ettle_id: id.to_string(),
-            })?;
+        let ettle = store.get_ettle(id).map_err(|_| {
+            ExError::new(ExErrorKind::TraversalBroken)
+                .with_entity_id(id.to_string())
+                .with_message("RT computation failed: parent chain broken")
+        })?;
 
         // Move to parent
         current = ettle.parent_id.as_deref();

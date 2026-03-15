@@ -1,6 +1,8 @@
-//! Canonical logging macros
+//! Canonical logging macros (re-implemented from ettlex-logging for ettlex-core consumers)
 //!
-//! These macros provide a structured, consistent way to log operations.
+//! These macros are identical in behaviour to those in ettlex-logging but live here
+//! so that crates depending only on ettlex-core can use them without adding a direct
+//! dependency on ettlex-logging.
 
 /// Log the start of an operation
 ///
@@ -36,7 +38,7 @@ macro_rules! log_op_start {
 ///
 /// ```
 /// # use ettlex_core::log_op_end;
-/// log_op_end!("create_ettle", duration_ms = 42);
+/// log_op_end!("create_ettle", duration_ms = 42u64);
 /// ```
 #[macro_export]
 macro_rules! log_op_end {
@@ -64,15 +66,14 @@ macro_rules! log_op_end {
 /// # Example
 ///
 /// ```ignore
-/// # use ettlex_core::{log_op_error, errors::EttleXError};
-/// let err = EttleXError::EttleNotFound { ettle_id: "e1".to_string() };
-/// log_op_error!("read_ettle", err, duration_ms = 10);
+/// # use ettlex_core::{log_op_error, errors::ExError, errors::ExErrorKind};
+/// let err = ExError::new(ExErrorKind::NotFound).with_message("not found");
+/// log_op_error!("read_ettle", err, duration_ms = 10u64);
 /// ```
 #[macro_export]
 macro_rules! log_op_error {
     ($op:expr, $err:expr, duration_ms = $duration:expr) => {{
-        use $crate::errors::ExError;
-        let ex_err: ExError = $err.into();
+        let ex_err: $crate::errors::ExError = $err.into();
         tracing::error!(
             component = module_path!(),
             op = $op,
@@ -83,8 +84,7 @@ macro_rules! log_op_error {
         );
     }};
     ($op:expr, $err:expr, duration_ms = $duration:expr, $($field:tt)*) => {{
-        use $crate::errors::ExError;
-        let ex_err: ExError = $err.into();
+        let ex_err: $crate::errors::ExError = $err.into();
         tracing::error!(
             component = module_path!(),
             op = $op,

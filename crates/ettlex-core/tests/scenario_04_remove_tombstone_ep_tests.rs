@@ -1,7 +1,7 @@
 /// Scenario 4: Remove/Tombstone EP
 ///
 /// Tests EP deletion (tombstoning) and active EP projection filtering.
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::ops::{active_eps, ep_ops, ettle_ops, refinement_ops, Store};
 
 #[test]
@@ -36,7 +36,7 @@ fn test_scenario_04_happy_tombstone_ep_disappears_from_active() {
     // AND EP1 still exists but get_ep returns error (deleted)
     let result = store.get_ep(&ep1_id);
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EpDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 #[test]
@@ -69,10 +69,7 @@ fn test_scenario_04_error_delete_only_mapping_ep_strands_child() {
 
     // THEN it should fail with TombstoneStrandsChild error
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::TombstoneStrandsChild { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::StrandsChild);
 }
 
 #[test]
@@ -92,7 +89,7 @@ fn test_scenario_04_error_cannot_delete_ep0() {
 
     // THEN it should fail with CannotDeleteEp0 error
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::CannotDeleteEp0 { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::CannotDelete);
 }
 
 #[test]

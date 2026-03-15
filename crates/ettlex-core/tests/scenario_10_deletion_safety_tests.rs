@@ -1,7 +1,7 @@
 /// Scenario 10: Deletion Safety Tests
 ///
 /// Tests deletion safety constraints (R5 requirement).
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::ops::{ep_ops, ettle_ops, refinement_ops, Store};
 
 #[test]
@@ -32,7 +32,7 @@ fn test_scenario_10_happy_delete_non_mapping_ep() {
     // AND EP1 is tombstoned
     let get_result = store.get_ep(&ep1_id);
     assert!(get_result.is_err());
-    assert!(matches!(get_result, Err(EttleXError::EpDeleted { .. })));
+    assert_eq!(get_result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 #[test]
@@ -64,10 +64,7 @@ fn test_scenario_10_error_delete_only_mapping_ep() {
 
     // THEN it should fail with TombstoneStrandsChild error
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::TombstoneStrandsChild { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::StrandsChild);
 }
 
 #[test]
@@ -105,10 +102,7 @@ fn test_scenario_10_error_delete_referenced_child() {
     // The parent should fail to delete because it has an active child mapping
     let parent_result = ettle_ops::delete_ettle(&mut store, &parent_id);
     assert!(parent_result.is_err());
-    assert!(matches!(
-        parent_result,
-        Err(EttleXError::DeleteWithChildren { .. })
-    ));
+    assert_eq!(parent_result.unwrap_err().kind(), ExErrorKind::CannotDelete);
 }
 
 #[test]
@@ -128,7 +122,7 @@ fn test_scenario_10_cannot_delete_ep0() {
 
     // THEN it should fail with CannotDeleteEp0 error
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::CannotDeleteEp0 { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::CannotDelete);
 }
 
 #[test]

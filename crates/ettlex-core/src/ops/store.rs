@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::{
     Constraint, Decision, DecisionEvidenceItem, DecisionLink, Ep, EpConstraintRef, Ettle,
 };
@@ -50,17 +50,16 @@ impl Store {
     ///
     /// Returns `EttleNotFound` if the ettle doesn't exist, or `EttleDeleted` if it was tombstoned.
     pub fn get_ettle(&self, id: &str) -> Result<&Ettle> {
-        let ettle = self
-            .ettles
-            .get(id)
-            .ok_or_else(|| EttleXError::EttleNotFound {
-                ettle_id: id.to_string(),
-            })?;
+        let ettle = self.ettles.get(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Ettle not found")
+        })?;
 
         if ettle.deleted {
-            return Err(EttleXError::EttleDeleted {
-                ettle_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(id.to_string())
+                .with_message("Ettle was deleted"));
         }
 
         Ok(ettle)
@@ -75,17 +74,16 @@ impl Store {
     ///
     /// Returns `EttleNotFound` if the ettle doesn't exist, or `EttleDeleted` if it was tombstoned.
     pub fn get_ettle_mut(&mut self, id: &str) -> Result<&mut Ettle> {
-        let ettle = self
-            .ettles
-            .get_mut(id)
-            .ok_or_else(|| EttleXError::EttleNotFound {
-                ettle_id: id.to_string(),
-            })?;
+        let ettle = self.ettles.get_mut(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Ettle not found")
+        })?;
 
         if ettle.deleted {
-            return Err(EttleXError::EttleDeleted {
-                ettle_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(id.to_string())
+                .with_message("Ettle was deleted"));
         }
 
         Ok(ettle)
@@ -99,14 +97,16 @@ impl Store {
     ///
     /// Returns `EpNotFound` if the EP doesn't exist, or `EpDeleted` if it was tombstoned.
     pub fn get_ep(&self, id: &str) -> Result<&Ep> {
-        let ep = self.eps.get(id).ok_or_else(|| EttleXError::EpNotFound {
-            ep_id: id.to_string(),
+        let ep = self.eps.get(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_ep_id(id.to_string())
+                .with_message("EP not found")
         })?;
 
         if ep.deleted {
-            return Err(EttleXError::EpDeleted {
-                ep_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_ep_id(id.to_string())
+                .with_message("EP was deleted"));
         }
 
         Ok(ep)
@@ -121,17 +121,16 @@ impl Store {
     ///
     /// Returns `EpNotFound` if the EP doesn't exist, or `EpDeleted` if it was tombstoned.
     pub fn get_ep_mut(&mut self, id: &str) -> Result<&mut Ep> {
-        let ep = self
-            .eps
-            .get_mut(id)
-            .ok_or_else(|| EttleXError::EpNotFound {
-                ep_id: id.to_string(),
-            })?;
+        let ep = self.eps.get_mut(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_ep_id(id.to_string())
+                .with_message("EP not found")
+        })?;
 
         if ep.deleted {
-            return Err(EttleXError::EpDeleted {
-                ep_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_ep_id(id.to_string())
+                .with_message("EP was deleted"));
         }
 
         Ok(ep)
@@ -197,17 +196,16 @@ impl Store {
     /// Returns `ConstraintNotFound` if the constraint doesn't exist,
     /// or `ConstraintDeleted` if it was tombstoned.
     pub fn get_constraint(&self, id: &str) -> Result<&Constraint> {
-        let constraint =
-            self.constraints
-                .get(id)
-                .ok_or_else(|| EttleXError::ConstraintNotFound {
-                    constraint_id: id.to_string(),
-                })?;
+        let constraint = self.constraints.get(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Constraint not found")
+        })?;
 
         if constraint.is_deleted() {
-            return Err(EttleXError::ConstraintDeleted {
-                constraint_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(id.to_string())
+                .with_message("Constraint was deleted"));
         }
 
         Ok(constraint)
@@ -222,17 +220,16 @@ impl Store {
     /// Returns `ConstraintNotFound` if the constraint doesn't exist,
     /// or `ConstraintDeleted` if it was tombstoned.
     pub fn get_constraint_mut(&mut self, id: &str) -> Result<&mut Constraint> {
-        let constraint =
-            self.constraints
-                .get_mut(id)
-                .ok_or_else(|| EttleXError::ConstraintNotFound {
-                    constraint_id: id.to_string(),
-                })?;
+        let constraint = self.constraints.get_mut(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Constraint not found")
+        })?;
 
         if constraint.is_deleted() {
-            return Err(EttleXError::ConstraintDeleted {
-                constraint_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(id.to_string())
+                .with_message("Constraint was deleted"));
         }
 
         Ok(constraint)
@@ -293,11 +290,11 @@ impl Store {
     ///
     /// Returns `ConstraintNotFound` if the constraint doesn't exist.
     pub fn get_constraint_including_deleted(&self, id: &str) -> Result<&Constraint> {
-        self.constraints
-            .get(id)
-            .ok_or_else(|| EttleXError::ConstraintNotFound {
-                constraint_id: id.to_string(),
-            })
+        self.constraints.get(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Constraint not found")
+        })
     }
 
     // ===== Decision Methods =====
@@ -311,17 +308,16 @@ impl Store {
     /// Returns `DecisionNotFound` if the decision doesn't exist,
     /// or `DecisionDeleted` if it was tombstoned.
     pub fn get_decision(&self, id: &str) -> Result<&Decision> {
-        let decision = self
-            .decisions
-            .get(id)
-            .ok_or_else(|| EttleXError::DecisionNotFound {
-                decision_id: id.to_string(),
-            })?;
+        let decision = self.decisions.get(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Decision not found")
+        })?;
 
         if decision.is_tombstoned() {
-            return Err(EttleXError::DecisionDeleted {
-                decision_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(id.to_string())
+                .with_message("Decision was deleted"));
         }
 
         Ok(decision)
@@ -336,17 +332,16 @@ impl Store {
     /// Returns `DecisionNotFound` if the decision doesn't exist,
     /// or `DecisionDeleted` if it was tombstoned.
     pub fn get_decision_mut(&mut self, id: &str) -> Result<&mut Decision> {
-        let decision = self
-            .decisions
-            .get_mut(id)
-            .ok_or_else(|| EttleXError::DecisionNotFound {
-                decision_id: id.to_string(),
-            })?;
+        let decision = self.decisions.get_mut(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Decision not found")
+        })?;
 
         if decision.is_tombstoned() {
-            return Err(EttleXError::DecisionDeleted {
-                decision_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::Deleted)
+                .with_entity_id(id.to_string())
+                .with_message("Decision was deleted"));
         }
 
         Ok(decision)
@@ -361,11 +356,11 @@ impl Store {
     ///
     /// Returns `DecisionNotFound` if the decision doesn't exist at all.
     pub fn get_decision_including_deleted(&self, id: &str) -> Result<&Decision> {
-        self.decisions
-            .get(id)
-            .ok_or_else(|| EttleXError::DecisionNotFound {
-                decision_id: id.to_string(),
-            })
+        self.decisions.get(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_entity_id(id.to_string())
+                .with_message("Decision not found")
+        })
     }
 
     /// Insert a Decision into the store
@@ -382,11 +377,10 @@ impl Store {
     ///
     /// Returns `NotFound` if the evidence item doesn't exist.
     pub fn get_evidence_item(&self, id: &str) -> Result<&DecisionEvidenceItem> {
-        self.decision_evidence_items
-            .get(id)
-            .ok_or_else(|| EttleXError::Internal {
-                message: format!("Evidence item not found: {}", id),
-            })
+        self.decision_evidence_items.get(id).ok_or_else(|| {
+            ExError::new(ExErrorKind::Internal)
+                .with_message(format!("Evidence item not found: {}", id))
+        })
     }
 
     /// Insert a DecisionEvidenceItem into the store
@@ -512,7 +506,8 @@ mod tests {
         let store = Store::new();
         let result = store.get_ettle("nonexistent");
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::EttleNotFound { .. })));
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
     }
 
     #[test]
@@ -525,6 +520,7 @@ mod tests {
 
         let result = store.get_ettle("ettle-1");
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::EttleDeleted { .. })));
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
     }
 }

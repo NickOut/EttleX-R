@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use ettlex_core::errors::{EttleXError, ExErrorKind};
+use ettlex_core::errors::{ExError, ExErrorKind};
 use ettlex_core::logging_facility::test_capture::init_test_capture;
 use ettlex_core::{log_op_end, log_op_error, log_op_start};
 use ettlex_core_types::schema::{EVENT_END, EVENT_END_ERROR, EVENT_START};
@@ -48,9 +48,9 @@ fn test_log_op_error_includes_kind() {
     let capture = init_test_capture();
     let op_name = "test_log_op_error_unique_3";
 
-    let err = EttleXError::EttleNotFound {
-        ettle_id: "e1".to_string(),
-    };
+    let err = ExError::new(ExErrorKind::NotFound)
+        .with_entity_id("e1")
+        .with_message("Ettle not found");
     log_op_error!(op_name, err, duration_ms = 10);
 
     let events = capture.events();
@@ -97,9 +97,9 @@ fn test_error_event_includes_error_code() {
     let capture = init_test_capture();
     let op_name = "test_error_event_unique_5";
 
-    let err = EttleXError::CycleDetected {
-        ettle_id: "e1".to_string(),
-    };
+    let err = ExError::new(ExErrorKind::CycleDetected)
+        .with_entity_id("e1")
+        .with_message("Cycle detected");
     log_op_error!(op_name, err, duration_ms = 5);
 
     capture.assert_event_exists(op_name, EVENT_END_ERROR);
@@ -184,10 +184,9 @@ fn test_error_conversion_preserves_context() {
     let capture = init_test_capture();
     let op_name = "test_error_conversion_unique_9";
 
-    let err = EttleXError::DeleteWithChildren {
-        ettle_id: "e1".to_string(),
-        child_count: 3,
-    };
+    let err = ExError::new(ExErrorKind::CannotDelete)
+        .with_entity_id("e1")
+        .with_message("Cannot delete: has 3 children");
 
     log_op_error!(op_name, err.clone(), duration_ms = 5);
 
@@ -197,10 +196,8 @@ fn test_error_conversion_preserves_context() {
         .find(|e| e.op.as_deref() == Some(op_name) && e.event.as_deref() == Some(EVENT_END_ERROR))
         .expect("Should have error event for this test");
 
-    // Verify the error was converted to ExError with correct kind
-    use ettlex_core::errors::ExError;
-    let ex_err: ExError = err.into();
-    assert_eq!(ex_err.kind(), ExErrorKind::CannotDelete);
+    // Verify the error kind
+    assert_eq!(err.kind(), ExErrorKind::CannotDelete);
 
     // Verify the error code is in the logged event
     assert_eq!(

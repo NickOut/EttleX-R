@@ -4,7 +4,7 @@
 //! Also covers Phase 1 error kind additions and Phase 3 engine evaluate().
 
 use ettlex_core::constraint_engine::{ConstraintEvalCtx, ConstraintFamilyStatus};
-use ettlex_core::errors::{EttleXError, ExErrorKind};
+use ettlex_core::errors::{ExError, ExErrorKind};
 use ettlex_core::model::{Constraint, Ep, EpConstraintRef, Ettle};
 use ettlex_core::ops::constraint_ops;
 use ettlex_core::ops::Store;
@@ -35,41 +35,37 @@ fn test_constraint_error_kind_codes() {
 
 #[test]
 fn test_bridge_constraint_already_exists_maps_to_already_exists() {
-    let err: ettlex_core::errors::ExError = EttleXError::ConstraintAlreadyExists {
-        constraint_id: "c1".to_string(),
-    }
-    .into();
+    let err = ExError::new(ExErrorKind::AlreadyExists)
+        .with_entity_id("c1")
+        .with_message("Constraint already exists");
     assert_eq!(err.kind(), ExErrorKind::AlreadyExists);
     assert_eq!(err.code(), "ERR_ALREADY_EXISTS");
 }
 
 #[test]
 fn test_bridge_constraint_tombstoned_maps_to_constraint_tombstoned() {
-    let err: ettlex_core::errors::ExError = EttleXError::ConstraintTombstoned {
-        constraint_id: "c1".to_string(),
-    }
-    .into();
+    let err = ExError::new(ExErrorKind::ConstraintTombstoned)
+        .with_entity_id("c1")
+        .with_message("Constraint tombstoned");
     assert_eq!(err.kind(), ExErrorKind::ConstraintTombstoned);
     assert_eq!(err.code(), "ERR_CONSTRAINT_TOMBSTONED");
 }
 
 #[test]
 fn test_bridge_constraint_already_attached_maps_to_duplicate_attachment() {
-    let err: ettlex_core::errors::ExError = EttleXError::ConstraintAlreadyAttached {
-        constraint_id: "c1".to_string(),
-        ep_id: "ep1".to_string(),
-    }
-    .into();
+    let err = ExError::new(ExErrorKind::DuplicateAttachment)
+        .with_entity_id("c1")
+        .with_ep_id("ep1")
+        .with_message("Constraint already attached");
     assert_eq!(err.kind(), ExErrorKind::DuplicateAttachment);
     assert_eq!(err.code(), "ERR_DUPLICATE_ATTACHMENT");
 }
 
 #[test]
 fn test_bridge_invalid_constraint_family_maps_to_invalid_constraint_family() {
-    let err: ettlex_core::errors::ExError = EttleXError::InvalidConstraintFamily {
-        constraint_id: "c1".to_string(),
-    }
-    .into();
+    let err = ExError::new(ExErrorKind::InvalidConstraintFamily)
+        .with_entity_id("c1")
+        .with_message("Invalid constraint family");
     assert_eq!(err.kind(), ExErrorKind::InvalidConstraintFamily);
     assert_eq!(err.code(), "ERR_INVALID_CONSTRAINT_FAMILY");
 }

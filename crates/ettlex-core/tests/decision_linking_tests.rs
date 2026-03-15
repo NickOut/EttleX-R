@@ -3,6 +3,7 @@
 //! Tests scenarios 8, 14-21 from seed_decision_schema_stubs_v2.yaml
 //! Phase 2: Linking & Supersession with validation
 
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::ops::Store;
 use ettlex_core::ops::{decision_ops, ep_ops, ettle_ops};
 
@@ -64,10 +65,7 @@ fn test_scenario_8_tombstone_prevents_new_linking() {
     // Verify it's tombstoned
     let result = store.get_decision(&decision_id);
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::DecisionDeleted { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 
     // Try to link tombstoned decision - should fail
     let result = decision_ops::attach_decision_to_target(
@@ -80,10 +78,7 @@ fn test_scenario_8_tombstone_prevents_new_linking() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::DecisionTombstoned { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::DecisionTombstoned);
 }
 
 // Scenario 14: Link decision to EP with deterministic ordering
@@ -157,10 +152,7 @@ fn test_scenario_15_duplicate_link_rejected() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::DuplicateDecisionLink { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::DuplicateLink);
 }
 
 // Scenario 16: Unlink removes link but preserves decision history
@@ -212,10 +204,7 @@ fn test_scenario_17_link_rejects_unknown_decision() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::DecisionNotFound { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 // Scenario 18: Link rejects unknown EP id
@@ -235,10 +224,7 @@ fn test_scenario_18_link_rejects_unknown_ep() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::EpNotFound { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 // Scenario 19: Link rejects unknown target_kind unless explicitly allowed
@@ -258,10 +244,7 @@ fn test_scenario_19_link_rejects_invalid_target_kind() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidTargetKind { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidTargetKind);
 }
 
 // Scenario 20: Supersede creates a deterministic supersedes link

@@ -1,7 +1,7 @@
 /// Scenario 3: Add EP to Ettle
 ///
 /// Tests adding EPs to an Ettle and verifying active EP projection.
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::ops::{active_eps, ep_ops, ettle_ops, Store};
 
 #[test]
@@ -55,10 +55,7 @@ fn test_scenario_03_error_duplicate_ordinal() {
 
     // THEN it should fail with OrdinalAlreadyExists error
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::OrdinalAlreadyExists { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidOrdinal);
 }
 
 #[test]
@@ -85,7 +82,7 @@ fn test_scenario_03_error_add_to_tombstoned_ettle() {
 
     // THEN it should fail with EttleDeleted error
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 #[test]

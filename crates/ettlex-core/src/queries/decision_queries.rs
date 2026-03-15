@@ -3,7 +3,7 @@
 //! This module provides read-only query operations for decisions with
 //! deterministic ordering, pagination, and filtering.
 
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::{Decision, DecisionLink};
 use crate::ops::Store;
 use crate::traversal::ept::compute_ept;
@@ -391,23 +391,23 @@ fn encode_cursor(created_at_ms: i64, decision_id: &str) -> String {
 /// Returns (created_at_ms, decision_id) tuple
 fn decode_cursor(cursor: &str) -> Result<Option<(i64, String)>> {
     let decoded = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, cursor)
-        .map_err(|_| EttleXError::Internal {
-            message: "Invalid cursor: base64 decode failed".to_string(),
+        .map_err(|_| {
+            ExError::new(ExErrorKind::Internal).with_message("Invalid cursor: base64 decode failed")
         })?;
 
-    let cursor_str = String::from_utf8(decoded).map_err(|_| EttleXError::Internal {
-        message: "Invalid cursor: UTF-8 decode failed".to_string(),
+    let cursor_str = String::from_utf8(decoded).map_err(|_| {
+        ExError::new(ExErrorKind::Internal).with_message("Invalid cursor: UTF-8 decode failed")
     })?;
 
     let parts: Vec<&str> = cursor_str.split('|').collect();
     if parts.len() != 2 {
-        return Err(EttleXError::Internal {
-            message: "Invalid cursor: wrong format".to_string(),
-        });
+        return Err(
+            ExError::new(ExErrorKind::Internal).with_message("Invalid cursor: wrong format")
+        );
     }
 
-    let created_at_ms = parts[0].parse::<i64>().map_err(|_| EttleXError::Internal {
-        message: "Invalid cursor: timestamp parse failed".to_string(),
+    let created_at_ms = parts[0].parse::<i64>().map_err(|_| {
+        ExError::new(ExErrorKind::Internal).with_message("Invalid cursor: timestamp parse failed")
     })?;
 
     let decision_id = parts[1].to_string();

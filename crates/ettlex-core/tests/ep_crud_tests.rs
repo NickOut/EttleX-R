@@ -2,8 +2,8 @@ mod common;
 
 use common::new_store;
 use ettlex_core::{
+    errors::ExErrorKind,
     ops::{ep_ops, ettle_ops},
-    EttleXError,
 };
 
 // ===== CREATE EP TESTS =====
@@ -52,7 +52,7 @@ fn test_create_ep_fails_on_nonexistent_ettle() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 #[test]
@@ -73,10 +73,7 @@ fn test_create_ep_fails_on_duplicate_ordinal() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::OrdinalAlreadyExists { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidOrdinal);
 }
 
 // ===== READ EP TESTS =====
@@ -110,7 +107,7 @@ fn test_read_ep_fails_on_nonexistent() {
     let result = ep_ops::read_ep(&store, "nonexistent-ep");
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EpNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 #[test]
@@ -134,7 +131,7 @@ fn test_read_ep_fails_on_deleted() {
 
     let result = ep_ops::read_ep(&store, &ep_id);
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EpDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 // ===== UPDATE EP TESTS =====
@@ -254,7 +251,7 @@ fn test_delete_ep_tombstones_when_no_child() {
     // Verify tombstoned
     let result = store.get_ep(&ep_id);
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EpDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 #[test]
@@ -287,10 +284,7 @@ fn test_delete_ep_fails_when_ep_has_child() {
     let result = ep_ops::delete_ep(&mut store, &ep_id);
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::TombstoneStrandsChild { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::StrandsChild);
 }
 
 #[test]
@@ -299,5 +293,5 @@ fn test_delete_ep_fails_on_nonexistent() {
     let result = ep_ops::delete_ep(&mut store, "nonexistent");
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EpNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }

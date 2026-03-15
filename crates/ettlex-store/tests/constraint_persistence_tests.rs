@@ -5,6 +5,7 @@
 //! 2. Stable ordering
 //! 3. Historical preservation (tombstoning)
 
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::model::{Constraint, Ep, EpConstraintRef, Ettle};
 use ettlex_store::repo::{hydration, SqliteRepo};
 use rusqlite::Connection;
@@ -415,10 +416,7 @@ fn test_hydration_loads_deleted_constraints() {
     let loaded = store.get_constraint("c1");
     // Should return error because constraint is deleted
     assert!(loaded.is_err());
-    assert!(matches!(
-        loaded,
-        Err(ettlex_core::errors::EttleXError::ConstraintDeleted { .. })
-    ));
+    assert_eq!(loaded.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 #[test]

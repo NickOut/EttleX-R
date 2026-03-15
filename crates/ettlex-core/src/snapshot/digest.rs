@@ -34,7 +34,7 @@ use sha2::{Digest, Sha256};
 ///
 /// ## Errors
 ///
-/// Returns `EttleXError::Serialization` if JSON serialization fails.
+/// Returns `Serialization error` if JSON serialization fails.
 ///
 /// ## Example
 ///
@@ -65,7 +65,7 @@ pub fn compute_ept_digest(ept: &[String]) -> Result<String> {
 ///
 /// ## Errors
 ///
-/// Returns `EttleXError::Serialization` if JSON serialization fails.
+/// Returns `Serialization error` if JSON serialization fails.
 pub fn compute_manifest_digest(manifest: &SnapshotManifest) -> Result<String> {
     let canonical = serde_json::to_string(manifest)?;
     Ok(hash_string(&canonical))
@@ -87,7 +87,7 @@ pub fn compute_manifest_digest(manifest: &SnapshotManifest) -> Result<String> {
 ///
 /// ## Errors
 ///
-/// Returns `EttleXError::Serialization` if JSON serialization fails.
+/// Returns `Serialization error` if JSON serialization fails.
 ///
 /// ## Idempotency Property
 ///

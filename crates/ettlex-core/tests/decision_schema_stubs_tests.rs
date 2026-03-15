@@ -3,6 +3,7 @@
 //! Tests scenarios from seed_decision_schema_stubs_v2.yaml
 //! Phase 1: Scenarios 1-7, 28 (CRUD + evidence validation + non-snapshot-semantic)
 
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::model::{Ep, Ettle};
 use ettlex_core::ops::Store;
 use ettlex_core::ops::{decision_ops, ep_ops, ettle_ops};
@@ -64,10 +65,7 @@ fn test_scenario_2_create_decision_rejects_missing_title() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidDecision { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidDecision);
 }
 
 // Scenario 3: Create decision rejects missing decision_text
@@ -91,10 +89,7 @@ fn test_scenario_3_create_decision_rejects_missing_decision_text() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidDecision { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidDecision);
 }
 
 // Scenario 4: Create decision rejects missing rationale
@@ -118,10 +113,7 @@ fn test_scenario_4_create_decision_rejects_missing_rationale() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidDecision { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidDecision);
 }
 
 // Scenario 5: Create decision supports explicit decision_id
@@ -186,10 +178,7 @@ fn test_scenario_6_create_decision_rejects_duplicate_id() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::AlreadyExists { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::ConstraintViolation);
 }
 
 // Scenario 7: Update decision modifies updated_at and preserves created_at
@@ -293,10 +282,7 @@ fn test_scenario_10_create_decision_rejects_capture_without_content() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidEvidence { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidEvidence);
 }
 
 // Scenario 11: Create decision accepts file evidence with repo-relative path
@@ -350,10 +336,7 @@ fn test_scenario_12_create_decision_rejects_file_without_path() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidEvidence { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidEvidence);
 }
 
 // Scenario 13: Create decision rejects absolute file paths
@@ -377,10 +360,7 @@ fn test_scenario_13_create_decision_rejects_absolute_paths() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidEvidencePath { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidEvidencePath);
 }
 
 // Scenario 28: Decisions do not affect snapshot manifest bytes or semantic digest
@@ -822,10 +802,7 @@ fn test_scenario_35_evidence_file_paths_relative() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(ettlex_core::errors::EttleXError::InvalidEvidencePath { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidEvidencePath);
 
     // Relative path should succeed
     let result = decision_ops::create_decision(

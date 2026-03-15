@@ -12,9 +12,10 @@
 
 use ettlex_core::{
     apply,
+    errors::ExErrorKind,
     ops::{decision_ops, ep_ops, ettle_ops, refinement_ops},
     policy::NeverAnchoredPolicy,
-    Command, EttleXError, Metadata, Store,
+    Command, Metadata, Store,
 };
 
 #[test]
@@ -108,7 +109,7 @@ fn test_command_ettle_delete() {
 
     // Ettle should be tombstoned
     let result = new_state.get_ettle(&ettle_id);
-    assert!(matches!(result, Err(EttleXError::EttleDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 #[test]
@@ -296,7 +297,7 @@ fn test_command_error_ettle_create_invalid_title() {
     let policy = NeverAnchoredPolicy;
     let result = apply(state, cmd, &policy);
 
-    assert!(matches!(result, Err(EttleXError::InvalidTitle { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidTitle);
 }
 
 #[test]
@@ -317,7 +318,7 @@ fn test_command_error_ep_create_invalid_what() {
     let policy = NeverAnchoredPolicy;
     let result = apply(state, cmd, &policy);
 
-    assert!(matches!(result, Err(EttleXError::InvalidWhat { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidInput);
 }
 
 #[test]
@@ -349,10 +350,7 @@ fn test_command_error_refine_link_child_already_has_parent() {
     let policy = NeverAnchoredPolicy;
     let result = apply(state, cmd, &policy);
 
-    assert!(matches!(
-        result,
-        Err(EttleXError::ChildAlreadyHasParent { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::IllegalReparent);
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 //! All operations follow the TES (Temporal Event Sourcing) pattern and maintain
 //! deterministic ordering for query operations.
 
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::{Decision, DecisionEvidenceItem, DecisionLink};
 use crate::ops::store::Store;
 
@@ -51,19 +51,16 @@ pub fn create_decision(
 ) -> Result<String> {
     // Validate required fields
     if title.trim().is_empty() {
-        return Err(EttleXError::InvalidDecision {
-            reason: "Title cannot be empty".to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::InvalidDecision)
+            .with_message("Title cannot be empty".to_string()));
     }
     if decision_text.trim().is_empty() {
-        return Err(EttleXError::InvalidDecision {
-            reason: "Decision text cannot be empty".to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::InvalidDecision)
+            .with_message("Decision text cannot be empty".to_string()));
     }
     if rationale.trim().is_empty() {
-        return Err(EttleXError::InvalidDecision {
-            reason: "Rationale cannot be empty".to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::InvalidDecision)
+            .with_message("Rationale cannot be empty".to_string()));
     }
 
     // Validate evidence rules
@@ -82,9 +79,9 @@ pub fn create_decision(
 
     // Check for duplicate
     if store.decisions.contains_key(&final_decision_id) {
-        return Err(EttleXError::AlreadyExists {
-            entity_id: final_decision_id,
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_entity_id(final_decision_id)
+            .with_message("Entity already exists"));
     }
 
     // Handle evidence capture if provided
@@ -132,39 +129,38 @@ fn validate_evidence(
                 || evidence_capture_content.is_some()
                 || evidence_file_path.is_some()
             {
-                return Err(EttleXError::InvalidEvidence {
-                    reason: "evidence_kind 'none' does not allow evidence fields".to_string(),
-                });
+                return Err(ExError::new(ExErrorKind::InvalidEvidence).with_message(
+                    "evidence_kind 'none' does not allow evidence fields".to_string(),
+                ));
             }
         }
         "excerpt" => {
             // Requires evidence_excerpt
             if evidence_excerpt.is_none() {
-                return Err(EttleXError::InvalidEvidence {
-                    reason: "evidence_kind 'excerpt' requires evidence_excerpt".to_string(),
-                });
+                return Err(ExError::new(ExErrorKind::InvalidEvidence).with_message(
+                    "evidence_kind 'excerpt' requires evidence_excerpt".to_string(),
+                ));
             }
         }
         "capture" => {
             // Requires evidence_capture_content OR evidence_excerpt
             if evidence_capture_content.is_none() && evidence_excerpt.is_none() {
-                return Err(EttleXError::InvalidEvidence {
-                    reason: "evidence_kind 'capture' requires evidence_capture_content or evidence_excerpt".to_string(),
-                });
+                return Err(ExError::new(ExErrorKind::InvalidEvidence).with_message(
+                    "evidence_kind 'capture' requires evidence_capture_content or evidence_excerpt"
+                        .to_string(),
+                ));
             }
         }
         "file" => {
             // Requires evidence_file_path (must be relative)
             if let Some(path) = evidence_file_path {
                 if path.starts_with('/') || path.starts_with("\\") {
-                    return Err(EttleXError::InvalidEvidencePath {
-                        reason: "File path must be relative, not absolute".to_string(),
-                    });
+                    return Err(ExError::new(ExErrorKind::InvalidEvidencePath)
+                        .with_message("File path must be relative, not absolute".to_string()));
                 }
             } else {
-                return Err(EttleXError::InvalidEvidence {
-                    reason: "evidence_kind 'file' requires evidence_file_path".to_string(),
-                });
+                return Err(ExError::new(ExErrorKind::InvalidEvidence)
+                    .with_message("evidence_kind 'file' requires evidence_file_path".to_string()));
             }
         }
         _ => {
@@ -283,28 +279,25 @@ pub fn attach_decision_to_target(
     ordinal: i32,
 ) -> Result<()> {
     // Verify decision exists (raw lookup to check tombstoned separately)
-    let decision =
-        store
-            .decisions
-            .get(decision_id)
-            .ok_or_else(|| EttleXError::DecisionNotFound {
-                decision_id: decision_id.to_string(),
-            })?;
+    let decision = store.decisions.get(decision_id).ok_or_else(|| {
+        ExError::new(ExErrorKind::NotFound)
+            .with_entity_id(decision_id.to_string())
+            .with_message("Decision not found")
+    })?;
 
     // Check if tombstoned - return specific error for linking context
     if decision.is_tombstoned() {
-        return Err(EttleXError::DecisionTombstoned {
-            decision_id: decision_id.to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::DecisionTombstoned)
+            .with_entity_id(decision_id.to_string())
+            .with_message("Decision is tombstoned and cannot be linked"));
     }
 
     // Validate target_kind
     match target_kind.as_str() {
         "ep" | "ettle" | "constraint" | "decision" => {}
         _ => {
-            return Err(EttleXError::InvalidTargetKind {
-                target_kind: target_kind.clone(),
-            })
+            return Err(ExError::new(ExErrorKind::InvalidTargetKind)
+                .with_message(format!("Invalid target kind: {}", target_kind.clone())))
         }
     }
 
@@ -327,12 +320,12 @@ pub fn attach_decision_to_target(
 
     // Check if link already exists
     if store.is_decision_linked(decision_id, &target_kind, &target_id, &relation_kind) {
-        return Err(EttleXError::DuplicateDecisionLink {
-            decision_id: decision_id.to_string(),
-            target_kind,
-            target_id,
-            relation_kind,
-        });
+        return Err(ExError::new(ExErrorKind::DuplicateLink)
+            .with_entity_id(decision_id.to_string())
+            .with_message(format!(
+                "Duplicate decision link: target={}:{}, relation={}",
+                target_kind, target_id, relation_kind
+            )));
     }
 
     // Create link
@@ -363,12 +356,12 @@ pub fn detach_decision_from_target(
     relation_kind: &str,
 ) -> Result<()> {
     if !store.is_decision_linked(decision_id, target_kind, target_id, relation_kind) {
-        return Err(EttleXError::DecisionLinkNotFound {
-            decision_id: decision_id.to_string(),
-            target_kind: target_kind.to_string(),
-            target_id: target_id.to_string(),
-            relation_kind: relation_kind.to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::NotFound)
+            .with_entity_id(decision_id.to_string())
+            .with_message(format!(
+                "Decision link not found: target={}:{}, relation={}",
+                target_kind, target_id, relation_kind
+            )));
     }
 
     store.remove_decision_link(decision_id, target_kind, target_id, relation_kind);
@@ -479,7 +472,9 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::InvalidDecision { .. })));
+        assert!(
+            result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::InvalidDecision
+        );
     }
 
     #[test]

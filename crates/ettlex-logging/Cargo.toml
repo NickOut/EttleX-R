@@ -1,0 +1,16 @@
+[package]
+name = "ettlex-logging"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+ettlex-errors = { workspace = true }
+ettlex-core-types = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+ettlex-errors = { workspace = true }

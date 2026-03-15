@@ -32,7 +32,7 @@ pub mod traversal;
 // Re-export commonly used types
 pub use apply::apply;
 pub use commands::Command;
-pub use errors::{EttleXError, ExError, ExErrorKind, Result};
+pub use errors::{ExError, ExErrorKind, Result};
 pub use model::{Ep, Ettle, Metadata};
 pub use ops::Store;
 pub use policy::{AnchorPolicy, CommitPolicyHook, DenyAllCommitPolicyHook, NoopCommitPolicyHook};

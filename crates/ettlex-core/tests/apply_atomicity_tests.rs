@@ -11,7 +11,7 @@
 //! 4. State ownership transfer semantics
 
 use ettlex_core::{
-    apply, ops::ettle_ops, policy::NeverAnchoredPolicy, Command, EttleXError, Store,
+    apply, errors::ExErrorKind, ops::ettle_ops, policy::NeverAnchoredPolicy, Command, Store,
 };
 
 #[test]
@@ -62,7 +62,7 @@ fn test_apply_fails_without_partial_mutation() {
 
     // THEN the command fails
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::InvalidTitle { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidTitle);
 
     // AND the original state is unchanged (caller still has valid original)
     assert_eq!(original_state.list_ettles().len(), 1);
@@ -85,7 +85,7 @@ fn test_apply_surfaces_typed_errors_never_panics() {
         how: None,
     };
     let result = apply(state.clone(), cmd, &NeverAnchoredPolicy);
-    assert!(matches!(result, Err(EttleXError::InvalidTitle { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidTitle);
 
     // 2. Non-existent Ettle ID
     let cmd = Command::EttleUpdate {
@@ -94,7 +94,7 @@ fn test_apply_surfaces_typed_errors_never_panics() {
         metadata: None,
     };
     let result = apply(state.clone(), cmd, &NeverAnchoredPolicy);
-    assert!(matches!(result, Err(EttleXError::EttleNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 
     // 3. Non-existent EP ID
     let cmd = Command::EpUpdate {
@@ -106,7 +106,7 @@ fn test_apply_surfaces_typed_errors_never_panics() {
         normative: None,
     };
     let result = apply(state.clone(), cmd, &NeverAnchoredPolicy);
-    assert!(matches!(result, Err(EttleXError::EpNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 
     // 4. Invalid EP content (empty WHAT string)
     let mut temp_state = Store::new();
@@ -123,7 +123,7 @@ fn test_apply_surfaces_typed_errors_never_panics() {
         how: String::new(),
     };
     let result = apply(temp_state, cmd, &NeverAnchoredPolicy);
-    assert!(matches!(result, Err(EttleXError::InvalidWhat { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidInput);
 }
 
 #[test]

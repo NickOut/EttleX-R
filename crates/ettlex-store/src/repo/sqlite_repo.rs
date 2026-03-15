@@ -5,6 +5,8 @@
 #![allow(clippy::result_large_err)]
 
 use crate::errors::{from_rusqlite, Result};
+use crate::model::{EttleCursor, EttleListItem, EttleListOpts, EttleListPage, EttleRecord};
+use base64::Engine as _;
 use ettlex_core::errors::{ExError, ExErrorKind};
 use ettlex_core::model::{
     Constraint, Decision, DecisionEvidenceItem, DecisionLink, Ep, EpConstraintRef, Ettle,
@@ -187,6 +189,289 @@ impl SqliteRepo {
 
         Ok(result)
     }
+
+    // -------------------------------------------------------------------------
+    // Ettle v2 CRUD functions (Slice 01)
+    // -------------------------------------------------------------------------
+
+    /// Insert a new Ettle using the v2 schema columns.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_ettle(
+        conn: &Connection,
+        id: &str,
+        title: &str,
+        why: &str,
+        what: &str,
+        how: &str,
+        reasoning_link_id: Option<&str>,
+        reasoning_link_type: Option<&str>,
+        created_at: &str,
+        updated_at: &str,
+    ) -> Result<()> {
+        conn.execute(
+            "INSERT INTO ettles (id, title, why, what, how, reasoning_link_id, reasoning_link_type, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                id,
+                title,
+                why,
+                what,
+                how,
+                reasoning_link_id,
+                reasoning_link_type,
+                created_at,
+                updated_at,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+        Ok(())
+    }
+
+    /// Get an Ettle record (v2) by ID.
+    /// strings without a type-mismatch error.
+    pub fn get_ettle_record(conn: &Connection, ettle_id: &str) -> Result<Option<EttleRecord>> {
+        let result = conn
+            .query_row(
+                "SELECT id, title, why, what, how, reasoning_link_id, reasoning_link_type, \
+                 created_at, updated_at, tombstoned_at \
+                 FROM ettles WHERE id = ?1",
+                [ettle_id],
+                |row| {
+                    Ok(EttleRecord {
+                        id: row.get(0)?,
+                        title: row.get(1)?,
+                        why: row.get(2)?,
+                        what: row.get(3)?,
+                        how: row.get(4)?,
+                        reasoning_link_id: row.get(5)?,
+                        reasoning_link_type: row.get(6)?,
+                        created_at: row.get(7)?,
+                        updated_at: row.get(8)?,
+                        tombstoned_at: row.get(9)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+        Ok(result)
+    }
+
+    /// List Ettles using cursor-based pagination on (created_at, id).
+    pub fn list_ettles(conn: &Connection, opts: &EttleListOpts) -> Result<EttleListPage> {
+        // Fetch limit+1 rows so we can detect if there's a next page
+        let fetch_limit = opts.limit as i64 + 1;
+
+        fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EttleListItem> {
+            Ok(EttleListItem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                tombstoned_at: row.get(2)?,
+            })
+        }
+
+        let rows: Vec<EttleListItem> = match (&opts.cursor, opts.include_tombstoned) {
+            (Some(c), true) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, tombstoned_at FROM ettles \
+                         WHERE (created_at > ?1 OR (created_at = ?1 AND id > ?2)) \
+                         ORDER BY created_at, id LIMIT ?3",
+                    )
+                    .map_err(from_rusqlite)?;
+                let rows = stmt
+                    .query_map(rusqlite::params![c.created_at, c.id, fetch_limit], map_row)
+                    .map_err(from_rusqlite)?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(from_rusqlite)?;
+                rows
+            }
+            (Some(c), false) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, tombstoned_at FROM ettles \
+                         WHERE tombstoned_at IS NULL \
+                         AND (created_at > ?1 OR (created_at = ?1 AND id > ?2)) \
+                         ORDER BY created_at, id LIMIT ?3",
+                    )
+                    .map_err(from_rusqlite)?;
+                let rows = stmt
+                    .query_map(rusqlite::params![c.created_at, c.id, fetch_limit], map_row)
+                    .map_err(from_rusqlite)?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(from_rusqlite)?;
+                rows
+            }
+            (None, true) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, tombstoned_at FROM ettles \
+                         ORDER BY created_at, id LIMIT ?1",
+                    )
+                    .map_err(from_rusqlite)?;
+                let rows = stmt
+                    .query_map([fetch_limit], map_row)
+                    .map_err(from_rusqlite)?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(from_rusqlite)?;
+                rows
+            }
+            (None, false) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, tombstoned_at FROM ettles \
+                         WHERE tombstoned_at IS NULL \
+                         ORDER BY created_at, id LIMIT ?1",
+                    )
+                    .map_err(from_rusqlite)?;
+                let rows = stmt
+                    .query_map([fetch_limit], map_row)
+                    .map_err(from_rusqlite)?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(from_rusqlite)?;
+                rows
+            }
+        };
+
+        // Detect next page
+        let has_more = rows.len() > opts.limit as usize;
+        let items: Vec<EttleListItem> = rows.into_iter().take(opts.limit as usize).collect();
+
+        let next_cursor = if has_more {
+            // Cursor is based on the last item returned
+            if let Some(last) = items.last() {
+                // Fetch created_at for the last item to build the cursor.
+                // CAST to TEXT so that rows seeded with INTEGER epoch values are
+                // handled without a rusqlite type mismatch.
+                let created_at: String = conn
+                    .query_row(
+                        "SELECT CAST(created_at AS TEXT) FROM ettles WHERE id = ?1",
+                        [&last.id],
+                        |r| r.get(0),
+                    )
+                    .map_err(from_rusqlite)?;
+                let raw = format!("{},{}", created_at, last.id);
+                Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.as_bytes()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok(EttleListPage { items, next_cursor })
+    }
+
+    /// Decode a base64 cursor string into an `EttleCursor`.
+    pub fn decode_ettle_cursor(encoded: &str) -> Result<EttleCursor> {
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(encoded.as_bytes())
+            .map_err(|e| {
+                ExError::new(ExErrorKind::InvalidInput)
+                    .with_op("decode_ettle_cursor")
+                    .with_message(format!("invalid cursor base64: {}", e))
+            })?;
+        let s = String::from_utf8(bytes).map_err(|e| {
+            ExError::new(ExErrorKind::InvalidInput)
+                .with_op("decode_ettle_cursor")
+                .with_message(format!("cursor not valid UTF-8: {}", e))
+        })?;
+        // Split on the LAST comma to handle created_at values that might contain commas
+        let comma_pos = s.rfind(',').ok_or_else(|| {
+            ExError::new(ExErrorKind::InvalidInput)
+                .with_op("decode_ettle_cursor")
+                .with_message("cursor missing comma separator")
+        })?;
+        let created_at = s[..comma_pos].to_string();
+        let id = s[comma_pos + 1..].to_string();
+        Ok(EttleCursor { created_at, id })
+    }
+
+    /// Update an existing Ettle's content fields.
+    ///
+    /// Only `Some` fields are written; `None` means "preserve existing value".
+    /// For `reasoning_link_id` / `reasoning_link_type`, `Some(None)` clears the field.
+    ///
+    /// This implementation fetches the current record, applies the patches, and writes
+    /// all fields in a single UPDATE to avoid dynamic SQL generation.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_ettle(
+        conn: &Connection,
+        id: &str,
+        title: Option<&str>,
+        why: Option<&str>,
+        what: Option<&str>,
+        how: Option<&str>,
+        reasoning_link_id: Option<Option<&str>>,
+        reasoning_link_type: Option<Option<&str>>,
+        updated_at: &str,
+    ) -> Result<()> {
+        // Read current record to apply partial updates
+        let current = SqliteRepo::get_ettle_record(conn, id)?.ok_or_else(|| {
+            ExError::new(ExErrorKind::NotFound)
+                .with_op("update_ettle")
+                .with_entity_id(id)
+                .with_message(format!("Ettle not found: {}", id))
+        })?;
+
+        let new_title = title.unwrap_or(&current.title).to_string();
+        let new_why = why.unwrap_or(&current.why).to_string();
+        let new_what = what.unwrap_or(&current.what).to_string();
+        let new_how = how.unwrap_or(&current.how).to_string();
+        let new_link_id: Option<String> = match reasoning_link_id {
+            Some(Some(v)) => Some(v.to_string()),
+            Some(None) => None,                        // Clear
+            None => current.reasoning_link_id.clone(), // Preserve
+        };
+        let new_link_type: Option<String> = match reasoning_link_type {
+            Some(Some(v)) => Some(v.to_string()),
+            Some(None) => None,                          // Clear
+            None => current.reasoning_link_type.clone(), // Preserve
+        };
+
+        conn.execute(
+            "UPDATE ettles SET title = ?1, why = ?2, what = ?3, how = ?4, \
+             reasoning_link_id = ?5, reasoning_link_type = ?6, updated_at = ?7 \
+             WHERE id = ?8",
+            rusqlite::params![
+                new_title,
+                new_why,
+                new_what,
+                new_how,
+                new_link_id,
+                new_link_type,
+                updated_at,
+                id,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+        Ok(())
+    }
+
+    /// Set `tombstoned_at` on an Ettle.
+    pub fn tombstone_ettle(conn: &Connection, id: &str, tombstoned_at: &str) -> Result<()> {
+        conn.execute(
+            "UPDATE ettles SET tombstoned_at = ?1 WHERE id = ?2",
+            rusqlite::params![tombstoned_at, id],
+        )
+        .map_err(from_rusqlite)?;
+        Ok(())
+    }
+
+    /// Count active (non-tombstoned) Ettles that have `reasoning_link_id = ettle_id`.
+    pub fn get_active_ettle_dependants_count(conn: &Connection, ettle_id: &str) -> Result<u64> {
+        let count: u64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM ettles WHERE reasoning_link_id = ?1 AND tombstoned_at IS NULL",
+                [ettle_id],
+                |r| r.get(0),
+            )
+            .map_err(from_rusqlite)?;
+        Ok(count)
+    }
+
+    // -------------------------------------------------------------------------
+    // End of Ettle v2 CRUD functions
+    // -------------------------------------------------------------------------
 
     /// Get an EP from the database by ID
     pub fn get_ep(conn: &Connection, ep_id: &str) -> Result<Option<Ep>> {

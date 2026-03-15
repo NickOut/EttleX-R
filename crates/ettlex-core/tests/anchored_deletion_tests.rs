@@ -12,9 +12,10 @@
 
 use ettlex_core::{
     apply,
+    errors::ExErrorKind,
     ops::{ep_ops, ettle_ops, refinement_ops},
     policy::{NeverAnchoredPolicy, SelectedAnchoredPolicy},
-    Command, EttleXError, Store,
+    Command, Store,
 };
 use std::collections::HashSet;
 
@@ -217,7 +218,7 @@ fn test_hard_delete_cannot_delete_ep0() {
     let result = apply(state, cmd, &policy);
 
     // THEN it fails with CannotDeleteEp0
-    assert!(matches!(result, Err(EttleXError::CannotDeleteEp0 { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::CannotDelete);
 }
 
 #[test]
@@ -245,10 +246,12 @@ fn test_hard_delete_prevents_stranding_child() {
     // (Note: EP0 deletion is already blocked by CannotDeleteEp0, but this tests the
     // stranding logic that would apply to non-EP0 deletions)
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::CannotDeleteEp0 { .. }) | Err(EttleXError::TombstoneStrandsChild { .. })
-    ));
+    let kind = result.unwrap_err().kind();
+    assert!(
+        kind == ExErrorKind::CannotDelete || kind == ExErrorKind::StrandsChild,
+        "Expected CannotDelete or StrandsChild, got {:?}",
+        kind
+    );
 }
 
 #[test]

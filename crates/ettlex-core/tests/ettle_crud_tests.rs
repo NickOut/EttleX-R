@@ -1,7 +1,8 @@
 mod common;
 
 use common::new_store;
-use ettlex_core::{ops::ettle_ops, EttleXError};
+use ettlex_core::errors::ExErrorKind;
+use ettlex_core::ops::ettle_ops;
 
 // ===== CREATE ETTLE TESTS =====
 
@@ -11,12 +12,17 @@ fn test_create_ettle_fails_on_empty_title() {
     let result = ettle_ops::create_ettle(&mut store, "".to_string(), None, None, None, None);
 
     assert!(result.is_err());
-    match result {
-        Err(EttleXError::InvalidTitle { reason }) => {
-            assert!(reason.contains("empty") || reason.contains("blank"));
-        }
-        _ => panic!("Expected InvalidTitle error"),
-    }
+    let err = result.unwrap_err();
+    assert_eq!(
+        err.kind(),
+        ExErrorKind::InvalidTitle,
+        "Expected InvalidTitle error"
+    );
+    assert!(
+        err.message().to_lowercase().contains("empty")
+            || err.message().to_lowercase().contains("blank"),
+        "Expected message to mention 'empty' or 'blank'"
+    );
 }
 
 #[test]
@@ -26,10 +32,11 @@ fn test_create_ettle_fails_on_whitespace_only_title() {
         ettle_ops::create_ettle(&mut store, "   \t\n  ".to_string(), None, None, None, None);
 
     assert!(result.is_err());
-    match result {
-        Err(EttleXError::InvalidTitle { .. }) => {}
-        _ => panic!("Expected InvalidTitle error"),
-    }
+    assert_eq!(
+        result.unwrap_err().kind(),
+        ExErrorKind::InvalidTitle,
+        "Expected InvalidTitle error"
+    );
 }
 
 #[test]
@@ -85,7 +92,7 @@ fn test_read_ettle_fails_on_nonexistent() {
     let result = ettle_ops::read_ettle(&store, "nonexistent-id");
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 #[test]
@@ -100,7 +107,7 @@ fn test_read_ettle_fails_on_deleted() {
     // Try to read it
     let result = ettle_ops::read_ettle(&store, &ettle_id);
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 // ===== UPDATE ETTLE TESTS =====
@@ -155,7 +162,7 @@ fn test_update_ettle_fails_on_empty_title() {
     let result = ettle_ops::update_ettle(&mut store, &ettle_id, Some("".to_string()), None);
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::InvalidTitle { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidTitle);
 }
 
 // ===== DELETE ETTLE TESTS =====
@@ -171,7 +178,7 @@ fn test_delete_ettle_tombstones_when_no_children() {
     // Verify it's tombstoned (can't read, but still exists in store)
     let result = store.get_ettle(&ettle_id);
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 
     // Verify it's not in list_ettles
     let ettles = store.list_ettles();
@@ -202,10 +209,7 @@ fn test_delete_ettle_fails_when_ettle_has_children() {
     let result = ettle_ops::delete_ettle(&mut store, &parent_id);
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::DeleteWithChildren { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::CannotDelete);
 }
 
 #[test]
@@ -214,7 +218,7 @@ fn test_delete_ettle_fails_on_nonexistent() {
     let result = ettle_ops::delete_ettle(&mut store, "nonexistent");
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 #[test]
@@ -229,5 +233,5 @@ fn test_delete_ettle_fails_on_already_deleted() {
     let result = ettle_ops::delete_ettle(&mut store, &ettle_id);
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleDeleted { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }

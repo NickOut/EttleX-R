@@ -1,4 +1,4 @@
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::ops::Store;
 
 use super::invariants;
@@ -28,102 +28,111 @@ pub fn validate_tree(store: &Store) -> Result<()> {
     // Requirement 1 & 2: Check for unknown EP refs and bidirectional membership
     let unknown_ep_refs = invariants::find_unknown_ep_refs(store);
     if let Some((ettle_id, ep_id)) = unknown_ep_refs.first() {
-        return Err(EttleXError::EpListContainsUnknownId {
-            ettle_id: ettle_id.clone(),
-            ep_id: ep_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_entity_id(ettle_id.clone())
+            .with_message(format!("ep_ids contains unknown EP ID: {}", ep_id.clone())));
     }
 
     let eps_with_unknown_ettle = invariants::find_eps_with_unknown_ettle(store);
     if let Some((ep_id, ettle_id)) = eps_with_unknown_ettle.first() {
-        return Err(EttleXError::EpOwnershipPointsToUnknownEttle {
-            ep_id: ep_id.clone(),
-            ettle_id: ettle_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_ep_id(ep_id.clone())
+            .with_message(format!(
+                "EP has ettle_id pointing to unknown ettle: {}",
+                ettle_id.clone()
+            )));
     }
 
     let membership_inconsistencies = invariants::find_membership_inconsistencies(store);
     if let Some((ep_id, ep_ettle_id, owner_ettle_id)) = membership_inconsistencies.first() {
-        return Err(EttleXError::MembershipInconsistent {
-            ep_id: ep_id.clone(),
-            ep_ettle_id: ep_ettle_id.clone(),
-            owner_ettle_id: owner_ettle_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_ep_id(ep_id.clone())
+            .with_message(format!(
+                "EP has ettle_id={} but is owned by ettle {}",
+                ep_ettle_id.clone(),
+                owner_ettle_id.clone()
+            )));
     }
 
     let ep_orphans = invariants::find_ep_orphans(store);
     if let Some((ep_id, ettle_id)) = ep_orphans.first() {
-        return Err(EttleXError::EpOrphaned {
-            ep_id: ep_id.clone(),
-            ettle_id: ettle_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_ep_id(ep_id.clone())
+            .with_message(format!(
+                "EP points to ettle {} but is not listed in its ep_ids",
+                ettle_id.clone()
+            )));
     }
 
     // Requirement 4: Parent chain integrity
     for ettle in store.list_ettles() {
         if invariants::has_cycle(store, &ettle.id) {
-            return Err(EttleXError::CycleDetected {
-                ettle_id: ettle.id.clone(),
-            });
+            return Err(ExError::new(ExErrorKind::CycleDetected)
+                .with_entity_id(ettle.id.clone())
+                .with_message("Setting parent would create a cycle"));
         }
     }
 
     let orphans = invariants::find_orphans(store);
     if let Some((child_id, parent_id)) = orphans.first() {
-        return Err(EttleXError::OrphanedEttle {
-            ettle_id: child_id.clone(),
-            parent_id: parent_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::NotFound)
+            .with_entity_id(child_id.clone())
+            .with_message(format!("Parent {} does not exist", parent_id.clone())));
     }
 
     // Requirement 6: Refinement mapping integrity (uses active_eps internally)
     let missing_mappings = invariants::find_children_without_ep_mapping(store);
     if let Some((child_id, parent_id)) = missing_mappings.first() {
-        return Err(EttleXError::ChildWithoutEpMapping {
-            child_id: child_id.clone(),
-            parent_id: parent_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_entity_id(child_id.clone())
+            .with_message(format!(
+                "Child has no EP mapping from parent {}",
+                parent_id.clone()
+            )));
     }
 
     let duplicate_ordinals = invariants::find_duplicate_ordinals(store);
     if let Some((ettle_id, ordinal)) = duplicate_ordinals.first() {
-        return Err(EttleXError::DuplicateEpOrdinal {
-            ettle_id: ettle_id.clone(),
-            ordinal: *ordinal,
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_entity_id(ettle_id.clone())
+            .with_ordinal(*ordinal)
+            .with_message("Duplicate EP ordinal"));
     }
 
     let duplicate_mappings = invariants::find_duplicate_child_mappings(store);
     if let Some((child_id, ep_ids)) = duplicate_mappings.first() {
-        return Err(EttleXError::ChildReferencedByMultipleEps {
-            child_id: child_id.clone(),
-            ep_ids: ep_ids.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_entity_id(child_id.clone())
+            .with_message(format!("Referenced by multiple EPs: {:?}", ep_ids.clone(),)));
     }
 
     let invalid_refs = invariants::find_eps_with_nonexistent_children(store);
     if let Some((ep_id, child_id)) = invalid_refs.first() {
-        return Err(EttleXError::EpReferencesNonExistentChild {
-            ep_id: ep_id.clone(),
-            child_id: child_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintViolation)
+            .with_ep_id(ep_id.clone())
+            .with_message(format!(
+                "References non-existent child: {}",
+                child_id.clone()
+            )));
     }
 
     // Requirement 7: Deletion safety constraints
     let deleted_ep_mappings = invariants::find_deleted_ep_mappings(store);
     if let Some(ep_id) = deleted_ep_mappings.first() {
         // This is a data integrity issue - deleted EPs shouldn't have mappings
-        return Err(EttleXError::MappingReferencesDeletedEp {
-            ep_id: ep_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::Deleted)
+            .with_ep_id(ep_id.clone())
+            .with_message("EP has child mapping but EP is deleted"));
     }
 
     let deleted_child_mappings = invariants::find_deleted_child_mappings(store);
     if let Some((ep_id, child_id)) = deleted_child_mappings.first() {
-        return Err(EttleXError::MappingReferencesDeletedChild {
-            ep_id: ep_id.clone(),
-            child_id: child_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::Deleted)
+            .with_ep_id(ep_id.clone())
+            .with_message(format!(
+                "EP maps to deleted child ettle {}",
+                child_id.clone()
+            )));
     }
 
     Ok(())

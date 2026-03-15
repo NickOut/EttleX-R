@@ -1,4 +1,4 @@
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::{Ep, Ettle};
 use crate::ops::Store;
 
@@ -35,21 +35,21 @@ pub fn active_eps<'a>(store: &'a Store, ettle: &Ettle) -> Result<Vec<&'a Ep>> {
     // Collect all EPs listed in ettle.ep_ids
     for ep_id in &ettle.ep_ids {
         // Check if EP exists in store (allow tombstoned EPs)
-        let ep = store
-            .eps
-            .get(ep_id)
-            .ok_or_else(|| EttleXError::EpListContainsUnknownId {
-                ettle_id: ettle.id.clone(),
-                ep_id: ep_id.clone(),
-            })?;
+        let ep = store.eps.get(ep_id).ok_or_else(|| {
+            ExError::new(ExErrorKind::ConstraintViolation)
+                .with_entity_id(ettle.id.clone())
+                .with_message(format!("ep_ids contains unknown EP ID: {}", ep_id.clone()))
+        })?;
 
         // Validate bidirectional membership consistency (R1 requirement)
         if ep.ettle_id != ettle.id {
-            return Err(EttleXError::MembershipInconsistent {
-                ep_id: ep.id.clone(),
-                ep_ettle_id: ep.ettle_id.clone(),
-                owner_ettle_id: ettle.id.clone(),
-            });
+            return Err(ExError::new(ExErrorKind::ConstraintViolation)
+                .with_ep_id(ep.id.clone())
+                .with_message(format!(
+                    "EP has ettle_id={} but is owned by ettle {}",
+                    ep.ettle_id.clone(),
+                    ettle.id.clone()
+                )));
         }
 
         // Only include non-deleted EPs in the active set
@@ -186,10 +186,7 @@ mod tests {
 
         let result = active_eps(&store, &ettle);
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(EttleXError::EpListContainsUnknownId { .. })
-        ));
+        assert_eq!(result.unwrap_err().kind(), ExErrorKind::ConstraintViolation);
     }
 
     #[test]
@@ -212,9 +209,6 @@ mod tests {
 
         let result = active_eps(&store, &ettle);
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(EttleXError::MembershipInconsistent { .. })
-        ));
+        assert_eq!(result.unwrap_err().kind(), ExErrorKind::ConstraintViolation);
     }
 }

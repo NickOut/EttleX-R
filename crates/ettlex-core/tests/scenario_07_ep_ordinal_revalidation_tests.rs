@@ -1,7 +1,7 @@
 /// Scenario 7: EP Ordinal Revalidation
 ///
 /// Tests ordinal uniqueness, immutability, and reuse prevention.
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::ops::{active_eps, ep_ops, ettle_ops, Store};
 
 #[test]
@@ -87,10 +87,7 @@ fn test_scenario_07_error_reuse_tombstoned_ordinal() {
 
     // THEN it should fail with EpOrdinalReuseForbidden error
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::EpOrdinalReuseForbidden { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidOrdinal);
 }
 
 #[test]

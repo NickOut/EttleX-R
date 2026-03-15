@@ -126,16 +126,11 @@ fn collect_leaf_ep_ids_in_subtree(
 
 /// Validate that an EP exists and is a leaf (no child_ettle_id).
 fn validate_leaf_ep(store: &ettlex_core::ops::store::Store, ep_id: &str) -> Result<()> {
-    use ettlex_core::errors::EttleXError;
-
-    store.get_ep(ep_id).map_err(|e| match e {
-        EttleXError::EpNotFound { .. } | EttleXError::EpDeleted { .. } => {
-            ExError::new(ExErrorKind::NotFound)
-                .with_op("validate_leaf_ep")
-                .with_ep_id(ep_id)
-                .with_message("EP not found or deleted")
-        }
-        _ => ExError::from(e),
+    store.get_ep(ep_id).map_err(|_e| {
+        ExError::new(ExErrorKind::NotFound)
+            .with_op("validate_leaf_ep")
+            .with_ep_id(ep_id)
+            .with_message("EP not found or deleted")
     })?;
 
     // An EP is a leaf if no non-deleted ettle claims it as its parent_ep_id.
@@ -316,15 +311,14 @@ pub(crate) fn snapshot_commit_by_leaf(
     validate_leaf_ep(&store, leaf_ep_id)?;
 
     // Get root ettle for this EP (traverse UP via parent_id to find the true root)
-    let ep = store.get_ep(leaf_ep_id).map_err(ExError::from)?;
+    let ep = store.get_ep(leaf_ep_id)?;
     let root_ettle_id = find_ancestor_root(&store, &ep.ettle_id);
 
     // Step 4: Profile resolution → ambiguity_policy + predicate_evaluation_enabled
     let profile = resolve_profile(conn, profile_ref)?;
 
     // Step 5: EPT computation (EptAmbiguous and DeterminismViolation are NOT waivable)
-    let ept = compute_ept(&store, &root_ettle_id, None).map_err(|e| {
-        let ex: ExError = e.into();
+    let ept = compute_ept(&store, &root_ettle_id, None).map_err(|ex| {
         match ex.kind() {
             // Re-map AmbiguousLeafSelection (from EptAmbiguousLeafEp) to EptAmbiguous
             ExErrorKind::AmbiguousLeafSelection => ExError::new(ExErrorKind::EptAmbiguous)
@@ -488,17 +482,13 @@ fn resolve_root_to_leaf(
     store: &ettlex_core::ops::store::Store,
     root_ettle_id: &str,
 ) -> Result<String> {
-    use ettlex_core::errors::EttleXError;
-
     // Verify the root ettle exists first
-    store.get_ettle(root_ettle_id).map_err(|e| match e {
-        EttleXError::EttleNotFound { .. } | EttleXError::EttleDeleted { .. } => {
-            ExError::new(ExErrorKind::NotFound)
-                .with_op("resolve_root_to_leaf")
-                .with_entity_id(root_ettle_id)
-                .with_message("Root ettle not found")
-        }
-        _ => ExError::from(e),
+    store.get_ettle(root_ettle_id).map_err(|e| {
+        ExError::new(ExErrorKind::NotFound)
+            .with_op("resolve_root_to_leaf")
+            .with_entity_id(root_ettle_id)
+            .with_message("Root ettle not found")
+            .with_source(e)
     })?;
 
     let leaf_eps = collect_leaf_ep_ids_in_subtree(store, root_ettle_id);

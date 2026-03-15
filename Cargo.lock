@@ -1145,6 +1145,8 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "ettlex-core-types",
+ "ettlex-errors",
+ "ettlex-logging",
  "hex",
  "proptest",
  "serde",
@@ -1152,7 +1154,6 @@ dependencies = [
  "sha2",
  "thiserror 1.0.69",
  "tracing",
- "tracing-subscriber",
  "uuid",
 ]
 
@@ -1183,6 +1184,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ettlex-errors"
+version = "0.1.0"
+dependencies = [
+ "ettlex-core-types",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "ettlex-logging"
+version = "0.1.0"
+dependencies = [
+ "ettlex-core-types",
+ "ettlex-errors",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ettlex-mcp"
 version = "0.1.0"
 dependencies = [
@@ -1206,6 +1226,7 @@ version = "0.1.0"
 name = "ettlex-store"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "ettlex-core",
  "ettlex-core-types",

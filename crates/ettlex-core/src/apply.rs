@@ -30,7 +30,7 @@
 //! ```
 
 use crate::commands::Command;
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::ops::{constraint_ops, decision_ops, ep_ops, ettle_ops, refinement_ops, Store};
 use crate::policy::AnchorPolicy;
 use crate::rules::validation;
@@ -56,12 +56,12 @@ use crate::rules::validation;
 /// # Returns
 ///
 /// * `Ok(Store)` - New valid state after successful command execution
-/// * `Err(EttleXError)` - Typed error, old state remains valid
+/// * `Err(ExError)` - Typed error, old state remains valid
 ///
 /// # Errors
 ///
 /// Returns an error if the command cannot be applied due to validation failures,
-/// constraint violations, or other domain-specific errors. See `EttleXError` for
+/// constraint violations, or other domain-specific errors. See `ExError` for
 /// the full taxonomy of possible errors.
 ///
 /// # Example
@@ -351,9 +351,10 @@ fn hard_delete_ep(store: &mut Store, ep_id: &str) -> Result<()> {
 
     // Safety check: Cannot delete EP0
     if ep.ordinal == 0 {
-        return Err(EttleXError::CannotDeleteEp0 {
-            ettle_id: ep.ettle_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::CannotDelete)
+            .with_entity_id(ep.ettle_id.clone())
+            .with_ep_id("ep0")
+            .with_message("Cannot delete EP0 (ordinal 0)"));
     }
 
     // Safety check: If EP maps to child, ensure it's not the only mapping
@@ -370,10 +371,12 @@ fn hard_delete_ep(store: &mut Store, ep_id: &str) -> Result<()> {
 
         // If this is the only mapping, deletion would strand the child
         if mapping_count == 1 {
-            return Err(EttleXError::TombstoneStrandsChild {
-                ep_id: ep_id.to_string(),
-                child_id: child_id.clone(),
-            });
+            return Err(ExError::new(ExErrorKind::StrandsChild)
+                .with_ep_id(ep_id.to_string())
+                .with_message(format!(
+                    "It's the only active mapping to child {}",
+                    child_id.clone()
+                )));
         }
     }
 
@@ -381,12 +384,11 @@ fn hard_delete_ep(store: &mut Store, ep_id: &str) -> Result<()> {
     let ettle_id = ep.ettle_id.clone();
 
     // Remove from EP store
-    store
-        .eps
-        .remove(ep_id)
-        .ok_or_else(|| EttleXError::EpNotFound {
-            ep_id: ep_id.to_string(),
-        })?;
+    store.eps.remove(ep_id).ok_or_else(|| {
+        ExError::new(ExErrorKind::NotFound)
+            .with_ep_id(ep_id.to_string())
+            .with_message("EP not found")
+    })?;
 
     // Remove from owning Ettle's ep_ids
     let ettle = store.get_ettle_mut(&ettle_id)?;
@@ -395,10 +397,10 @@ fn hard_delete_ep(store: &mut Store, ep_id: &str) -> Result<()> {
 
     // Verify EP was actually in the ep_ids list
     if ettle.ep_ids.len() == original_len {
-        return Err(EttleXError::DeleteReferencesMissingEpInOwningEttle {
-            ep_id: ep_id.to_string(),
-            ettle_id,
-        });
+        return Err(ExError::new(ExErrorKind::CannotDelete)
+            .with_ep_id(ep_id)
+            .with_entity_id(ettle_id)
+            .with_message("EP not found in owning Ettle's ep_ids list"));
     }
 
     ettle.updated_at = Utc::now();
@@ -563,7 +565,9 @@ mod tests {
 
         let result = apply(state, cmd, &policy);
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::CannotDeleteEp0 { .. })));
+        assert!(
+            result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::CannotDelete
+        );
     }
 
     #[test]
@@ -682,7 +686,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintNotFound { .. })
+            Err(e) if e.kind() == ExErrorKind::NotFound
         ));
     }
 
@@ -712,7 +716,7 @@ mod tests {
         let result = apply(state, cmd, &policy);
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+        assert!(result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::Deleted);
     }
 
     #[test]
@@ -755,7 +759,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintNotFound { .. })
+            Err(e) if e.kind() == ExErrorKind::NotFound
         ));
     }
 
@@ -784,7 +788,7 @@ mod tests {
         let result = apply(state, cmd, &policy);
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+        assert!(result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::Deleted);
     }
 
     #[test]
@@ -842,7 +846,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintNotFound { .. })
+            Err(e) if e.kind() == ExErrorKind::NotFound
         ));
     }
 
@@ -881,7 +885,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintTombstoned { .. })
+            Err(e) if e.kind() == ExErrorKind::ConstraintTombstoned
         ));
     }
 
@@ -911,7 +915,7 @@ mod tests {
         let result = apply(state, cmd, &policy);
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::EpNotFound { .. })));
+        assert!(result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::NotFound);
     }
 
     #[test]
@@ -950,7 +954,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintAlreadyAttached { .. })
+            Err(e) if e.kind() == ExErrorKind::DuplicateAttachment
         ));
     }
 
@@ -1022,7 +1026,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintNotAttached { .. })
+            Err(e) if e.kind() == ExErrorKind::NotFound
         ));
     }
 }

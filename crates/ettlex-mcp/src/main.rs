@@ -179,14 +179,14 @@ fn handle_tools_list() -> Value {
     let tools = vec![
         tool_def(
             "ettlex_apply",
-            "Apply a write command (EttleCreate, EpCreate, EpUpdate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault, PolicyCreate).",
+            "Apply a write command (EttleCreate, EttleUpdate, EttleTombstone, EpCreate, EpUpdate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault, PolicyCreate).",
             json!({
                 "type": "object",
                 "required": ["command"],
                 "properties": {
                     "command": {
                         "type": "object",
-                        "description": "Tagged command object. Required field: tag. Tags: EttleCreate {title}, EpCreate {ettle_id, ordinal, normative?, why?, what?, how?}, EpUpdate {ep_id, why?, what?, how?, title?, normative?}, SnapshotCommit {leaf_ep_id, policy_ref?}, ConstraintCreate {family, kind, scope, payload_json}, ConstraintAttachToEp {ep_id, constraint_id, ordinal}, ProfileCreate {profile_ref, payload_json}, ProfileSetDefault {profile_ref}, PolicyCreate {policy_ref, text}."
+                        "description": "Tagged command object. Required field: tag. Tags: EttleCreate {title, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleUpdate {ettle_id, title?, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleTombstone {ettle_id}, EpCreate {ettle_id, ordinal, normative?, why?, what?, how?}, EpUpdate {ep_id, why?, what?, how?, title?}, SnapshotCommit {leaf_ep_id, policy_ref?}, ConstraintCreate {family, kind, scope, payload_json}, ConstraintAttachToEp {ep_id, constraint_id, ordinal}, ProfileCreate {profile_ref, payload_json}, ProfileSetDefault {profile_ref}, PolicyCreate {policy_ref, text}."
                     },
                     "expected_state_version": {
                         "type": "integer",
@@ -212,8 +212,9 @@ fn handle_tools_list() -> Value {
             json!({
                 "type": "object",
                 "properties": {
-                    "limit": { "type": "integer", "description": "Max results (default 100)" },
-                    "cursor": { "type": "string", "description": "Opaque pagination cursor" }
+                    "limit": { "type": "integer", "description": "Max results 1–500 (default 100)" },
+                    "cursor": { "type": "string", "description": "Opaque pagination cursor" },
+                    "include_tombstoned": { "type": "boolean", "description": "If true, include tombstoned ettles (default false)" }
                 }
             }),
         ),

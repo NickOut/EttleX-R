@@ -1,0 +1,542 @@
+# EttleX Slice Registry
+#
+# This file is the source of truth for all vertical slices implemented in the codebase.
+# It is read by the code generator at plan time and updated on completion of each slice.
+#
+# The `make test-slice` Makefile target derives its test filter from the registered
+# tests across all completed slices. Every test listed here must pass under test-slice.
+#
+# Format:
+#   [[slice]]          — one entry per completed slice
+#   [[slice.tests]]    — one entry per registered test within the slice
+#   [[slice.pre_authorised_failures]]  — tests outside the slice boundary that were
+#                                        expected to fail as a consequence of the slice
+#
+# Status values: "complete" | "in-progress"
+#
+# This file grows monotonically. Entries are never removed.
+# Slices are listed in implementation order.
+
+[[slice]]
+id = "infrastructure-facilities"
+ettle_id = "ettle:019cf0f6-5797-73a3-895a-c42ef4f22e38"
+description = "Extract ettlex-errors and ettlex-logging crates; retire EttleXError across workspace; add AlreadyTombstoned, SelfReferentialLink, HasActiveDependants, MissingLinkType variants"
+layers = ["infrastructure"]
+status = "complete"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_ex_error_builder_all_fields"
+scenario = "SC-01"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_assert_err_kind_passes_on_correct_kind"
+scenario = "SC-02"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_assert_err_kind_fails_on_wrong_kind"
+scenario = "SC-03"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_already_tombstoned_code"
+scenario = "SC-04"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_self_referential_link_code"
+scenario = "SC-05"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_has_active_dependants_code"
+scenario = "SC-06"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_missing_link_type_code"
+scenario = "SC-07"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/errors_tests.rs"
+test = "test_new_variants_distinct"
+scenario = "SC-08"
+
+[[slice.tests]]
+crate = "ettlex-logging"
+file = "tests/logging_tests.rs"
+test = "test_init_development_no_panic"
+scenario = "SC-09"
+
+[[slice.tests]]
+crate = "ettlex-logging"
+file = "tests/logging_tests.rs"
+test = "test_init_test_capture_returns_handle"
+scenario = "SC-10"
+
+[[slice.tests]]
+crate = "ettlex-logging"
+file = "tests/logging_tests.rs"
+test = "test_log_op_start_emits_start_event"
+scenario = "SC-11"
+
+[[slice.tests]]
+crate = "ettlex-logging"
+file = "tests/logging_tests.rs"
+test = "test_log_op_end_emits_end_event_with_duration"
+scenario = "SC-12"
+
+[[slice.tests]]
+crate = "ettlex-logging"
+file = "tests/logging_tests.rs"
+test = "test_log_op_error_emits_error_event_with_err_kind"
+scenario = "SC-13"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_check_banned_patterns_rejects_println"
+scenario = "SC-14"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_check_banned_patterns_rejects_tracing_subscriber_init"
+scenario = "SC-15"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_ettlex_errors_no_core_dep"
+scenario = "SC-16"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_ettlex_logging_no_core_dep"
+scenario = "SC-17"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_ettlex_x_error_not_in_workspace"
+scenario = "SC-18"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_store_public_api_no_ettlex_x_error"
+scenario = "SC-19"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_engine_public_api_no_ettlex_x_error"
+scenario = "SC-20"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_no_direct_tracing_subscriber_init"
+scenario = "SC-21"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_no_println_in_non_test_code"
+scenario = "SC-22"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_from_bridge_not_in_workspace"
+scenario = "SC-23"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_ettlex_x_error_enum_not_defined"
+scenario = "SC-24"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_core_types_correlation_types_present"
+scenario = "SC-25"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_core_types_sensitive_t_present"
+scenario = "SC-26"
+
+[[slice.tests]]
+crate = "ettlex-errors"
+file = "tests/conformance_tests.rs"
+test = "test_core_types_no_workspace_deps"
+scenario = "SC-27"
+
+[[slice]]
+id = "slice-01-ettle-crud"
+ettle_id = "ettle:slice-01"
+description = "Ettle CRUD — Store v2 schema (migration 012), engine handler module, McpCommand dispatch for EttleCreate/EttleUpdate/EttleTombstone, MCP tool handlers for ettle.get and ettle.list"
+layers = ["store", "engine", "mcp"]
+status = "complete"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/ettle_migration_tests.rs"
+test = "test_migration_012_applies_cleanly"
+scenario = "SC-50"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/ettle_migration_tests.rs"
+test = "test_existing_ettle_rows_survive_with_defaults"
+scenario = "SC-51"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_minimal_ettle_succeeds"
+scenario = "SC-01"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_returns_ettle_id"
+scenario = "SC-02"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_with_all_fields_succeeds"
+scenario = "SC-03"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_with_reasoning_link_succeeds"
+scenario = "SC-04"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_empty_title_fails"
+scenario = "SC-05"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_rejects_caller_supplied_id"
+scenario = "SC-06"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_link_without_type_fails"
+scenario = "SC-07"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_type_without_link_fails"
+scenario = "SC-08"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_link_to_nonexistent_ettle_fails"
+scenario = "SC-09"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_link_to_tombstoned_ettle_fails"
+scenario = "SC-10"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_whitespace_only_title_fails"
+scenario = "SC-11"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_get_returns_all_fields"
+scenario = "SC-12"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_get_nonexistent_returns_not_found"
+scenario = "SC-13"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_empty_returns_empty_page"
+scenario = "SC-14"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_single_ettle"
+scenario = "SC-15"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_pagination_cursor"
+scenario = "SC-16"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_limit_zero_fails"
+scenario = "SC-17"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_limit_over_500_fails"
+scenario = "SC-18"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_invalid_cursor_fails"
+scenario = "SC-19"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_excludes_tombstoned_by_default"
+scenario = "SC-20"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_include_tombstoned_flag"
+scenario = "SC-21"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_title_succeeds"
+scenario = "SC-22"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_why_succeeds"
+scenario = "SC-23"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_what_succeeds"
+scenario = "SC-24"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_how_succeeds"
+scenario = "SC-25"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_sets_reasoning_link"
+scenario = "SC-26"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_changes_reasoning_link"
+scenario = "SC-27"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_clears_reasoning_link"
+scenario = "SC-28"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_preserves_unspecified_fields"
+scenario = "SC-29"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_rejects_self_referential_link"
+scenario = "SC-30"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_nonexistent_ettle_fails"
+scenario = "SC-31"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_tombstoned_ettle_fails"
+scenario = "SC-32"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_empty_update_fails"
+scenario = "SC-33"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_link_to_nonexistent_fails"
+scenario = "SC-34"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_update_link_without_type_fails"
+scenario = "SC-35"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_tombstone_active_ettle_succeeds"
+scenario = "SC-36"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_tombstone_nonexistent_ettle_fails"
+scenario = "SC-37"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_tombstone_already_tombstoned_fails"
+scenario = "SC-38"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_tombstone_with_active_dependants_fails"
+scenario = "SC-39"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_tombstone_allows_tombstoned_dependant"
+scenario = "SC-40"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_hard_delete_not_exposed"
+scenario = "SC-41"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_occ_correct_version_succeeds"
+scenario = "SC-42"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_occ_wrong_version_fails"
+scenario = "SC-43"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_each_mutation_appends_one_provenance_event"
+scenario = "SC-44"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_failed_command_no_provenance_event"
+scenario = "SC-45"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_ettle_get_byte_identical"
+scenario = "SC-46"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_ettle_list_byte_identical"
+scenario = "SC-47"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_create_large_fields_succeeds"
+scenario = "SC-48"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_crud_tests.rs"
+test = "test_list_max_limit_succeeds"
+scenario = "SC-49"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_architectural_conformance_tests.rs"
+test = "test_dispatch_no_ettle_business_logic"
+scenario = "SC-52"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_architectural_conformance_tests.rs"
+test = "test_dedicated_handler_functions_exist"
+scenario = "SC-53"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_architectural_conformance_tests.rs"
+test = "test_store_functions_no_domain_validation"
+scenario = "SC-54"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_architectural_conformance_tests.rs"
+test = "test_state_version_owned_by_apply_mcp_command"
+scenario = "SC-55"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_architectural_conformance_tests.rs"
+test = "test_provenance_owned_by_engine_action"
+scenario = "SC-56"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_architectural_conformance_tests.rs"
+test = "test_no_ettle_delete_variant"
+scenario = "SC-57"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/ettle_architectural_conformance_tests.rs"
+test = "test_ettle_handler_no_raw_sql"
+scenario = "SC-58"

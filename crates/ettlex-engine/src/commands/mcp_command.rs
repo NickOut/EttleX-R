@@ -9,7 +9,7 @@
 
 use ettlex_core::approval_router::ApprovalRouter;
 use ettlex_core::errors::{ExError, ExErrorKind};
-use ettlex_core::model::{Constraint, Ep, EpConstraintRef, Ettle};
+use ettlex_core::model::{Constraint, Ep, EpConstraintRef};
 use ettlex_core::policy_provider::PolicyProvider;
 use ettlex_store::cas::FsStore;
 use ettlex_store::errors::Result;
@@ -17,6 +17,8 @@ use ettlex_store::repo::SqliteRepo;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+
+use crate::commands::ettle::{handle_ettle_create, handle_ettle_tombstone, handle_ettle_update};
 
 use crate::commands::engine_command::{apply_engine_command, EngineCommand, EngineCommandResult};
 use crate::commands::snapshot::SnapshotOptions;
@@ -56,7 +58,43 @@ pub enum McpCommand {
         /// Must not be supplied — ID is auto-generated.
         #[serde(default)]
         ettle_id: Option<String>,
+        #[serde(default)]
+        why: Option<String>,
+        #[serde(default)]
+        what: Option<String>,
+        #[serde(default)]
+        how: Option<String>,
+        #[serde(default)]
+        reasoning_link_id: Option<String>,
+        #[serde(default)]
+        reasoning_link_type: Option<String>,
     },
+
+    /// Update an existing Ettle's content fields.
+    ///
+    /// At least one field must be supplied; omitted fields are preserved.
+    /// `reasoning_link_id: null` clears the link. `reasoning_link_id` absent
+    /// preserves the existing value.
+    EttleUpdate {
+        ettle_id: String,
+        #[serde(default)]
+        title: Option<String>,
+        #[serde(default)]
+        why: Option<String>,
+        #[serde(default)]
+        what: Option<String>,
+        #[serde(default)]
+        how: Option<String>,
+        #[serde(default, deserialize_with = "deserialize_double_option")]
+        reasoning_link_id: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_double_option")]
+        reasoning_link_type: Option<Option<String>>,
+    },
+
+    /// Soft-delete (tombstone) an Ettle.
+    ///
+    /// The Ettle must have no active dependants.
+    EttleTombstone { ettle_id: String },
 
     // ── EP ───────────────────────────────────────────────────────────────────
     /// Create a new EP.
@@ -134,6 +172,22 @@ fn default_true() -> bool {
     true
 }
 
+/// Deserializer for `Option<Option<T>>` that distinguishes absent from null.
+///
+/// - Field absent → `None` (do not update)
+/// - Field `null` → `Some(None)` (clear)
+/// - Field `"value"` → `Some(Some("value"))` (set)
+fn deserialize_double_option<'de, D, T>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    use serde::Deserialize;
+    Ok(Some(Option::<T>::deserialize(deserializer)?))
+}
+
 // ---------------------------------------------------------------------------
 // McpCommandResult
 // ---------------------------------------------------------------------------
@@ -152,6 +206,8 @@ pub enum McpCommandResult {
     EttleCreate {
         ettle_id: String,
     },
+    EttleUpdate,
+    EttleTombstone,
     EpCreate {
         ep_id: String,
     },
@@ -214,7 +270,41 @@ pub fn apply_mcp_command(
     // 3. Dispatch
     let result = dispatch_mcp_command(cmd, conn, cas, policy_provider, approval_router)?;
 
-    // 4. Insert log row
+    // 4. Append provenance event for successful ettle mutations
+    let prov_kind_and_id: Option<(&str, String)> = match &result {
+        McpCommandResult::EttleCreate { ettle_id } => Some(("ettle_created", ettle_id.clone())),
+        McpCommandResult::EttleUpdate => None, // correlation id not available here
+        McpCommandResult::EttleTombstone => None,
+        _ => None,
+    };
+    // We capture what we can; for update/tombstone we just record the kind
+    let prov_kind: Option<&str> = match &result {
+        McpCommandResult::EttleCreate { .. } => Some("ettle_created"),
+        McpCommandResult::EttleUpdate => Some("ettle_updated"),
+        McpCommandResult::EttleTombstone => Some("ettle_tombstoned"),
+        _ => None,
+    };
+    if let Some(kind) = prov_kind {
+        let correlation_id = match &prov_kind_and_id {
+            Some((_, id)) => id.clone(),
+            None => uuid::Uuid::now_v7().to_string(),
+        };
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        conn.execute(
+            "INSERT INTO provenance_events (kind, correlation_id, timestamp) VALUES (?1, ?2, ?3)",
+            rusqlite::params![kind, correlation_id, now_ms],
+        )
+        .map_err(|e| {
+            ExError::new(ExErrorKind::Persistence)
+                .with_op("apply_mcp_command")
+                .with_message(format!("Failed to insert provenance_events row: {}", e))
+        })?;
+    }
+
+    // 5. Insert log row
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -280,25 +370,65 @@ fn dispatch_mcp_command(
             }
         }
 
-        McpCommand::EttleCreate { title, ettle_id } => {
+        McpCommand::EttleCreate {
+            title,
+            ettle_id,
+            why,
+            what,
+            how,
+            reasoning_link_id,
+            reasoning_link_type,
+        } => {
             // Identity contract: caller must not supply an ettle_id
             if ettle_id.is_some() {
                 return Err(ExError::new(ExErrorKind::InvalidInput)
                     .with_op("ettle_create")
                     .with_message("ettle_id must not be supplied; it is auto-generated"));
             }
-            // Validate title is non-empty
-            if title.trim().is_empty() {
-                return Err(ExError::new(ExErrorKind::InvalidInput)
-                    .with_op("ettle_create")
-                    .with_message("title must not be empty"));
-            }
-            let generated_id = format!("ettle:{}", uuid::Uuid::now_v7());
-            let ettle = Ettle::new(generated_id.clone(), title);
-            SqliteRepo::persist_ettle(conn, &ettle)?;
-            Ok(McpCommandResult::EttleCreate {
-                ettle_id: generated_id,
-            })
+            let new_id = handle_ettle_create(
+                conn,
+                &title,
+                why.as_deref(),
+                what.as_deref(),
+                how.as_deref(),
+                reasoning_link_id.as_deref(),
+                reasoning_link_type.as_deref(),
+            )?;
+            Ok(McpCommandResult::EttleCreate { ettle_id: new_id })
+        }
+
+        McpCommand::EttleUpdate {
+            ettle_id,
+            title,
+            why,
+            what,
+            how,
+            reasoning_link_id,
+            reasoning_link_type,
+        } => {
+            // Convert Option<Option<String>> → Option<Option<&str>>
+            // We must bind the inner Option<String> to a local so the &str lives long enough.
+            let link_id_inner: Option<Option<String>> = reasoning_link_id;
+            let link_type_inner: Option<Option<String>> = reasoning_link_type;
+            let link_id_ref: Option<Option<&str>> = link_id_inner.as_ref().map(|v| v.as_deref());
+            let link_type_ref: Option<Option<&str>> =
+                link_type_inner.as_ref().map(|v| v.as_deref());
+            handle_ettle_update(
+                conn,
+                &ettle_id,
+                title.as_deref(),
+                why.as_deref(),
+                what.as_deref(),
+                how.as_deref(),
+                link_id_ref,
+                link_type_ref,
+            )?;
+            Ok(McpCommandResult::EttleUpdate)
+        }
+
+        McpCommand::EttleTombstone { ettle_id } => {
+            handle_ettle_tombstone(conn, &ettle_id)?;
+            Ok(McpCommandResult::EttleTombstone)
         }
 
         McpCommand::EpCreate {
@@ -316,8 +446,8 @@ fn dispatch_mcp_command(
                     .with_op("ep_create")
                     .with_message("ep_id must not be supplied; it is auto-generated"));
             }
-            // Validate that the referenced ettle exists
-            if SqliteRepo::get_ettle(conn, &ettle_id)?.is_none() {
+            // Validate that the referenced ettle exists (use v2 record API)
+            if SqliteRepo::get_ettle_record(conn, &ettle_id)?.is_none() {
                 return Err(ExError::new(ExErrorKind::NotFound)
                     .with_op("ep_create")
                     .with_entity_id(&ettle_id)

@@ -4,7 +4,7 @@
 //! All operations follow the TES (Temporal Event Sourcing) pattern and maintain
 //! deterministic ordering for manifest generation.
 
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::{Constraint, EpConstraintRef};
 use crate::ops::store::Store;
 use serde_json::Value as JsonValue;
@@ -36,15 +36,15 @@ pub fn create_constraint(
     payload_json: JsonValue,
 ) -> Result<()> {
     if family.is_empty() {
-        return Err(EttleXError::InvalidConstraintFamily {
-            constraint_id: constraint_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::InvalidConstraintFamily)
+            .with_entity_id(constraint_id.clone())
+            .with_message("Constraint family is invalid"));
     }
 
     if store.constraints.contains_key(&constraint_id) {
-        return Err(EttleXError::ConstraintAlreadyExists {
-            constraint_id: constraint_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::AlreadyExists)
+            .with_entity_id(constraint_id.clone())
+            .with_message("Constraint already exists"));
     }
 
     let constraint = Constraint::new(constraint_id.clone(), family, kind, scope, payload_json);
@@ -106,9 +106,9 @@ pub fn attach_constraint_to_ep(
     // Verify constraint exists and is not tombstoned
     let constraint = store.get_constraint_including_deleted(&constraint_id)?;
     if constraint.is_deleted() {
-        return Err(EttleXError::ConstraintTombstoned {
-            constraint_id: constraint_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::ConstraintTombstoned)
+            .with_entity_id(constraint_id.clone())
+            .with_message("Constraint is tombstoned and cannot be attached"));
     }
 
     // Verify EP exists and is not deleted
@@ -116,10 +116,10 @@ pub fn attach_constraint_to_ep(
 
     // Check if already attached
     if store.is_constraint_attached_to_ep(&ep_id, &constraint_id) {
-        return Err(EttleXError::ConstraintAlreadyAttached {
-            constraint_id,
-            ep_id,
-        });
+        return Err(ExError::new(ExErrorKind::DuplicateAttachment)
+            .with_entity_id(constraint_id.clone())
+            .with_ep_id(ep_id.clone())
+            .with_message("Constraint is already attached to EP"));
     }
 
     // Create attachment record
@@ -142,10 +142,10 @@ pub fn detach_constraint_from_ep(
     constraint_id: &str,
 ) -> Result<()> {
     if !store.is_constraint_attached_to_ep(ep_id, constraint_id) {
-        return Err(EttleXError::ConstraintNotAttached {
-            constraint_id: constraint_id.to_string(),
-            ep_id: ep_id.to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::NotFound)
+            .with_entity_id(constraint_id.to_string())
+            .with_ep_id(ep_id.to_string())
+            .with_message("Constraint is not attached to EP"));
     }
 
     store.remove_ep_constraint_ref(ep_id, constraint_id);
@@ -282,7 +282,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintNotFound { .. })
+            Err(e) if e.kind() == ExErrorKind::NotFound
         ));
     }
 
@@ -307,7 +307,7 @@ mod tests {
         // Should not be able to get deleted constraint
         let result = store.get_constraint("c1");
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::ConstraintDeleted { .. })));
+        assert!(result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::Deleted);
     }
 
     #[test]
@@ -354,7 +354,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintAlreadyAttached { .. })
+            Err(e) if e.kind() == ExErrorKind::DuplicateAttachment
         ));
     }
 
@@ -379,7 +379,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintTombstoned { .. })
+            Err(e) if e.kind() == ExErrorKind::ConstraintTombstoned
         ));
     }
 
@@ -415,7 +415,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(EttleXError::ConstraintNotAttached { .. })
+            Err(e) if e.kind() == ExErrorKind::NotFound
         ));
     }
 
@@ -455,6 +455,6 @@ mod tests {
 
         let result = list_constraints_for_ep(&store, "nonexistent");
         assert!(result.is_err());
-        assert!(matches!(result, Err(EttleXError::EpNotFound { .. })));
+        assert!(result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::NotFound);
     }
 }

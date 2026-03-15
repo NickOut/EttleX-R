@@ -1,0 +1,9 @@
+Provenance events not being recorded other than for seeds
+
+The logging tests fail due to global state pollution from parallel test runs - a pre-existing issue unrelated to my changes.
+All tests pass with --test-threads=1. The logging tests use a global shared TestCapture that's not thread-safe across test binaries. This is a pre-existing design issue. The logging tests need #[serial] or similar — but rather than add that dependency, I should add a [[test]] section to the
+  Cargo.toml to configure harness settings, or simply note this is a pre-existing condition.
+
+Decisions not recorded
+
+Policy not in DB

@@ -13,7 +13,7 @@
 
 use ettlex_core::apply::apply;
 use ettlex_core::commands::Command;
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::ops::{ep_ops, ettle_ops, Store};
 use ettlex_core::policy::NeverAnchoredPolicy;
 
@@ -92,8 +92,9 @@ fn test_action_apply_ep_update_rejects_empty() {
     let result = apply(store, cmd, &NeverAnchoredPolicy);
 
     assert!(result.is_err(), "Empty EpUpdate must be rejected");
-    assert!(
-        matches!(result.unwrap_err(), EttleXError::EmptyUpdate { .. }),
+    assert_eq!(
+        result.unwrap_err().kind(),
+        ExErrorKind::EmptyUpdate,
         "Error must be EmptyUpdate"
     );
 }
@@ -117,8 +118,9 @@ fn test_action_apply_ep_update_not_found() {
     let result = apply(store, cmd, &NeverAnchoredPolicy);
 
     assert!(result.is_err(), "Update of missing EP must fail");
-    assert!(
-        matches!(result.unwrap_err(), EttleXError::EpNotFound { .. }),
+    assert_eq!(
+        result.unwrap_err().kind(),
+        ExErrorKind::NotFound,
         "Error must be EpNotFound"
     );
 }

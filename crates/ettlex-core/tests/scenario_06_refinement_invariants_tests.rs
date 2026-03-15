@@ -1,7 +1,7 @@
 /// Scenario 6: Refinement Invariants
 ///
 /// Tests refinement tree invariants including EP mappings and child relationships.
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::model::Ep;
 use ettlex_core::ops::{ep_ops, ettle_ops, refinement_ops, Store};
 use ettlex_core::rules::{invariants, validation};
@@ -68,10 +68,7 @@ fn test_scenario_06_error_child_without_ep_mapping() {
     // AND validate_tree fails
     let result = validation::validate_tree(&store);
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::ChildWithoutEpMapping { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::ConstraintViolation);
 }
 
 #[test]
@@ -162,10 +159,7 @@ fn test_scenario_06_error_mapping_references_deleted_ep() {
     // AND validate_tree fails
     let result = validation::validate_tree(&store);
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::MappingReferencesDeletedEp { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
 #[test]
@@ -209,8 +203,5 @@ fn test_scenario_06_error_mapping_to_deleted_child() {
     // AND validate_tree fails
     let result = validation::validate_tree(&store);
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::MappingReferencesDeletedChild { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
 }

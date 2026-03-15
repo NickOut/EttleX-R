@@ -2,7 +2,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use super::{active_eps, store::Store};
-use crate::errors::{EttleXError, Result};
+use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::Ep;
 
 /// Create a new EP with the given parameters
@@ -50,16 +50,16 @@ pub fn create_ep(
 
     // Validate WHAT content (cannot be empty string)
     if !what.is_empty() && what.trim().is_empty() {
-        return Err(EttleXError::InvalidWhat {
-            ep_id: ep_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::InvalidInput)
+            .with_ep_id(ep_id.clone())
+            .with_message("Invalid WHAT content: cannot be empty string"));
     }
 
     // Validate HOW content (cannot be empty string)
     if !how.is_empty() && how.trim().is_empty() {
-        return Err(EttleXError::InvalidHow {
-            ep_id: ep_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::InvalidInput)
+            .with_ep_id(ep_id.clone())
+            .with_message("Invalid HOW content: cannot be empty string"));
     }
 
     // Check if ordinal already exists (including tombstoned EPs)
@@ -70,17 +70,19 @@ pub fn create_ep(
             if existing_ep.ordinal == ordinal {
                 if existing_ep.deleted {
                     // Ordinal reuse forbidden
-                    return Err(EttleXError::EpOrdinalReuseForbidden {
-                        ettle_id: ettle_id.to_string(),
-                        ordinal,
-                        tombstoned_ep_id: existing_ep_id.clone(),
-                    });
+                    return Err(ExError::new(ExErrorKind::InvalidOrdinal)
+                        .with_entity_id(ettle_id)
+                        .with_ordinal(ordinal)
+                        .with_message(format!(
+                            "Ordinal is used by tombstoned EP {}",
+                            existing_ep_id
+                        )));
                 } else {
                     // Active EP with same ordinal
-                    return Err(EttleXError::OrdinalAlreadyExists {
-                        ettle_id: ettle_id.to_string(),
-                        ordinal,
-                    });
+                    return Err(ExError::new(ExErrorKind::InvalidOrdinal)
+                        .with_entity_id(ettle_id)
+                        .with_ordinal(ordinal)
+                        .with_message("Ordinal already exists"));
                 }
             }
         }
@@ -152,26 +154,26 @@ pub fn update_ep(
 ) -> Result<()> {
     // Reject empty update: at least one field must be supplied
     if why.is_none() && what.is_none() && how.is_none() && title.is_none() && normative.is_none() {
-        return Err(EttleXError::EmptyUpdate {
-            ep_id: id.to_string(),
-        });
+        return Err(ExError::new(ExErrorKind::EmptyUpdate)
+            .with_ep_id(id)
+            .with_message("EpUpdate requires at least one field to update"));
     }
 
     // Validate WHAT if provided (cannot be empty string)
     if let Some(ref w) = what {
         if !w.is_empty() && w.trim().is_empty() {
-            return Err(EttleXError::InvalidWhat {
-                ep_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::InvalidInput)
+                .with_ep_id(id.to_string())
+                .with_message("Invalid WHAT content: cannot be empty string"));
         }
     }
 
     // Validate HOW if provided (cannot be empty string)
     if let Some(ref h) = how {
         if !h.is_empty() && h.trim().is_empty() {
-            return Err(EttleXError::InvalidHow {
-                ep_id: id.to_string(),
-            });
+            return Err(ExError::new(ExErrorKind::InvalidInput)
+                .with_ep_id(id.to_string())
+                .with_message("Invalid HOW content: cannot be empty string"));
         }
     }
 
@@ -232,9 +234,10 @@ pub fn delete_ep(store: &mut Store, id: &str) -> Result<()> {
 
     // R5: Cannot delete EP0
     if ep.ordinal == 0 {
-        return Err(EttleXError::CannotDeleteEp0 {
-            ettle_id: ep.ettle_id.clone(),
-        });
+        return Err(ExError::new(ExErrorKind::CannotDelete)
+            .with_entity_id(ep.ettle_id.clone())
+            .with_ep_id("ep0")
+            .with_message("Cannot delete EP0 (ordinal 0)"));
     }
 
     // R5: Check if EP is the only active mapping to its child (deletion safety)
@@ -251,10 +254,12 @@ pub fn delete_ep(store: &mut Store, id: &str) -> Result<()> {
 
         // If this is the only mapping, deletion would strand the child
         if mapping_count == 1 {
-            return Err(EttleXError::TombstoneStrandsChild {
-                ep_id: id.to_string(),
-                child_id: child_id.clone(),
-            });
+            return Err(ExError::new(ExErrorKind::StrandsChild)
+                .with_ep_id(id.to_string())
+                .with_message(format!(
+                    "It's the only active mapping to child {}",
+                    child_id.clone()
+                )));
         }
     }
 

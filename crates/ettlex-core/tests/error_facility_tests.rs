@@ -1,12 +1,10 @@
-use ettlex_core::errors::{EttleXError, ExError, ExErrorKind};
+use ettlex_core::errors::{ExError, ExErrorKind};
 
 #[test]
 fn test_not_found_verifiable_by_kind() {
-    let err = EttleXError::EttleNotFound {
-        ettle_id: "unknown".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::NotFound)
+        .with_entity_id("unknown")
+        .with_message("Ettle not found");
 
     assert_eq!(ex_err.kind(), ExErrorKind::NotFound);
     assert_eq!(ex_err.code(), "ERR_NOT_FOUND");
@@ -15,11 +13,9 @@ fn test_not_found_verifiable_by_kind() {
 
 #[test]
 fn test_deleted_distinct_from_not_found() {
-    let err = EttleXError::EttleDeleted {
-        ettle_id: "deleted-ettle".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::Deleted)
+        .with_entity_id("deleted-ettle")
+        .with_message("Ettle was deleted");
 
     assert_eq!(ex_err.kind(), ExErrorKind::Deleted);
     assert_eq!(ex_err.code(), "ERR_DELETED");
@@ -29,11 +25,8 @@ fn test_deleted_distinct_from_not_found() {
 
 #[test]
 fn test_invalid_title_structured_fields() {
-    let err = EttleXError::InvalidTitle {
-        reason: "Title cannot be empty".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::InvalidTitle)
+        .with_message("Invalid title: Title cannot be empty");
 
     assert_eq!(ex_err.kind(), ExErrorKind::InvalidTitle);
     assert_eq!(ex_err.code(), "ERR_INVALID_TITLE");
@@ -60,11 +53,9 @@ fn test_error_kind_code_mapping() {
 
 #[test]
 fn test_ep_not_found_conversion() {
-    let err = EttleXError::EpNotFound {
-        ep_id: "ep123".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::NotFound)
+        .with_ep_id("ep123")
+        .with_message("EP not found");
 
     assert_eq!(ex_err.kind(), ExErrorKind::NotFound);
     assert_eq!(ex_err.code(), "ERR_NOT_FOUND");
@@ -73,11 +64,9 @@ fn test_ep_not_found_conversion() {
 
 #[test]
 fn test_cycle_detected_conversion() {
-    let err = EttleXError::CycleDetected {
-        ettle_id: "e1".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::CycleDetected)
+        .with_entity_id("e1")
+        .with_message("Cycle detected");
 
     assert_eq!(ex_err.kind(), ExErrorKind::CycleDetected);
     assert_eq!(ex_err.code(), "ERR_CYCLE_DETECTED");
@@ -86,12 +75,10 @@ fn test_cycle_detected_conversion() {
 
 #[test]
 fn test_ordinal_already_exists_conversion() {
-    let err = EttleXError::OrdinalAlreadyExists {
-        ettle_id: "e1".to_string(),
-        ordinal: 5,
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::InvalidOrdinal)
+        .with_entity_id("e1")
+        .with_ordinal(5)
+        .with_message("Ordinal already exists");
 
     assert_eq!(ex_err.kind(), ExErrorKind::InvalidOrdinal);
     assert_eq!(ex_err.code(), "ERR_INVALID_ORDINAL");
@@ -101,12 +88,9 @@ fn test_ordinal_already_exists_conversion() {
 
 #[test]
 fn test_cannot_delete_with_children_conversion() {
-    let err = EttleXError::DeleteWithChildren {
-        ettle_id: "e1".to_string(),
-        child_count: 3,
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::CannotDelete)
+        .with_entity_id("e1")
+        .with_message("Cannot delete: has 3 children");
 
     assert_eq!(ex_err.kind(), ExErrorKind::CannotDelete);
     assert_eq!(ex_err.code(), "ERR_CANNOT_DELETE");
@@ -116,12 +100,9 @@ fn test_cannot_delete_with_children_conversion() {
 
 #[test]
 fn test_strands_child_conversion() {
-    let err = EttleXError::TombstoneStrandsChild {
-        ep_id: "ep1".to_string(),
-        child_id: "child1".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::StrandsChild)
+        .with_ep_id("ep1")
+        .with_message("Tombstoning ep1 would strand child child1");
 
     assert_eq!(ex_err.kind(), ExErrorKind::StrandsChild);
     assert_eq!(ex_err.code(), "ERR_STRANDS_CHILD");
@@ -131,11 +112,9 @@ fn test_strands_child_conversion() {
 
 #[test]
 fn test_multiple_parents_conversion() {
-    let err = EttleXError::MultipleParents {
-        ettle_id: "e1".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::MultipleParents)
+        .with_entity_id("e1")
+        .with_message("Multiple parents detected");
 
     assert_eq!(ex_err.kind(), ExErrorKind::MultipleParents);
     assert_eq!(ex_err.code(), "ERR_MULTIPLE_PARENTS");
@@ -143,11 +122,9 @@ fn test_multiple_parents_conversion() {
 
 #[test]
 fn test_traversal_broken_conversion() {
-    let err = EttleXError::RtParentChainBroken {
-        ettle_id: "e1".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::TraversalBroken)
+        .with_entity_id("e1")
+        .with_message("Parent chain broken");
 
     assert_eq!(ex_err.kind(), ExErrorKind::TraversalBroken);
     assert_eq!(ex_err.code(), "ERR_TRAVERSAL_BROKEN");
@@ -155,11 +132,9 @@ fn test_traversal_broken_conversion() {
 
 #[test]
 fn test_ambiguous_leaf_selection_conversion() {
-    let err = EttleXError::EptAmbiguousLeafEp {
-        leaf_id: "leaf1".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::AmbiguousLeafSelection)
+        .with_entity_id("leaf1")
+        .with_message("Leaf has multiple EPs");
 
     assert_eq!(ex_err.kind(), ExErrorKind::AmbiguousLeafSelection);
     assert_eq!(ex_err.code(), "ERR_AMBIGUOUS_LEAF_SELECTION");
@@ -167,11 +142,9 @@ fn test_ambiguous_leaf_selection_conversion() {
 
 #[test]
 fn test_determinism_violation_conversion() {
-    let err = EttleXError::ActiveEpOrderNonDeterministic {
-        ettle_id: "e1".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::DeterminismViolation)
+        .with_entity_id("e1")
+        .with_message("Active EP order is non-deterministic");
 
     assert_eq!(ex_err.kind(), ExErrorKind::DeterminismViolation);
     assert_eq!(ex_err.code(), "ERR_DETERMINISM_VIOLATION");
@@ -211,12 +184,10 @@ fn test_ex_error_display() {
 
 #[test]
 fn test_constraint_violation_conversion() {
-    let err = EttleXError::DuplicateEpOrdinal {
-        ettle_id: "e1".to_string(),
-        ordinal: 2,
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::ConstraintViolation)
+        .with_entity_id("e1")
+        .with_ordinal(2)
+        .with_message("Duplicate EP ordinal");
 
     assert_eq!(ex_err.kind(), ExErrorKind::ConstraintViolation);
     assert_eq!(ex_err.code(), "ERR_CONSTRAINT_VIOLATION");
@@ -224,11 +195,7 @@ fn test_constraint_violation_conversion() {
 
 #[test]
 fn test_illegal_reparent_conversion() {
-    let err = EttleXError::IllegalReparent {
-        reason: "Would create orphan".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::IllegalReparent).with_message("Would create orphan");
 
     assert_eq!(ex_err.kind(), ExErrorKind::IllegalReparent);
     assert_eq!(ex_err.code(), "ERR_ILLEGAL_REPARENT");
@@ -236,11 +203,7 @@ fn test_illegal_reparent_conversion() {
 
 #[test]
 fn test_internal_error_conversion() {
-    let err = EttleXError::Internal {
-        message: "Unexpected state".to_string(),
-    };
-
-    let ex_err: ExError = err.into();
+    let ex_err = ExError::new(ExErrorKind::Internal).with_message("Unexpected state");
 
     assert_eq!(ex_err.kind(), ExErrorKind::Internal);
     assert_eq!(ex_err.code(), "ERR_INTERNAL");

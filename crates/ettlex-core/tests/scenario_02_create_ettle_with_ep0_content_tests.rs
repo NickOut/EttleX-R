@@ -2,7 +2,7 @@
 ///
 /// Tests creating an Ettle with WHY/WHAT/HOW content for EP0.
 /// Validates content constraints (empty strings forbidden for WHAT/HOW).
-use ettlex_core::errors::EttleXError;
+use ettlex_core::errors::ExErrorKind;
 use ettlex_core::ops::{ettle_ops, Store};
 
 #[test]
@@ -51,7 +51,7 @@ fn test_scenario_02_error_empty_how_string() {
 
     // THEN it should fail with InvalidHow error
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::InvalidHow { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidInput);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn test_scenario_02_error_empty_what_string() {
 
     // THEN it should fail with InvalidWhat error
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::InvalidWhat { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidInput);
 }
 
 #[test]

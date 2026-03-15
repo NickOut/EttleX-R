@@ -2,8 +2,8 @@ mod common;
 
 use common::new_store;
 use ettlex_core::{
+    errors::ExErrorKind,
     ops::{ep_ops, ettle_ops, refinement_ops},
-    EttleXError,
 };
 
 // ===== SET_PARENT TESTS =====
@@ -47,7 +47,7 @@ fn test_set_parent_detects_direct_cycle() {
     let result = refinement_ops::set_parent(&mut store, &ettle_id, Some(&ettle_id));
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::CycleDetected { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::CycleDetected);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn test_set_parent_detects_indirect_cycle() {
     let result = refinement_ops::set_parent(&mut store, &a_id, Some(&c_id));
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::CycleDetected { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::CycleDetected);
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn test_set_parent_fails_on_nonexistent_parent() {
     let result = refinement_ops::set_parent(&mut store, &child_id, Some("nonexistent"));
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::ParentNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn test_set_parent_fails_on_nonexistent_child() {
     let result = refinement_ops::set_parent(&mut store, "nonexistent", Some(&parent_id));
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 // ===== LINK_CHILD TESTS =====
@@ -162,10 +162,7 @@ fn test_link_child_fails_when_child_already_has_parent() {
     let result = refinement_ops::link_child(&mut store, &ep2_id, &child_id);
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::ChildAlreadyHasParent { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::IllegalReparent);
 }
 
 #[test]

@@ -2,9 +2,9 @@ mod common;
 
 use common::{new_store, setup_simple_tree};
 use ettlex_core::{
+    errors::ExErrorKind,
     ops::{ep_ops, ettle_ops, refinement_ops},
     traversal::rt,
-    EttleXError,
 };
 
 // ===== RT COMPUTATION TESTS =====
@@ -104,7 +104,7 @@ fn test_rt_fails_on_nonexistent_ettle() {
     let result = rt::compute_rt(&store, "nonexistent");
 
     assert!(result.is_err());
-    assert!(matches!(result, Err(EttleXError::EttleNotFound { .. })));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
 }
 
 #[test]
@@ -121,10 +121,7 @@ fn test_rt_fails_on_broken_parent_chain() {
     let result = rt::compute_rt(&store, &child_id);
 
     assert!(result.is_err());
-    assert!(matches!(
-        result,
-        Err(EttleXError::RtParentChainBroken { .. })
-    ));
+    assert_eq!(result.unwrap_err().kind(), ExErrorKind::TraversalBroken);
 }
 
 #[test]
