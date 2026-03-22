@@ -1,5 +1,10 @@
 # Constraint: Rust Logging Facility
 
+> **SUPERSEDED**
+> This document has been converted to a first-class EttleX Ettle and updated to reflect the current architecture.
+> Authoritative constraint: `ettle:019d1623-58dd-7971-9ad3-5a6439a8477b` — EttleX — Logging Constraint
+> This file is retained as a historical artefact only. Code generators and reviewers MUST use the Ettle, not this file.
+
 **Constraint ID:** constraint/logging/v1
 **Family:** cross-cutting
 **Kind:** architectural

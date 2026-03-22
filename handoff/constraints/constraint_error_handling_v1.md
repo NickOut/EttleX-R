@@ -1,5 +1,10 @@
 # Constraint: Rust Common Error Handling
 
+> **SUPERSEDED**
+> This document has been converted to a first-class EttleX Ettle and updated to reflect the current architecture.
+> Authoritative constraint: `ettle:019d1622-a042-7151-8ada-6acdcd5f6982` — EttleX — Error Handling Constraint
+> This file is retained as a historical artefact only. Code generators and reviewers MUST use the Ettle, not this file.
+
 **Constraint ID:** constraint/error-handling/v1
 **Family:** cross-cutting
 **Kind:** architectural

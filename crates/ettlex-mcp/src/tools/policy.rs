@@ -1,7 +1,7 @@
 //! Handlers for `policy.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -35,7 +35,7 @@ pub fn handle_policy_get(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::PolicyRead(r) = result {
                 McpResult::Ok(json!({
                     "policy_ref": r.policy_ref,
@@ -69,7 +69,7 @@ pub fn handle_policy_list(
 
     match apply_engine_query(EngineQuery::PolicyList, conn, cas, Some(policy_provider)) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::PolicyList(entries) = result {
                 let items: Vec<Value> = entries
                     .into_iter()
@@ -123,7 +123,7 @@ pub fn handle_policy_export(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::PolicyExport(r) = result {
                 McpResult::Ok(json!({
                     "policy_ref": r.policy_ref,
@@ -171,7 +171,7 @@ pub fn handle_policy_project_for_handoff(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::PolicyProjectForHandoff(r) = result {
                 let projection_text = String::from_utf8_lossy(&r.projection_bytes).to_string();
                 McpResult::Ok(json!({

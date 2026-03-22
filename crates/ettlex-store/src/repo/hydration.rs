@@ -214,17 +214,9 @@ pub fn load_tree(conn: &Connection) -> Result<Store> {
     // Load all EPs (deterministic order: sorted by ettle_id, ordinal)
     load_all_eps(conn, &mut store)?;
 
-    // Load all Constraints (deterministic order: sorted by constraint_id)
-    let constraints = SqliteRepo::list_constraints(conn)?;
-    for constraint in constraints {
-        store.insert_constraint(constraint);
-    }
-
-    // Load all EP-Constraint attachment records (deterministic order: sorted by ep_id, ordinal)
-    let ep_constraint_refs = SqliteRepo::list_all_ep_constraint_refs(conn)?;
-    for ref_record in ep_constraint_refs {
-        store.insert_ep_constraint_ref(ref_record);
-    }
+    // NOTE: Legacy constraint tables (constraints, ep_constraint_refs) were dropped in
+    // migration 014 (Slice 02). Constraint loading from these tables is skipped.
+    // The new constraint model is represented via the `relations` table.
 
     // Load all Decisions (deterministic order: sorted by created_at, decision_id)
     let decisions = SqliteRepo::list_decisions(conn)?;

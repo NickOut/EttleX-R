@@ -23,10 +23,10 @@
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy_provider::NoopPolicyProvider;
+use ettlex_engine::commands::command::{apply_command, Command};
 use ettlex_engine::commands::engine_query::{
     apply_engine_query, EngineQuery, EngineQueryResult, SnapshotRef,
 };
-use ettlex_engine::commands::mcp_command::{apply_mcp_command, McpCommand};
 use ettlex_engine::commands::snapshot::{snapshot_commit, SnapshotOptions};
 use ettlex_store::cas::FsStore;
 use ettlex_store::repo::SqliteRepo;
@@ -71,17 +71,17 @@ fn test_ep_update_increments_state_version() {
     seed_leaf(&conn, ep_id, ettle_id, "original why");
 
     let before_sv: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("updated why".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    let (_result, new_sv) = apply_mcp_command(
+    let (_result, new_sv) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -125,14 +125,14 @@ fn test_ep_update_reflected_in_snapshot_diff() {
     .unwrap();
 
     // Apply EpUpdate
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("amended".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd,
         None,
         &mut conn,
@@ -223,14 +223,14 @@ fn test_ep_update_null_fields_rejected() {
     let ettle_id = "ettle:sunull";
     seed_leaf(&conn, ep_id, ettle_id, "original");
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: None,
         what: None,
         how: None,
         title: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -254,14 +254,14 @@ fn test_ep_update_large_content_succeeds() {
     seed_leaf(&conn, ep_id, ettle_id, "short");
 
     let large_why = "x".repeat(50 * 1024); // 50 KB
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some(large_why.clone()),
         what: None,
         how: None,
         title: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -289,14 +289,14 @@ fn test_ep_update_invariants_preserved() {
     let ettle_id = "ettle:suinv";
     seed_leaf(&conn, ep_id, ettle_id, "original");
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("new why".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd,
         None,
         &mut conn,
@@ -324,17 +324,17 @@ fn test_ep_update_not_idempotent() {
     seed_leaf(&conn, ep_id, ettle_id, "original");
 
     let before_sv: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
 
-    let cmd1 = McpCommand::EpUpdate {
+    let cmd1 = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("update 1".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd1,
         None,
         &mut conn,
@@ -345,14 +345,14 @@ fn test_ep_update_not_idempotent() {
     .unwrap();
 
     // Same content as cmd1 — still a distinct command, must still increment sv
-    let cmd2 = McpCommand::EpUpdate {
+    let cmd2 = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("update 1".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd2,
         None,
         &mut conn,
@@ -363,7 +363,7 @@ fn test_ep_update_not_idempotent() {
     .unwrap();
 
     let after_sv: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
         after_sv,
@@ -382,14 +382,14 @@ fn test_ep_update_deterministic() {
     seed_leaf(&conn, "ep:sudet1:0", "ettle:sudet1", "original");
     seed_leaf(&conn, "ep:sudet2:0", "ettle:sudet2", "original");
 
-    let cmd1 = McpCommand::EpUpdate {
+    let cmd1 = Command::EpUpdate {
         ep_id: "ep:sudet1:0".to_string(),
         why: Some("deterministic".to_string()),
         what: Some("same content".to_string()),
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd1,
         None,
         &mut conn,
@@ -399,14 +399,14 @@ fn test_ep_update_deterministic() {
     )
     .unwrap();
 
-    let cmd2 = McpCommand::EpUpdate {
+    let cmd2 = Command::EpUpdate {
         ep_id: "ep:sudet2:0".to_string(),
         why: Some("deterministic".to_string()),
         what: Some("same content".to_string()),
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd2,
         None,
         &mut conn,
@@ -436,19 +436,19 @@ fn test_ep_update_concurrent_occ_one_wins() {
 
     // Both callers observe state_version = 0
     let sv_before: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
     assert_eq!(sv_before, 0);
 
     // First update wins
-    let cmd1 = McpCommand::EpUpdate {
+    let cmd1 = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("first".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    let result1 = apply_mcp_command(
+    let result1 = apply_command(
         cmd1,
         Some(0),
         &mut conn,
@@ -459,14 +459,14 @@ fn test_ep_update_concurrent_occ_one_wins() {
     assert!(result1.is_ok(), "First concurrent update must succeed");
 
     // Second update with same expected_sv=0 loses
-    let cmd2 = McpCommand::EpUpdate {
+    let cmd2 = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("second".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    let result2 = apply_mcp_command(
+    let result2 = apply_command(
         cmd2,
         Some(0),
         &mut conn,
@@ -490,17 +490,17 @@ fn test_ep_update_sequential_no_occ_both_succeed() {
     seed_leaf(&conn, ep_id, ettle_id, "original");
 
     let before_sv: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
 
-    let cmd1 = McpCommand::EpUpdate {
+    let cmd1 = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("first".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd1,
         None,
         &mut conn,
@@ -510,14 +510,14 @@ fn test_ep_update_sequential_no_occ_both_succeed() {
     )
     .unwrap();
 
-    let cmd2 = McpCommand::EpUpdate {
+    let cmd2 = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("second".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd2,
         None,
         &mut conn,
@@ -528,7 +528,7 @@ fn test_ep_update_sequential_no_occ_both_succeed() {
     .unwrap();
 
     let after_sv: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
         after_sv,
@@ -549,17 +549,17 @@ fn test_ep_update_state_version_observable() {
     seed_leaf(&conn, ep_id, ettle_id, "original");
 
     let v0: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("updated".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    let (_result, returned_sv) = apply_mcp_command(
+    let (_result, returned_sv) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -570,7 +570,7 @@ fn test_ep_update_state_version_observable() {
     .unwrap();
 
     let v1: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
     assert_eq!(v1, v0 + 1, "state_version must increment after EpUpdate");
     assert_eq!(
@@ -600,14 +600,14 @@ fn test_ep_update_on_pre_title_ep_succeeds() {
         "Pre-title-column EP should have null title"
     );
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("updated why".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -637,14 +637,14 @@ fn test_ep_update_must_not_create_ep() {
         .query_row("SELECT COUNT(*) FROM eps", [], |r| r.get(0))
         .unwrap();
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("updated".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    apply_mcp_command(
+    apply_command(
         cmd,
         None,
         &mut conn,
@@ -674,14 +674,14 @@ fn test_ep_update_byte_identical_retrieval() {
     let ettle_id = "ettle:subyte";
     seed_leaf(&conn, ep_id, ettle_id, "original");
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("byte check".to_string()),
         what: Some("exact content".to_string()),
         how: Some("precise how".to_string()),
         title: Some("T1".to_string()),
     };
-    apply_mcp_command(
+    apply_command(
         cmd,
         None,
         &mut conn,

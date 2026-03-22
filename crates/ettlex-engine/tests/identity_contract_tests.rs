@@ -26,7 +26,7 @@
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy_provider::NoopPolicyProvider;
-use ettlex_engine::commands::mcp_command::{apply_mcp_command, McpCommand, McpCommandResult};
+use ettlex_engine::commands::command::{apply_command, Command, CommandResult};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use tempfile::TempDir;
@@ -47,7 +47,7 @@ fn setup() -> (TempDir, Connection, FsStore) {
 #[test]
 fn test_ettle_create_generates_id() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "My Ettle".to_string(),
         ettle_id: None,
         why: None,
@@ -56,7 +56,7 @@ fn test_ettle_create_generates_id() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let (result, _sv) = apply_mcp_command(
+    let (result, _sv) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -65,7 +65,7 @@ fn test_ettle_create_generates_id() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = result else {
+    let CommandResult::EttleCreate { ettle_id } = result else {
         panic!("Expected EttleCreate result");
     };
     assert!(!ettle_id.is_empty(), "ettle_id must be generated");
@@ -79,7 +79,7 @@ fn test_ettle_create_generates_id() {
 fn test_ep_create_generates_id() {
     let (_dir, mut conn, cas) = setup();
     // First create an ettle to attach the EP to
-    let create_ettle = McpCommand::EttleCreate {
+    let create_ettle = Command::EttleCreate {
         title: "Parent Ettle".to_string(),
         ettle_id: None,
         why: None,
@@ -88,7 +88,7 @@ fn test_ep_create_generates_id() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let (ettle_result, _) = apply_mcp_command(
+    let (ettle_result, _) = apply_command(
         create_ettle,
         None,
         &mut conn,
@@ -97,11 +97,11 @@ fn test_ep_create_generates_id() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = ettle_result else {
+    let CommandResult::EttleCreate { ettle_id } = ettle_result else {
         panic!("Expected EttleCreate");
     };
 
-    let cmd = McpCommand::EpCreate {
+    let cmd = Command::EpCreate {
         ettle_id: ettle_id.clone(),
         ordinal: 0,
         normative: true,
@@ -110,7 +110,7 @@ fn test_ep_create_generates_id() {
         how: "how".to_string(),
         ep_id: None,
     };
-    let (result, _sv) = apply_mcp_command(
+    let (result, _sv) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -119,7 +119,7 @@ fn test_ep_create_generates_id() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EpCreate { ep_id } = result else {
+    let CommandResult::EpCreate { ep_id } = result else {
         panic!("Expected EpCreate result");
     };
     assert!(!ep_id.is_empty(), "ep_id must be generated");
@@ -132,7 +132,7 @@ fn test_ep_create_generates_id() {
 #[test]
 fn test_ettle_create_rejects_supplied_ettle_id() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "My Ettle".to_string(),
         ettle_id: Some("ettle:caller-supplied:0".to_string()),
         why: None,
@@ -141,7 +141,7 @@ fn test_ettle_create_rejects_supplied_ettle_id() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -164,8 +164,8 @@ fn test_ettle_create_rejects_supplied_ettle_id() {
 fn test_ep_create_rejects_supplied_ep_id() {
     let (_dir, mut conn, cas) = setup();
     // Create ettle first
-    let (ettle_result, _) = apply_mcp_command(
-        McpCommand::EttleCreate {
+    let (ettle_result, _) = apply_command(
+        Command::EttleCreate {
             title: "Ettle".to_string(),
             ettle_id: None,
             why: None,
@@ -181,11 +181,11 @@ fn test_ep_create_rejects_supplied_ep_id() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = ettle_result else {
+    let CommandResult::EttleCreate { ettle_id } = ettle_result else {
         panic!()
     };
 
-    let cmd = McpCommand::EpCreate {
+    let cmd = Command::EpCreate {
         ettle_id,
         ordinal: 0,
         normative: true,
@@ -194,7 +194,7 @@ fn test_ep_create_rejects_supplied_ep_id() {
         how: "h".to_string(),
         ep_id: Some("ep:caller-supplied:0".to_string()),
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -213,7 +213,7 @@ fn test_ep_create_rejects_supplied_ep_id() {
 #[test]
 fn test_ettle_create_empty_title_fails() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: String::new(),
         ettle_id: None,
         why: None,
@@ -222,7 +222,7 @@ fn test_ettle_create_empty_title_fails() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -241,7 +241,7 @@ fn test_ettle_create_empty_title_fails() {
 #[test]
 fn test_ep_create_missing_ettle_fails() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EpCreate {
+    let cmd = Command::EpCreate {
         ettle_id: "ettle:does-not-exist".to_string(),
         ordinal: 0,
         normative: true,
@@ -250,7 +250,7 @@ fn test_ep_create_missing_ettle_fails() {
         how: "h".to_string(),
         ep_id: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -270,7 +270,7 @@ fn test_ep_create_missing_ettle_fails() {
 fn test_ettle_create_max_length_title_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let title = "T".repeat(255);
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title,
         ettle_id: None,
         why: None,
@@ -279,7 +279,7 @@ fn test_ettle_create_max_length_title_succeeds() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -302,8 +302,8 @@ fn test_ettle_create_max_length_title_succeeds() {
 fn test_ep_create_ordinal_conflict_fails() {
     let (_dir, mut conn, cas) = setup();
     // Create ettle
-    let (ettle_result, _) = apply_mcp_command(
-        McpCommand::EttleCreate {
+    let (ettle_result, _) = apply_command(
+        Command::EttleCreate {
             title: "Ettle".to_string(),
             ettle_id: None,
             why: None,
@@ -319,13 +319,13 @@ fn test_ep_create_ordinal_conflict_fails() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = ettle_result else {
+    let CommandResult::EttleCreate { ettle_id } = ettle_result else {
         panic!()
     };
 
     // Create EP with ordinal 0
-    apply_mcp_command(
-        McpCommand::EpCreate {
+    apply_command(
+        Command::EpCreate {
             ettle_id: ettle_id.clone(),
             ordinal: 0,
             normative: true,
@@ -343,8 +343,8 @@ fn test_ep_create_ordinal_conflict_fails() {
     .unwrap();
 
     // Create second EP with same ordinal → must fail
-    let result = apply_mcp_command(
-        McpCommand::EpCreate {
+    let result = apply_command(
+        Command::EpCreate {
             ettle_id,
             ordinal: 0,
             normative: true,
@@ -369,7 +369,7 @@ fn test_ep_create_ordinal_conflict_fails() {
 #[test]
 fn test_ettle_create_id_ulid_format() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Format Check".to_string(),
         ettle_id: None,
         why: None,
@@ -378,7 +378,7 @@ fn test_ettle_create_id_ulid_format() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let (result, _) = apply_mcp_command(
+    let (result, _) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -387,7 +387,7 @@ fn test_ettle_create_id_ulid_format() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = result else {
+    let CommandResult::EttleCreate { ettle_id } = result else {
         panic!()
     };
     assert!(
@@ -404,8 +404,8 @@ fn test_ettle_create_id_ulid_format() {
 #[test]
 fn test_ep_create_id_ulid_format() {
     let (_dir, mut conn, cas) = setup();
-    let (ettle_result, _) = apply_mcp_command(
-        McpCommand::EttleCreate {
+    let (ettle_result, _) = apply_command(
+        Command::EttleCreate {
             title: "E".to_string(),
             ettle_id: None,
             why: None,
@@ -421,12 +421,12 @@ fn test_ep_create_id_ulid_format() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = ettle_result else {
+    let CommandResult::EttleCreate { ettle_id } = ettle_result else {
         panic!()
     };
 
-    let (result, _) = apply_mcp_command(
-        McpCommand::EpCreate {
+    let (result, _) = apply_command(
+        Command::EpCreate {
             ettle_id,
             ordinal: 0,
             normative: true,
@@ -442,7 +442,7 @@ fn test_ep_create_id_ulid_format() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EpCreate { ep_id } = result else {
+    let CommandResult::EpCreate { ep_id } = result else {
         panic!()
     };
     assert!(
@@ -459,7 +459,7 @@ fn test_ep_create_id_ulid_format() {
 #[test]
 fn test_ettle_create_successive_calls_distinct_ids() {
     let (_dir, mut conn, cas) = setup();
-    let mk_cmd = || McpCommand::EttleCreate {
+    let mk_cmd = || Command::EttleCreate {
         title: "Same Title".to_string(),
         ettle_id: None,
         why: None,
@@ -469,7 +469,7 @@ fn test_ettle_create_successive_calls_distinct_ids() {
         reasoning_link_type: None,
     };
 
-    let (r1, _) = apply_mcp_command(
+    let (r1, _) = apply_command(
         mk_cmd(),
         None,
         &mut conn,
@@ -478,7 +478,7 @@ fn test_ettle_create_successive_calls_distinct_ids() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let (r2, _) = apply_mcp_command(
+    let (r2, _) = apply_command(
         mk_cmd(),
         None,
         &mut conn,
@@ -488,10 +488,10 @@ fn test_ettle_create_successive_calls_distinct_ids() {
     )
     .unwrap();
 
-    let McpCommandResult::EttleCreate { ettle_id: id1 } = r1 else {
+    let CommandResult::EttleCreate { ettle_id: id1 } = r1 else {
         panic!()
     };
-    let McpCommandResult::EttleCreate { ettle_id: id2 } = r2 else {
+    let CommandResult::EttleCreate { ettle_id: id2 } = r2 else {
         panic!()
     };
     assert_ne!(id1, id2, "Successive EttleCreate must produce distinct IDs");
@@ -504,8 +504,8 @@ fn test_ettle_create_successive_calls_distinct_ids() {
 #[test]
 fn test_ettle_create_identical_title_distinct_ids() {
     let (_dir, mut conn, cas) = setup();
-    let (r1, _) = apply_mcp_command(
-        McpCommand::EttleCreate {
+    let (r1, _) = apply_command(
+        Command::EttleCreate {
             title: "Dup Title".to_string(),
             ettle_id: None,
             why: None,
@@ -521,8 +521,8 @@ fn test_ettle_create_identical_title_distinct_ids() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let (r2, _) = apply_mcp_command(
-        McpCommand::EttleCreate {
+    let (r2, _) = apply_command(
+        Command::EttleCreate {
             title: "Dup Title".to_string(),
             ettle_id: None,
             why: None,
@@ -539,10 +539,10 @@ fn test_ettle_create_identical_title_distinct_ids() {
     )
     .unwrap();
 
-    let McpCommandResult::EttleCreate { ettle_id: id1 } = r1 else {
+    let CommandResult::EttleCreate { ettle_id: id1 } = r1 else {
         panic!()
     };
-    let McpCommandResult::EttleCreate { ettle_id: id2 } = r2 else {
+    let CommandResult::EttleCreate { ettle_id: id2 } = r2 else {
         panic!()
     };
     assert_ne!(id1, id2, "Distinct Ettles must have distinct IDs");
@@ -562,8 +562,8 @@ fn test_ettle_create_identical_title_distinct_ids() {
 fn test_ettle_create_then_get_consistent() {
     let (_dir, mut conn, cas) = setup();
     let title = "Consistency Check".to_string();
-    let (r, _) = apply_mcp_command(
-        McpCommand::EttleCreate {
+    let (r, _) = apply_command(
+        Command::EttleCreate {
             title: title.clone(),
             ettle_id: None,
             why: None,
@@ -579,7 +579,7 @@ fn test_ettle_create_then_get_consistent() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = r else {
+    let CommandResult::EttleCreate { ettle_id } = r else {
         panic!()
     };
 

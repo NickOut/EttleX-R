@@ -1,0 +1,196 @@
+schema_version: 0
+project:
+  name: ettlex
+ettles:
+- id: ettle:snapshot_commit_actions_refactor
+  title: Snapshot Commit Refactor — Action Commands as Canonical Mutation Ingress
+  eps:
+  - id: ep:snapshot_commit_actions_refactor:0
+    ordinal: 0
+    normative: true
+    why: |-
+      Snapshot commit is a canonical mutation: it appends to the ledger, writes manifest bytes to CAS, and
+      must remain deterministic and policy-governed.
+      
+      Phase 1 originally implemented snapshot_commit as an internal engine/store API. To support MCP as a thin
+      transport over a single command layer, snapshot_commit MUST be invoked via action:commands (Apply),
+      with all semantic validation and determinism rules enforced in that layer.
+      
+      This refactor prevents split-brain behaviour (CLI/engine vs MCP/actions) and guarantees that all mutation
+      flows through the same governance and error taxonomy.
+    what: |-
+      Refactor snapshot_commit so that:
+      
+      1) Canonical mutation ingress
+         - A new Action Command MUST exist:
+             Command::SnapshotCommit { leaf_ep_id, policy_ref?, profile_ref?, options? }
+         - The ONLY supported way to commit a snapshot in production code MUST be via action:commands::apply
+           with Command::SnapshotCommit.
+         - Engine/store snapshot_commit functions MAY remain internal, but MUST be called only from the action
+           command implementation, and MUST NOT encode semantic rules.
+      
+      1.1) Leaf-scoped selector (terminology alignment)
+         - SnapshotCommit MUST be leaf-scoped:
+             * The primary selector MUST be leaf_ep_id (an EP id).
+             * root_ettle_id MUST NOT be the primary commit selector.
+         - Definition of "leaf under the refinement model":
+             * A leaf EP is an EP that has no child Ettle (i.e., it is not linked to any child_ettle_id).
+             * Leaf status is determined structurally (no outgoing refine-to-child edge),
+               not by ordinal position within its Ettle.
+             * If an Ettle contains multiple EPs, some with children and some without,
+               only those EPs without child Ettles qualify as valid leaf_ep_id values.
+         - The action layer MUST derive root_ettle_id internally (via EP→Ettle membership) for bookkeeping,
+           provenance, and manifest fields that require it.
+         - If any legacy interface accepts root_ettle_id (e.g., CLI flag or internal API), it MUST resolve to
+           exactly one leaf EP deterministically or fail with a typed error.
+           * Deterministic resolution rule (if legacy root is supported):
+               - If the Ettle has exactly one leaf EP under the refinement model, resolve to that leaf.
+               - Otherwise fail with RootEttleAmbiguous (do NOT pick arbitrarily).
+      
+      2) Stable semantics
+         - The committed manifest content MUST remain compliant with seed_snapshot_commit_v4.yaml.
+         - Deterministic canonicalisation, digest computation, and "created_at noise" behaviour MUST remain unchanged.
+         - Ledger append-only rules MUST remain unchanged.
+      
+      3) Clear layering
+         - action:commands owns:
+             * request validation (leaf EP existence, leaf-ness, EP-only, EPT determinism, required refs)
+             * policy/profile gating decisions (or delegations)
+             * canonicalisation rules + digest inputs
+             * legacy root_ettle_id resolution (if supported anywhere)
+             * error taxonomy
+         - store/engine owns:
+             * transactional DB writes
+             * CAS blob writes
+             * returning low-level IO errors
+      
+      4) Compatibility
+         - Existing CLI code MUST be re-wired to call the action command rather than calling engine/store directly.
+         - No external interface (seed import/export, snapshot identifiers) changes are permitted in this refactor.
+         - If the CLI already supports a root-based flag, it MAY continue to exist but MUST behave as legacy:
+             * it resolves root→leaf deterministically as per 1.1, or fails with RootEttleAmbiguous.
+    how: |-
+      Scenarios (all MUST be implemented as tests; Gherkin is normative):
+      
+      Feature: Snapshot commit uses action commands as the canonical ingress
+      
+        Background:
+          Given a repository with SQLite + CAS store initialised
+          And an Ettle tree exists with at least one leaf EP
+          And seed_snapshot_commit_v4.yaml behaviour is already implemented and passing
+      
+        # --- Positive cases ---
+      
+        Scenario: Snapshot commit succeeds via action:commands apply (leaf-scoped)
+          When I call action:commands::apply(Command::SnapshotCommit{leaf_ep_id})
+          Then a new snapshot_id is returned
+          And one new ledger row is appended
+          And one manifest blob is written to CAS
+          And the manifest bytes conform to seed_snapshot_commit_v4.yaml
+      
+        Scenario: CLI snapshot commit delegates to action:commands
+          When I invoke `ettlex snapshot commit --leaf <leaf_ep_id>`
+          Then the CLI calls action:commands::apply(Command::SnapshotCommit{leaf_ep_id=...})
+          And the CLI does not call store/engine snapshot_commit directly
+      
+        Scenario: Store/engine snapshot_commit remains internal-only
+          Given I attempt to call store/engine snapshot_commit from outside the action layer (in production code)
+          Then the build fails due to module visibility OR a lint rule OR a prohibited import boundary
+          And the policy for this restriction is documented in code comments
+      
+        # --- Leaf vs root selector alignment ---
+      
+        Scenario: SnapshotCommit rejects non-leaf EP id
+          Given EP <ep_id> exists but is not a leaf under the refinement model
+          When I call action:commands::apply(Command::SnapshotCommit{leaf_ep_id=<ep_id>})
+          Then a typed error NotALeaf is returned
+          And no snapshot is committed
+      
+        Scenario: SnapshotCommit rejects unknown EP id
+          When I call action:commands::apply(Command::SnapshotCommit{leaf_ep_id="ep:missing"})
+          Then a typed error NotFound is returned
+          And no snapshot is committed
+      
+        Scenario: Legacy root selector resolves deterministically when exactly one leaf exists
+          Given Ettle <root_ettle_id> has exactly one leaf EP <leaf_ep_id>
+          When I invoke `ettlex snapshot commit --root <root_ettle_id>` (legacy path)
+          Then the system resolves to <leaf_ep_id>
+          And the CLI calls action:commands::apply(Command::SnapshotCommit{leaf_ep_id=<leaf_ep_id>})
+          And a snapshot is committed successfully
+      
+        Scenario: Legacy root selector fails when multiple leaves exist
+          Given Ettle <root_ettle_id> has more than one leaf EP
+          When I invoke `ettlex snapshot commit --root <root_ettle_id>` (legacy path)
+          Then a typed error RootEttleAmbiguous is returned
+          And the error includes the candidate leaf EP ids
+          And no snapshot is committed
+      
+        Scenario: Legacy root selector fails when no leaves exist
+          Given Ettle <root_ettle_id> contains no leaf EPs (invalid refinement graph)
+          When I invoke `ettlex snapshot commit --root <root_ettle_id>` (legacy path)
+          Then a typed error RootEttleInvalid is returned
+          And no snapshot is committed
+      
+        # --- Determinism and invariants ---
+      
+        Scenario: Snapshot commit output remains deterministic under refactor
+          Given canonical state is unchanged and leaf_ep_id is identical
+          When I commit snapshot via old internal path in a test harness
+          And I commit snapshot via action command path
+          Then semantic_manifest_digest is identical
+          And ept_digest is identical
+          And manifest bytes are identical except for created_at and manifest_digest
+      
+        Scenario: Snapshot commit preserves created_at non-determinism rule
+          Given created_at is included in manifest bytes
+          When I commit twice with identical state
+          Then manifest_digest differs
+          And semantic_manifest_digest is identical
+      
+        Scenario: No extra mutation occurs during commit
+          When I call Command::SnapshotCommit
+          Then no Ettle, EP, link, or constraint rows are modified
+          And only the ledger and CAS are written
+      
+        # --- Policy and error taxonomy propagation ---
+      
+        Scenario: Policy gating is enforced in action layer
+          Given a policy profile denies snapshot commit for this leaf
+          When I call Command::SnapshotCommit
+          Then a typed error PolicyDenied is returned
+          And no ledger row is appended
+          And no CAS write occurs
+      
+        Scenario: Engine/store IO error is surfaced as typed error
+          Given CAS storage is configured to fail writes
+          When I call Command::SnapshotCommit
+          Then a typed error StorageError is returned
+          And the error includes a stable error_code
+          And no partial ledger write remains (transactional safety)
+      
+        Scenario: EPT ambiguity fails fast with typed error
+          Given the refinement graph is ambiguous under EPT algorithm
+          When I call Command::SnapshotCommit
+          Then a typed error EptAmbiguous is returned
+          And no snapshot is committed
+      
+        # --- Boundary conditions ---
+      
+        Scenario: Snapshot commit is idempotent only by explicit option
+          Given a snapshot with identical semantic_manifest_digest already exists
+          When I call Command::SnapshotCommit without options
+          Then a new snapshot is still committed (append-only)
+          And the system does not auto-deduplicate
+          When I call Command::SnapshotCommit with option allow_dedup=true
+          Then the system MAY return existing snapshot_id
+          And MUST record an event describing reuse (if reuse occurs)
+      
+        Scenario: Snapshot commit handles large manifests
+          Given the manifest projection is at least 5MB
+          When I call Command::SnapshotCommit
+          Then commit completes within configured time budget
+          And peak memory remains within configured limits
+links:
+  - parent: ettle:snapshot_commit
+    parent_ep: ep:snapshot_commit:1
+    child: ettle:snapshot_commit_actions_refactor

@@ -2,7 +2,7 @@
 
 use ettlex_core::model::Constraint;
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -47,7 +47,7 @@ pub fn handle_constraint_get(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ConstraintGet(c) = result {
                 McpResult::Ok(constraint_to_json(&c))
             } else {
@@ -86,7 +86,7 @@ pub fn handle_constraint_list_by_family(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ConstraintListByFamily(cs) = result {
                 let items: Vec<Value> = cs.iter().map(constraint_to_json).collect();
                 McpResult::Ok(json!({ "items": items }))

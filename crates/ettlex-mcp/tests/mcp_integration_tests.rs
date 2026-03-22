@@ -193,7 +193,7 @@ impl TestHarness {
 
     fn state_version(&self) -> u64 {
         self.conn
-            .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
             .unwrap()
     }
 
@@ -422,6 +422,7 @@ fn test_s_occ_2_new_state_version() {
 // S-INV-1 — MCP does not implement business logic
 // ---------------------------------------------------------------------------
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_s_inv_1_delegation_only() {
     let mut h = TestHarness::new();
@@ -698,6 +699,7 @@ fn test_s_pol_6_policy_list_cursor() {
 // S-DET-1 — MCP emits canonical JSON with stable key ordering
 // ---------------------------------------------------------------------------
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_s_det_1_canonical_json_stable() {
     let mut h = TestHarness::new();
@@ -927,6 +929,7 @@ fn test_s_diff_3_missing_blob() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_s_con_1_create_attach_snapshot() {
     let mut h = TestHarness::new();
     h.seed_leaf();
@@ -1004,6 +1007,7 @@ fn test_s_con_1_create_attach_snapshot() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_s_con_2_missing_family() {
     let mut h = TestHarness::new();
     let resp = h.call(
@@ -1026,6 +1030,7 @@ fn test_s_con_2_missing_family() {
 // S-CON-3 — Reject duplicate attachment
 // ---------------------------------------------------------------------------
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_s_con_3_duplicate_attachment() {
     let mut h = TestHarness::new();

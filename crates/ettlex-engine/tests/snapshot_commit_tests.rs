@@ -249,6 +249,7 @@ fn test_snapshot_commit_idempotent_across_calls() {
 }
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_snapshot_commit_with_constraints() {
     use ettlex_core::ops::constraint_ops;
     use serde_json::json;

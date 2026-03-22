@@ -336,6 +336,7 @@ fn test_determinism_violation_not_waivable() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_constraint_ambiguity_fail_fast() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);
@@ -371,6 +372,7 @@ fn test_constraint_ambiguity_fail_fast() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_constraint_ambiguity_choose_deterministic() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);
@@ -410,6 +412,7 @@ fn test_constraint_ambiguity_choose_deterministic() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_constraint_ambiguity_routed() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);
@@ -461,6 +464,7 @@ fn test_constraint_ambiguity_routed() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_constraint_ambiguity_router_unavailable() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);
@@ -772,6 +776,7 @@ fn test_dry_run_no_writes() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_dry_run_no_routing() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);
@@ -938,6 +943,7 @@ fn test_semantic_digest_differs_on_different_inputs() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_routed_no_ledger_no_manifest() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);
@@ -983,6 +989,7 @@ fn test_routed_no_ledger_no_manifest() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_approval_request_deterministic_excl_created_at() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);
@@ -1065,6 +1072,7 @@ fn test_approval_request_deterministic_excl_created_at() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_dry_run_computes_resolved_constraint_resolution() {
     let (_tmp, mut conn, cas) = setup_db();
     seed_leaf_ep(&conn);

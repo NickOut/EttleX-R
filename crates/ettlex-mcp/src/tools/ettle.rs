@@ -1,8 +1,8 @@
 //! Handlers for `ettle.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
-use ettlex_engine::commands::read_tools::{base64_decode, ListOptions};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::read_tools::{base64_decode, ListOptions};
 use ettlex_store::cas::FsStore;
 use ettlex_store::model::EttleListOpts;
 use ettlex_store::repo::SqliteRepo;
@@ -15,7 +15,7 @@ use crate::error::{McpError, McpResult, MCP_INVALID_CURSOR, MCP_INVALID_INPUT};
 ///
 /// Params: `{ ettle_id: String }`
 ///
-/// Delegates to `ettlex_engine::commands::ettle::handle_ettle_get`.
+/// Delegates to `ettlex_memory::commands::ettle::handle_ettle_get`.
 /// Returns all v2 Ettle fields: id, title, why, what, how, reasoning_link_id,
 /// reasoning_link_type, created_at, updated_at, tombstoned_at.
 pub fn handle_ettle_get(
@@ -31,7 +31,7 @@ pub fn handle_ettle_get(
         }
     };
 
-    match ettlex_engine::commands::ettle::handle_ettle_get(conn, &ettle_id) {
+    match ettlex_memory::commands::ettle::handle_ettle_get(conn, &ettle_id) {
         Ok(r) => McpResult::Ok(json!({
             "id": r.id,
             // ettle_id is a backward-compatibility alias for id
@@ -54,7 +54,7 @@ pub fn handle_ettle_get(
 ///
 /// Params: `{ limit?: u64, cursor?: String, include_tombstoned?: bool }`
 ///
-/// Delegates to `ettlex_engine::commands::ettle::handle_ettle_list`.
+/// Delegates to `ettlex_memory::commands::ettle::handle_ettle_list`.
 /// Returns `{ items: [{ id, title, tombstoned_at }], cursor? }`.
 pub fn handle_ettle_list(
     params: &Value,
@@ -67,7 +67,7 @@ pub fn handle_ettle_list(
         Err(e) => return e,
     };
 
-    match ettlex_engine::commands::ettle::handle_ettle_list(conn, ettle_list_opts) {
+    match ettlex_memory::commands::ettle::handle_ettle_list(conn, ettle_list_opts) {
         Ok(page) => {
             let items: Vec<Value> = page
                 .items
@@ -113,7 +113,7 @@ pub fn handle_ettle_list_eps(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EttleListEps(eps) = result {
                 let items: Vec<Value> = eps
                     .iter()
@@ -170,7 +170,7 @@ pub fn handle_ettle_list_decisions(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EttleListDecisions(ds) = result {
                 let items: Vec<Value> = ds
                     .iter()

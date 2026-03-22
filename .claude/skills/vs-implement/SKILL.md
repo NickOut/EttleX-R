@@ -16,6 +16,25 @@ You MUST NOT write production code before RED evidence exists.
 You MUST NOT write tests that fit existing code — tests are written from the plan only.
 You MUST update `handoff/slice_wip.md` after each scenario.
 
+## Test execution rules (NON-NEGOTIABLE)
+
+ALL test runs MUST use `make test-slice`. Direct `cargo nextest` invocations are PROHIBITED.
+
+- CORRECT: `make test-slice`
+- PROHIBITED: `cargo nextest run ...` (with any flags, including --test-threads, --workspace, or -p)
+
+The `make test-slice` target is scoped to registered tests only and runs with parallel execution. Direct nextest invocations bypass the scope filter, serialise execution, and cause unnecessary full-workspace compilation. Any deviation from `make test-slice` is a protocol violation.
+
+## Timeout and hang rules (NON-NEGOTIABLE)
+
+If `make test-slice` has not returned any output after 3 minutes:
+1. Interrupt the command immediately (do not wait longer).
+2. Report to the user: "make test-slice has not returned output after 3 minutes — possible hang or very slow compile. Stopping."
+3. Wait for explicit user instruction before retrying.
+4. NEVER attempt to work around a slow or hanging test run by switching to direct `cargo nextest` invocations, background tasks, polling temp files, or any other method.
+
+Silently waiting and polling background task output files is a protocol violation equivalent to using direct cargo nextest. Fail loudly; do not degrade silently.
+
 ---
 
 ## Read Plan and WIP
@@ -33,7 +52,7 @@ For EACH scenario in SC-NN order:
 
 1. Write ONLY the declared test for this scenario. Test file must be within the declared slice boundary.
 2. Tests are written from the plan specification ONLY. Do not look at existing production code first.
-3. Run `make test-slice`.
+3. Run `make test-slice` (ONLY — never `cargo nextest` directly).
 4. Confirm the test fails (compile error or runtime failure). Capture the exact failure message.
 5. If the test passes before any implementation — STOP. This is a protocol failure. Report it to the user.
 6. Update `handoff/slice_wip.md`: fill RED Evidence column, set Status = RED.
@@ -42,7 +61,7 @@ For EACH scenario in SC-NN order:
 
 1. Implement the minimal production code within the declared slice boundary to make this scenario pass.
 2. No speculative code. No code outside the slice boundary. No behaviour without a scenario.
-3. Run `make test-slice`.
+3. Run `make test-slice` (ONLY — never `cargo nextest` directly).
 4. Confirm the test passes. Capture the passing confirmation.
 5. Update `handoff/slice_wip.md`: fill GREEN Evidence and Code Files columns, set Status = GREEN.
 

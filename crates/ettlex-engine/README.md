@@ -120,25 +120,66 @@ Error kinds used by engine commands:
 - `Persistence` - Storage operation failed
 - `Invariant` - Domain invariant violated
 
-## Snapshot Commit via Action Commands
+## Write Command Surface
 
-The canonical way to commit a snapshot is via `EngineCommand::SnapshotCommit`:
+All write operations go through `apply_command`:
 
 ```rust
-use ettlex_engine::commands::engine_command::{EngineCommand, apply_engine_command};
-use ettlex_engine::commands::snapshot::SnapshotOptions;
+use ettlex_engine::commands::command::{apply_command, Command};
 
-let cmd = EngineCommand::SnapshotCommit {
-    leaf_ep_id: "ep:my-leaf:0".to_string(),
-    policy_ref: "policy/default@0".to_string(),
-    profile_ref: "profile/default@0".to_string(),
-    options: SnapshotOptions {
-        expected_head: None,
-        dry_run: false,
-    },
+let cmd = Command::RelationCreate {
+    relation_type: "constraint".to_string(),
+    source_ettle_id: "ettle:src".to_string(),
+    target_ettle_id: "ettle:tgt".to_string(),
+    properties_json: None,
 };
 
-let result = apply_engine_command(cmd, &mut conn, &cas)?;
+let (result, new_state_version) =
+    apply_command(cmd, expected_state_version, &mut conn, &cas, &provider, &router)?;
+```
+
+### Available commands
+
+| Variant              | Description                                            |
+|---------------------|--------------------------------------------------------|
+| `EttleCreate`       | Create a new Ettle with WHY/WHAT/HOW                  |
+| `EttleUpdate`       | Update an Ettle's fields                              |
+| `EttleTombstone`    | Tombstone an Ettle (blocked by active constraint relations) |
+| `EpCreate`          | Create an EP within an Ettle                          |
+| `EpUpdate`          | Update EP fields                                      |
+| `SnapshotCommit`    | Commit a snapshot for a leaf EP                       |
+| `RelationCreate`    | Create a typed relation between two Ettles            |
+| `RelationUpdate`    | Update relation properties                            |
+| `RelationTombstone` | Tombstone a relation                                  |
+| `GroupCreate`       | Create a named group                                  |
+| `GroupTombstone`    | Tombstone a group (blocked if active members exist)   |
+| `GroupMemberAdd`    | Add an Ettle to a group                              |
+| `GroupMemberRemove` | Tombstone an Ettle's group membership                |
+| `ProfileCreate`     | Create a profile (idempotent on same content)        |
+| `ProfileSetDefault` | Set the default profile                               |
+| `PolicyCreate`      | Create a policy document (not idempotent)            |
+
+`apply_command` always:
+1. Validates the command against current state
+2. Executes the mutation within a transaction
+3. Appends a provenance event (`occurred_at` ISO-8601)
+4. Inserts a `command_log` row (OCC counter)
+5. Returns `(CommandResult, new_state_version)`
+
+## Snapshot Commit
+
+```rust
+use ettlex_engine::commands::command::{apply_command, Command};
+
+let cmd = Command::SnapshotCommit {
+    leaf_ep_id: "ep:my-leaf:0".to_string(),
+    policy_ref: None,     // None = permissive pass-through
+    profile_ref: None,
+    dry_run: false,
+    expected_head: None,
+};
+
+let (result, sv) = apply_command(cmd, None, &mut conn, &cas, &provider, &router)?;
 ```
 
 ### Leaf-scoped semantics
@@ -296,10 +337,10 @@ Key dependencies:
 - `rusqlite` - Database transactions
 - `tracing` - Implementation logging (debug level)
 
-## Read-Only Query Surface (`engine_query.rs`)
+## Read-Only Query Surface
 
-The `apply_engine_query(query, &Connection, &FsStore)` function dispatches all read-only queries.
-It never acquires `&mut Connection` and never writes to the DB or CAS.
+The `apply_engine_query(query, &Connection, &FsStore, policy_provider)` function dispatches
+all read-only queries. It never acquires `&mut Connection` and never writes to the DB or CAS.
 
 ### Query Variants
 

@@ -1,0 +1,21 @@
+[package]
+name = "ettlex-memory"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ettlex_memory"
+path = "src/lib.rs"
+
+[dependencies]
+ettlex-core = { path = "../ettlex-core" }
+ettlex-store = { path = "../ettlex-store" }
+ettlex-engine = { path = "../ettlex-engine" }
+rusqlite = { version = "0.29", features = ["bundled", "serde_json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.0"

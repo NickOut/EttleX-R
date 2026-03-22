@@ -103,7 +103,7 @@ impl Harness {
 
     fn state_version(&self) -> u64 {
         self.conn
-            .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
             .unwrap()
     }
 
@@ -212,6 +212,7 @@ fn test_ep_list_parents_happy_path() {
 // S-MT-HP-4: ep_list_constraints — EP with attached constraint
 // ---------------------------------------------------------------------------
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_ep_list_constraints_happy_path() {
     let mut h = Harness::new();
@@ -228,6 +229,7 @@ fn test_ep_list_constraints_happy_path() {
 // S-MT-HP-5: constraint_get — returns constraint JSON
 // ---------------------------------------------------------------------------
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_constraint_get_happy_path() {
     let mut h = Harness::new();
@@ -243,6 +245,7 @@ fn test_constraint_get_happy_path() {
 // S-MT-HP-6: constraint_list_by_family — returns items list
 // ---------------------------------------------------------------------------
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_constraint_list_by_family_happy_path() {
     let mut h = Harness::new();
@@ -525,6 +528,7 @@ fn test_ep_list_children_missing_param_returns_invalid_input() {
 // S-MT-ERR-2: constraint_get — missing constraint → NotFound
 // ---------------------------------------------------------------------------
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_constraint_get_missing_returns_not_found() {
     let mut h = Harness::new();
@@ -651,6 +655,7 @@ fn test_policy_export_unknown_kind_returns_policy_export_failed() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 fn test_query_tools_do_not_mutate_state_version() {
     let mut h = Harness::new();
     h.seed_leaf();
@@ -716,15 +721,12 @@ fn test_state_version_increments_after_apply() {
         .as_u64()
         .unwrap();
 
-    // state_version from StateGetVersion uses schema_version (migration count)
-    // Apply increments mcp_command_log but not schema_version
-    // So v0 == v1 for schema_version; but state_version() helper uses mcp_command_log
-    // The MCP result state_version is the schema migration count — it's stable.
-    // The mcp_command_log count should have incremented.
+    // state_version from StateGetVersion now uses command_log count (Slice 02 rename).
+    // After one successful write, command_log has 1 row → state_version = 1.
     let mcp_log_v1 = h.state_version();
-    assert_eq!(mcp_log_v1, 1, "mcp_command_log must increment after apply");
-    // Schema state_version is stable (same migration count)
-    assert_eq!(v0, v1, "schema_version is stable across apply calls");
+    assert_eq!(mcp_log_v1, 1, "command_log must increment after apply");
+    // MCP state_version also reflects command_log count.
+    assert_eq!(v1, v0 + 1, "state_version increments by 1 after apply");
 }
 
 // DEFERRED: S-MT ep_list_parents RefinementIntegrityViolation

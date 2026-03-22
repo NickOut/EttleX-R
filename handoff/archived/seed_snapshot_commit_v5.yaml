@@ -1,0 +1,401 @@
+schema_version: 0
+project:
+  name: ettlex
+
+ettles:
+  - id: ettle:snapshot_commit
+    title: Snapshot Commit Pipeline (End-to-End)
+    eps:
+      - id: ep:snapshot_commit:0
+        ordinal: 0
+        normative: true
+        why: |
+          Provide immutable semantic anchors by committing canonical state into an append-only ledger.
+          Enable reliable reproducible diffs and downstream TES generation by persisting a manifest in
+          CAS and anchoring it in the snapshot ledger in a single transaction boundary.
+          
+          This is the first point at which the system becomes self-hosting: a stable commit forms a
+          durable reference that can be used to reproduce EPT, validate invariants, and generate
+          projections.
+          
+          Dependency: this Ettle assumes the Storage Spine exists (SQLite schema + CAS + seed import)
+          and is healthy.
+        what: |
+          Implement snapshot commit as a single, atomic operation:
+          
+            compute EPT + digests
+              → build snapshot manifest (structured JSON)
+              → write manifest to CAS (digest-addressed)
+              → append ledger entry referencing manifest_digest
+          
+          Preconditions (normative):
+            - SQLite schema is migrated to head.
+            - facet_snapshots table exists.
+            - CAS store is available and supports atomic writes.
+            - Canonical Ettle/EP state exists and EPT computation is deterministic (Phase 0.5).
+          
+          The commit flow MUST be correct under concurrency, MUST be deterministic given identical
+          canonical state, MUST be idempotent when re-committing an identical state, and MUST record
+          all required manifest fields.
+          
+          Required manifest content (minimum):
+            - manifest_schema_version
+            - created_at (timestamp)
+            - repo/profile/policy references:
+                - policy_ref (string; may be empty but must exist as field)
+                - profile_ref (string; may be empty but must exist as field)
+            - EPT ordered list:
+                - ordered ettle_ids
+                - per-ettle ordered EP list (ordinal order) including:
+                    - ep_id
+                    - ordinal
+                    - normative
+                    - ep_digest (stable digest of normalized EP payload)
+            - effective constraints / resolution:
+                - effective_constraints (possibly empty list; field MUST exist)
+                - constraint_resolution (possibly empty; field MUST exist)
+            - coverage / exceptions:
+                - coverage (possibly empty; field MUST exist)
+                - exceptions (possibly empty; field MUST exist)
+            - integrity:
+                - root_ettle_id for the commit target
+                - ept_digest (digest of canonical EPT representation)
+                - manifest_digest (CAS digest of manifest bytes; implicit identity; includes created_at)
+                - semantic_manifest_digest (digest of the manifest with created_at excluded; stable comparison key)
+                - store_schema_version (current DB schema version/migration head)
+                - seed_digest (optional; include if available from provenance)
+          
+          Ledger append requirements (facet_snapshots table):
+            - snapshot_id (monotonic or UUID; stable identifier)
+            - root_ettle_id
+            - manifest_digest
+            - created_at
+            - parent_snapshot_id (nullable; for linear history; optional in v0 but schema-ready)
+            - status (e.g., committed) if present in schema
+            - any minimal provenance linkage (e.g., provenance_event_id) if present in schema
+          
+          CAS requirements:
+            - manifest JSON stored as kind: manifest_json (or equivalent) and indexed in cas_blobs when healthy.
+            - CAS write MUST be atomic temp→rename.
+            - If the same manifest_digest already exists with identical bytes, treat as success.
+          
+          Transaction boundary:
+            - The commit operation MUST behave as atomic:
+                - either (a) ledger entry exists AND referenced manifest exists in CAS, or
+                - (b) neither exists (no partial commit).
+            - If CAS write succeeds but ledger append fails, implementation MUST roll back or clean up
+              such that the system does not observe a ledger entry pointing at a missing manifest.
+              (A leftover CAS blob without a ledger reference is acceptable but SHOULD be avoided
+              where feasible.)
+          
+          Manifest constraint section (family-agnostic envelope; binding):
+            - The manifest MUST contain a constraints envelope that can carry constraints from any family.
+            - Constraint families MUST be sorted deterministically.
+            - Constraint references MUST be ordered deterministically.
+            - Per-family outcomes MUST be canonicalised before hashing.
+            - The ABB/SBB projection fields MUST remain present for CORE compatibility but MUST be
+              derived from the family-agnostic envelope, not be the sole representation.
+            - Resolution outcomes are derived artefacts; canonical constraint truth lives in
+              EP → constraint references.
+          
+          Leaf-scoped selector (normative):
+            - The primary commit selector MUST be leaf_ep_id (an EP id).
+            - root_ettle_id MUST NOT be the primary commit selector.
+            - The action layer MUST derive root_ettle_id internally for bookkeeping and manifest fields.
+            - Legacy root_ettle_id resolution (if supported): resolve to exactly one leaf EP
+              deterministically or fail with RootEttleAmbiguous.
+          
+          API surface (minimum):
+            - Action command: Command::SnapshotCommit { leaf_ep_id, policy_ref?, profile_ref?, options? }
+            - Options MUST include: expected_head (optional) and dry_run (optional).
+            - Engine/store snapshot_commit functions are internal-only; correctness lives in the action layer.
+          
+          Out of scope (for this seed):
+            - Snapshot diff algorithm (manifest-to-manifest diff)
+            - Garbage collection / reachability
+            - Full CLI UX beyond invoking commit
+        how: |
+          Implementation approach (normative):
+            - Deterministic traversal:
+                - EPT computation MUST use deterministic ordering primitives (no hash-iteration dependence).
+                - EP ordering per Ettle MUST be ordinal order.
+            - Digesting:
+                - EP digest MUST be computed from a canonical serialization of normalized EP content.
+                - EPT digest MUST be computed from a canonical serialization of the ordered EPT structure.
+                - Manifest digest MUST be computed over exact manifest JSON bytes written to CAS.
+            - Manifest serialization:
+                - MUST be stable JSON with deterministic key ordering and deterministic list ordering.
+                - The manifest MUST include created_at in the manifest JSON bytes written to CAS.
+                - manifest_digest is expected to vary between commits even when canonical state is unchanged.
+                - semantic_manifest_digest is computed over a canonical serialization of the manifest
+                  with created_at excluded.
+                - All idempotency/determinism comparisons MUST use semantic_manifest_digest (and ept_digest),
+                  not manifest_digest.
+                - The manifest MUST record both manifest_digest and semantic_manifest_digest.
+          
+          Scenarios (all MUST be implemented as tests; unit/integration; Gherkin is normative):
+          
+          Feature: Snapshot commit pipeline
+          
+            Background:
+              Given a repository with SQLite + CAS store initialised
+              And canonical Ettle/EP state exists in SQLite
+              And the EPT computation is deterministic and tested (Phase 0.5)
+          
+            # --- Happy path and core invariants ---
+          
+            Scenario: Commit writes manifest to CAS and appends ledger entry in one logical commit
+              Given root_ettle_id "ettle:root" exists
+              And policy_ref is "policy/default@0"
+              And profile_ref is "profile/default@0"
+              When I call snapshot_commit for leaf_ep_id
+              Then a manifest JSON blob is written to CAS
+              And the CAS blob digest equals manifest_digest recorded in the ledger
+              And a facet_snapshots ledger row exists referencing that manifest_digest
+              And the manifest contains an EPT ordered list
+              And every EP in the manifest has a stable ep_digest
+              And effective_constraints, constraint_resolution, coverage, and exceptions fields exist (even if empty)
+          
+            Scenario: Commit is deterministic for identical canonical state
+              Given the canonical DB state is unchanged between runs
+              When I call snapshot_commit twice (without modifying canonical state)
+              Then the produced manifest is semantically identical between the two commits
+              And the EPT digest is identical
+              And semantic_manifest_digest is identical between the two commits
+              And manifest_digest differs between the two commits (created_at varies)
+          
+            Scenario: Manifest includes created_at and semantic_manifest_digest
+              When I call snapshot_commit
+              Then the manifest includes created_at
+              And the manifest includes semantic_manifest_digest
+              And semantic_manifest_digest is computed with created_at excluded
+          
+            Scenario: Commit records policy_ref and profile_ref exactly as provided
+              Given policy_ref is "policy/foo@1.2"
+              And profile_ref is "profile/bar@0.9"
+              When I call snapshot_commit
+              Then the manifest policy_ref equals "policy/foo@1.2"
+              And the manifest profile_ref equals "profile/bar@0.9"
+          
+            Scenario: Commit enforces referential integrity between ledger and CAS
+              When snapshot_commit succeeds
+              Then reading CAS at manifest_digest returns valid JSON
+              And parsing that JSON yields manifest_schema_version and required fields
+              And loading the ledger row and following manifest_digest always resolves
+          
+            # --- Leaf selector ---
+          
+            Scenario: Commit succeeds via action command with leaf_ep_id
+              When I call Command::SnapshotCommit{leaf_ep_id}
+              Then a new snapshot_id is returned
+              And one new ledger row is appended
+              And one manifest blob is written to CAS
+          
+            Scenario: Commit rejects non-leaf EP id
+              Given EP exists but is not a leaf under the refinement model
+              When I call Command::SnapshotCommit{leaf_ep_id=that EP}
+              Then a typed error NotALeaf is returned
+              And no snapshot is committed
+          
+            Scenario: Legacy root selector resolves when exactly one leaf exists
+              Given Ettle has exactly one leaf EP
+              When I invoke legacy root-based commit
+              Then the system resolves to that leaf EP
+              And a snapshot is committed successfully
+          
+            Scenario: Legacy root selector fails when multiple leaves exist
+              Given Ettle has more than one leaf EP
+              When I invoke legacy root-based commit
+              Then a typed error RootEttleAmbiguous is returned
+              And the error includes the candidate leaf EP ids
+          
+            # --- Constraint envelope ---
+          
+            Scenario: Commit with zero constraints produces empty envelope and ABB/SBB projection fields
+              Given no constraints exist in canonical state
+              When snapshot_commit runs
+              Then manifest contains a constraints envelope
+              And effective_abb_constraints is an empty list
+              And resolved_sbb_selections is an empty list
+              And constraint_resolution is present and empty
+          
+            Scenario: Commit with multiple constraint families produces deterministic envelope
+              Given constraints exist with families "pattern" and "compliance"
+              When snapshot_commit runs twice with identical state
+              Then constraints envelope ordering is identical in both manifests
+              And constraints_digest is identical
+          
+            Scenario: Constraint ordering is deterministic (no hash-map iteration)
+              Given code changes that iterate constraints using hash-map iteration order
+              When snapshot_commit runs twice
+              Then semantic_manifest_digest differs
+              And the failure is reported as DeterminismViolation
+          
+            # --- Idempotency and duplicates ---
+          
+            Scenario: Commit rejects duplicate ledger entry for same parent head when expected_head is supplied
+              Given the repository head snapshot_id is H
+              When I call snapshot_commit with expected_head = H and it succeeds producing H2
+              When I call snapshot_commit again with expected_head = H
+              Then the commit fails with HeadMismatch
+              And no new ledger row is appended
+          
+            Scenario: Commit is safe when called concurrently with the same expected_head
+              Given two workers A and B with expected_head = H
+              When both call snapshot_commit concurrently
+              Then exactly one commit succeeds
+              And the other fails with HeadMismatch
+              And the ledger remains a linear history
+          
+            # --- Boundary conditions ---
+          
+            Scenario: Commit with a single Ettle and a single EP
+              Given a root tree containing exactly 1 ettle with exactly 1 EP
+              When snapshot_commit runs
+              Then manifest EPT contains exactly one ettle_id
+              And that ettle has exactly one EP entry with ordinal 0
+          
+            Scenario: Commit with a large but valid EPT (stress)
+              Given a generated canonical state with N=1000 ettles and M=5000 EPs
+              When snapshot_commit runs
+              Then it completes successfully within a reasonable bound for local execution
+              And manifest size_bytes is recorded in cas_blobs
+              And no ordering instability occurs
+          
+            Scenario: Commit when coverage/exceptions are empty
+              Given no coverage data exists and no exceptions exist
+              When snapshot_commit runs
+              Then manifest coverage is present and empty
+              And manifest exceptions is present and empty
+          
+            # --- Negative cases ---
+          
+            Scenario: Commit fails when root_ettle_id does not exist
+              Given root_ettle_id "ettle:missing" does not exist
+              When I call snapshot_commit for it
+              Then the call fails with NotFound
+              And no CAS manifest is written
+              And no ledger row is appended
+          
+            Scenario: Commit fails when canonical state violates EPT invariants
+              Given the canonical state contains a cycle in refinement links
+              When snapshot_commit runs
+              Then it fails with CycleDetected
+              And no ledger row is appended
+          
+            Scenario: Commit fails when EP ordinals are non-unique within an ettle
+              Given an ettle with duplicate ordinal EP entries exists in SQLite
+              When snapshot_commit runs
+              Then it fails with OrdinalConflict
+              And no ledger row is appended
+          
+            # --- Failure injection ---
+          
+            Scenario: CAS write failure prevents ledger append
+              Given CAS is configured to fail writes
+              When snapshot_commit runs
+              Then it fails with CasWriteFailed
+              And no ledger row is appended
+          
+            Scenario: Ledger append failure does not produce a visible partial commit
+              Given CAS writes succeed and SQLite fails during facet_snapshots insert
+              When snapshot_commit runs
+              Then it fails with LedgerAppendFailed
+              And no new facet_snapshots row exists
+              And the head snapshot_id is unchanged
+          
+            Scenario: Transaction rollback leaves no partial DB changes
+              Given snapshot_commit is interrupted mid-transaction
+              When the process restarts
+              Then the database contains no partially written snapshot rows
+              And schema invariants remain intact
+          
+            # --- Manifest content consistency ---
+          
+            Scenario: Manifest EPT is ordered and stable
+              When snapshot_commit runs
+              Then the manifest EPT list is ordered deterministically
+              And EPT ordering is identical to Phase 0.5 traversal output
+          
+            Scenario: Every EP entry in the manifest includes required fields
+              When snapshot_commit runs
+              Then for each EP entry ep_id, ordinal, normative, and ep_digest are present
+          
+            Scenario: Manifest includes store_schema_version and optional seed_digest
+              When snapshot_commit runs
+              Then manifest store_schema_version equals the current migration head
+              And manifest seed_digest equals the provenance seed_digest if available
+          
+            # --- Dry run ---
+          
+            Scenario: Dry-run computes manifest but does not persist
+              Given options.dry_run is true
+              When snapshot_commit runs
+              Then it returns a computed manifest or digest in the response
+              And no CAS blob is written
+              And no ledger row is appended
+          
+            # --- Reproducibility ---
+          
+            Scenario: Commit after DB reload produces stable digests
+              Given a canonical state was imported and committed once
+              And the process is restarted and canonical state reloaded from SQLite
+              When snapshot_commit runs again without changes
+              Then EPT digest is identical to the prior run
+              And EP digests are identical to the prior run
+
+      - id: ep:snapshot_commit:1
+        ordinal: 1
+        normative: true
+        why: |
+          The snapshot commit pipeline was originally implemented as an internal engine/store API.
+          To support MCP as a thin transport over a single command layer, and to prevent split-brain
+          behaviour between CLI/engine and MCP/actions paths, the commit operation must be refactored
+          to use action:commands as the sole canonical mutation ingress. This EP anchors that refactor
+          milestone in the tree.
+        what: |
+          Structural anchor for the snapshot commit actions refactor milestone. Represents the
+          existence of:
+            - Command::SnapshotCommit as the sole canonical mutation ingress
+            - Leaf-scoped selector (leaf_ep_id) with internal root_ettle_id derivation
+            - CLI re-wired to call action:commands rather than engine/store directly
+            - Module visibility or lint enforcement preventing direct store/engine calls
+
+          The normative implementation detail is defined in the snapshot commit actions refactor seed
+          (seed_snapshot_commit_actions_refactor_v3.yaml).
+        how: |
+          No new implementation scenarios here. This EP exists to:
+            - provide a stable parent refinement node for ettle:snapshot_commit_actions_refactor,
+            - preserve the dependency relationship in the refinement tree,
+            - and ensure rendered views show the actions refactor as a child of the commit pipeline.
+
+      - id: ep:snapshot_commit:2
+        ordinal: 2
+        normative: true
+        why: |
+          The action command layer is only viable as a complete interface if agents and MCP/CLI can
+          also observe canonical state and derived projections through stable query surfaces. Read
+          tools are the query complement to the command layer: without them, authoring is blind and
+          seeds remain the fallback inspection mechanism. This EP anchors the action read tools
+          milestone as a distinct child of the commit pipeline.
+        what: |
+          Structural anchor for the action read tools milestone. Represents the existence of:
+            - Deterministic query surfaces for Ettles, EPs, constraints, decisions, snapshots,
+              manifests, EPT projections, and snapshot diff
+            - Pagination and filtering support for large-tree scale
+            - Decision context queries (non-snapshot-semantic)
+            - MCP-ready thin transport wiring over the same action:query surface
+
+          The normative implementation detail is defined in the action read tools seed
+          (seed_action_read_tools_v3_rewrite.yaml).
+        how: |
+          No new implementation scenarios here. This EP exists to:
+            - provide a stable parent refinement node for ettle:action_read_tools,
+            - keep read tools as a distinct milestone from the actions refactor (ep:snapshot_commit:1),
+            - and ensure rendered views show the full command+query vocabulary as children of the
+              commit pipeline.
+
+links:
+  - parent: ettle:store
+    parent_ep: ep:store:0
+    child: ettle:snapshot_commit

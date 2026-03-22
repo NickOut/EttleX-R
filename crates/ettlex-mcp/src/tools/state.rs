@@ -1,7 +1,7 @@
 //! Handler for `state.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -25,7 +25,7 @@ pub fn handle_state_get_version(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::StateVersion(r) = result {
                 McpResult::Ok(json!({
                     "state_version": r.state_version,

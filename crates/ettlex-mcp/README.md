@@ -2,9 +2,14 @@
 
 MCP (Model Context Protocol) thin-slice server for EttleX.
 
-This crate is a **transport-only adapter** over `ettlex-engine`. It contains
+This crate is a **transport-only adapter** over `ettlex-memory`. It contains
 no business logic — every tool call is delegated to the engine query or command
-surface unchanged.
+surface unchanged via `MemoryManager`.
+
+> **Architecture note (Slice 02):** `ettlex-mcp` no longer depends directly on
+> `ettlex-engine`. All write commands route through `ettlex-memory::MemoryManager`.
+> Read queries are dispatched via `apply_engine_query` from `ettlex-engine` (accessed
+> through `ettlex-memory`'s re-export).
 
 ---
 
@@ -45,18 +50,49 @@ surface unchanged.
 All write operations go through `ettlex_apply` with a typed `command` payload:
 
 ```json
-{ "command": { "tag": "EttleCreate", "title": "My Ettle" } }
+{ "command": { "tag": "EttleCreate", "title": "My Ettle", "why": "...", "what": "...", "how": "..." } }
 ```
 
-| Tag                    | Fields                                                                  | Description                                   |
-| ---------------------- | ----------------------------------------------------------------------- | --------------------------------------------- |
-| `SnapshotCommit`       | `leaf_ep_id`, `policy_ref`, `profile_ref?`, `dry_run`, `expected_head?` | Commit a snapshot                             |
-| `EttleCreate`          | `title`                                                                 | Create an ettle                               |
-| `EpCreate`             | `ettle_id`, `ordinal`, `normative`, `why`, `what`, `how`                | Create an EP                                  |
-| `ConstraintCreate`     | `constraint_id`, `family`, `kind`, `scope`, `payload_json`              | Create a constraint                           |
-| `ConstraintAttachToEp` | `ep_id`, `constraint_id`, `ordinal`                                     | Attach a constraint to an EP                  |
-| `ProfileCreate`        | `profile_ref`, `payload_json`, `source?`                                | Create a profile (idempotent on same content) |
-| `ProfileSetDefault`    | `profile_ref`                                                           | Set the repository default profile            |
+### Ettle commands
+
+| Tag              | Fields                                                       | Description                    |
+| ---------------- | ------------------------------------------------------------ | ------------------------------ |
+| `EttleCreate`    | `title`, `why?`, `what?`, `how?`, `reasoning_link_id?`, `reasoning_link_type?` | Create an Ettle |
+| `EttleUpdate`    | `ettle_id`, `title?`, `why?`, `what?`, `how?`, `reasoning_link_id?`, `reasoning_link_type?` | Update an Ettle |
+| `EttleTombstone` | `ettle_id`                                                   | Tombstone an Ettle             |
+
+### EP commands
+
+| Tag        | Fields                                                               | Description   |
+| ---------- | -------------------------------------------------------------------- | ------------- |
+| `EpCreate` | `ettle_id`, `ordinal`, `normative?`, `why?`, `what?`, `how?`        | Create an EP  |
+| `EpUpdate` | `ep_id`, `why?`, `what?`, `how?`, `title?`                          | Update an EP  |
+
+### Relation commands
+
+| Tag                 | Fields                                                                    | Description              |
+| ------------------- | ------------------------------------------------------------------------- | ------------------------ |
+| `RelationCreate`    | `relation_type`, `source_ettle_id`, `target_ettle_id`, `properties_json?` | Create a relation        |
+| `RelationUpdate`    | `relation_id`, `properties_json`                                          | Update relation properties |
+| `RelationTombstone` | `relation_id`                                                             | Tombstone a relation     |
+
+### Group commands
+
+| Tag               | Fields                           | Description                |
+| ----------------- | -------------------------------- | -------------------------- |
+| `GroupCreate`     | `name`                           | Create a group             |
+| `GroupTombstone`  | `group_id`                       | Tombstone a group          |
+| `GroupMemberAdd`  | `group_id`, `ettle_id`           | Add an Ettle to a group    |
+| `GroupMemberRemove` | `group_id`, `ettle_id`         | Remove an Ettle from a group |
+
+### Snapshot and governance commands
+
+| Tag                 | Fields                                                                  | Description                                   |
+| ------------------- | ----------------------------------------------------------------------- | --------------------------------------------- |
+| `SnapshotCommit`    | `leaf_ep_id`, `policy_ref?`, `profile_ref?`, `dry_run`, `expected_head?` | Commit a snapshot                            |
+| `ProfileCreate`     | `profile_ref`, `payload_json`, `source?`                                | Create a profile (idempotent on same content) |
+| `ProfileSetDefault` | `profile_ref`                                                           | Set the repository default profile            |
+| `PolicyCreate`      | `policy_ref`, `text`                                                    | Create a policy document                      |
 
 ### Response shape
 
@@ -102,10 +138,12 @@ All errors have the shape `{ error_code: String, message: String }`.
 | `ProfileNotFound`         | Unknown profile reference                         |
 | `ProfileConflict`         | ProfileCreate with different content for same ref |
 | `ApprovalNotFound`        | Unknown approval token                            |
-| `InvalidConstraintFamily` | Empty constraint family                           |
-| `DuplicateAttachment`     | Constraint already attached to EP                 |
 | `MissingBlob`             | CAS blob not found                                |
 | `ResponseTooLarge`        | Response would exceed size limit                  |
+| `PolicyConflict`          | PolicyCreate attempted on existing policy_ref     |
+| `SelfReferentialLink`     | RelationCreate source and target are the same     |
+| `AlreadyTombstoned`       | Entity is already tombstoned                      |
+| `HasActiveDependants`     | Tombstone blocked by active dependants            |
 
 ---
 

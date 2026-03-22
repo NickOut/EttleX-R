@@ -380,7 +380,7 @@ pub fn apply_engine_query(
 
             let result = (|| -> Result<EngineQueryResult> {
                 let version: u64 = conn
-                    .query_row("SELECT COUNT(*) FROM schema_version", [], |row| row.get(0))
+                    .query_row("SELECT COUNT(*) FROM command_log", [], |row| row.get(0))
                     .map_err(|e| {
                         ExError::new(ExErrorKind::Persistence)
                             .with_op("state_get_version")

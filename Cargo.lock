@@ -1127,6 +1127,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ettlex-agent-api"
+version = "0.1.0"
+dependencies = [
+ "ettlex-memory",
+]
+
+[[package]]
 name = "ettlex-cli"
 version = "0.1.0"
 dependencies = [
@@ -1208,12 +1215,27 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "ettlex-core",
- "ettlex-engine",
+ "ettlex-memory",
  "ettlex-store",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
+name = "ettlex-memory"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ettlex-core",
+ "ettlex-engine",
+ "ettlex-store",
+ "rusqlite",
+ "serde",
+ "serde_json",
  "tempfile",
  "uuid",
 ]

@@ -1,7 +1,7 @@
 //! Handlers for `ept.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -34,7 +34,7 @@ pub fn handle_ept_compute(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EptCompute(r) = result {
                 McpResult::Ok(json!({
                     "leaf_ep_id": r.leaf_ep_id,
@@ -75,7 +75,7 @@ pub fn handle_ept_compute_decision_context(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EptComputeDecisionContext(r) = result {
                 let by_ep: serde_json::Map<String, Value> = r
                     .by_ep

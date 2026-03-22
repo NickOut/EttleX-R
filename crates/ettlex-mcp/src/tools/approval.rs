@@ -1,7 +1,7 @@
 //! Handler for `approval.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -35,7 +35,7 @@ pub fn handle_approval_get(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ApprovalGet(r) = result {
                 McpResult::Ok(json!({
                     "approval_token": r.approval_token,
@@ -72,7 +72,7 @@ pub fn handle_approval_list(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ApprovalList(page) = result {
                 let items: Vec<Value> = page
                     .items

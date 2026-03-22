@@ -257,7 +257,7 @@ pub(crate) fn handle_ettle_tombstone(conn: &mut Connection, ettle_id: &str) -> R
             .with_message(format!("Ettle is already tombstoned: {}", ettle_id)));
     }
 
-    // Check active dependants
+    // Check active dependants (reasoning_link references)
     let count = SqliteRepo::get_active_ettle_dependants_count(conn, ettle_id)?;
     if count > 0 {
         return Err(ExError::new(ExErrorKind::HasActiveDependants)
@@ -267,6 +267,16 @@ pub(crate) fn handle_ettle_tombstone(conn: &mut Connection, ettle_id: &str) -> R
                 "Ettle has {} active dependant(s) that must be tombstoned first",
                 count
             )));
+    }
+
+    // Check for active outgoing constraint relations
+    let active_constraint_count =
+        SqliteRepo::count_active_outgoing_constraint_relations(conn, ettle_id)?;
+    if active_constraint_count > 0 {
+        return Err(ExError::new(ExErrorKind::HasActiveDependants)
+            .with_op("handle_ettle_tombstone")
+            .with_entity_id(ettle_id)
+            .with_message("Ettle has active outgoing constraint relations"));
     }
 
     let now = chrono::Utc::now().to_rfc3339();

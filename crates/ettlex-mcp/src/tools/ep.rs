@@ -2,7 +2,7 @@
 
 use ettlex_core::model::{Constraint, Decision, Ep};
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -64,7 +64,7 @@ pub fn handle_ep_get(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EpGet(ep) = result {
                 McpResult::Ok(ep_to_json(&ep))
             } else {
@@ -96,7 +96,7 @@ pub fn handle_ep_list_children(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EpListChildren(eps) = result {
                 McpResult::Ok(json!({ "items": eps.iter().map(ep_to_json).collect::<Vec<_>>() }))
             } else {
@@ -128,7 +128,7 @@ pub fn handle_ep_list_parents(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EpListParents(eps) = result {
                 McpResult::Ok(json!({ "items": eps.iter().map(ep_to_json).collect::<Vec<_>>() }))
             } else {
@@ -160,7 +160,7 @@ pub fn handle_ep_list_constraints(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EpListConstraints(cs) = result {
                 McpResult::Ok(
                     json!({ "items": cs.iter().map(constraint_to_json).collect::<Vec<_>>() }),
@@ -201,7 +201,7 @@ pub fn handle_ep_list_decisions(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::EpListDecisions(ds) = result {
                 McpResult::Ok(
                     json!({ "items": ds.iter().map(decision_to_json).collect::<Vec<_>>() }),

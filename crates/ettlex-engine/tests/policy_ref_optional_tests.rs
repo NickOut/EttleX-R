@@ -25,8 +25,8 @@
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy_provider::NoopPolicyProvider;
+use ettlex_engine::commands::command::{apply_command, Command};
 use ettlex_engine::commands::engine_command::{apply_engine_command, EngineCommand};
-use ettlex_engine::commands::mcp_command::{apply_mcp_command, McpCommand};
 use ettlex_engine::commands::snapshot::SnapshotOptions;
 use ettlex_store::cas::FsStore;
 use ettlex_store::file_policy_provider::FilePolicyProvider;
@@ -242,15 +242,15 @@ fn test_result_tag_snapshot_committed() {
     let (_dir, mut conn, cas) = setup();
     seed_leaf(&conn, "ep:pr11:0", "ettle:pr11");
 
-    // Via McpCommand
-    let cmd = McpCommand::SnapshotCommit {
+    // Via Command
+    let cmd = Command::SnapshotCommit {
         leaf_ep_id: "ep:pr11:0".to_string(),
         policy_ref: None,
         profile_ref: None,
         dry_run: false,
         expected_head: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -263,10 +263,10 @@ fn test_result_tag_snapshot_committed() {
         "MCP SnapshotCommit with None policy_ref must succeed"
     );
 
-    use ettlex_engine::commands::mcp_command::McpCommandResult;
+    use ettlex_engine::commands::command::CommandResult;
     let (res, _) = result.unwrap();
     assert!(
-        matches!(res, McpCommandResult::SnapshotCommit { .. }),
+        matches!(res, CommandResult::SnapshotCommit { .. }),
         "Result must be SnapshotCommit"
     );
 }

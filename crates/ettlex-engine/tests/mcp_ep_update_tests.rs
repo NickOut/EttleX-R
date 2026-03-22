@@ -4,7 +4,7 @@
 //! S-MU-4 lives in `ettlex-mcp/tests/` (requires handle_apply from that crate).
 //!
 //! Scenario → test mapping:
-//!   S-MU-1  test_mcp_ep_update_returns_ep_id          [RED until ep_id added to McpCommandResult]
+//!   S-MU-1  test_mcp_ep_update_returns_ep_id          [RED until ep_id added to CommandResult]
 //!   S-MU-2  test_mcp_ep_update_empty_returns_structured_error
 //!   S-MU-3  test_mcp_ep_update_not_found_returns_structured_error
 
@@ -13,7 +13,7 @@
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy_provider::NoopPolicyProvider;
-use ettlex_engine::commands::mcp_command::{apply_mcp_command, McpCommand, McpCommandResult};
+use ettlex_engine::commands::command::{apply_command, Command, CommandResult};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use tempfile::TempDir;
@@ -55,14 +55,14 @@ fn test_mcp_ep_update_returns_ep_id() {
     let ep_id = "ep:mu1:0";
     seed_ep(&conn, ep_id);
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: Some("updated".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    let (result, _sv) = apply_mcp_command(
+    let (result, _sv) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -73,7 +73,7 @@ fn test_mcp_ep_update_returns_ep_id() {
     .unwrap();
 
     match result {
-        McpCommandResult::EpUpdate {
+        CommandResult::EpUpdate {
             ep_id: returned_ep_id,
         } => {
             assert_eq!(
@@ -82,7 +82,7 @@ fn test_mcp_ep_update_returns_ep_id() {
             );
         }
         other => panic!(
-            "Expected McpCommandResult::EpUpdate {{ ep_id }}, got {:?}",
+            "Expected CommandResult::EpUpdate {{ ep_id }}, got {:?}",
             other
         ),
     }
@@ -98,14 +98,14 @@ fn test_mcp_ep_update_empty_returns_structured_error() {
     let ep_id = "ep:mu2:0";
     seed_ep(&conn, ep_id);
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: ep_id.to_string(),
         why: None,
         what: None,
         how: None,
         title: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -132,14 +132,14 @@ fn test_mcp_ep_update_empty_returns_structured_error() {
 fn test_mcp_ep_update_not_found_returns_structured_error() {
     let (_dir, mut conn, cas) = setup();
 
-    let cmd = McpCommand::EpUpdate {
+    let cmd = Command::EpUpdate {
         ep_id: "ep:does-not-exist".to_string(),
         why: Some("anything".to_string()),
         what: None,
         how: None,
         title: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,

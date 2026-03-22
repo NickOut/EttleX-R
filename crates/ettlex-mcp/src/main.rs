@@ -179,14 +179,14 @@ fn handle_tools_list() -> Value {
     let tools = vec![
         tool_def(
             "ettlex_apply",
-            "Apply a write command (EttleCreate, EttleUpdate, EttleTombstone, EpCreate, EpUpdate, SnapshotCommit, ConstraintCreate, ConstraintAttachToEp, ProfileCreate, ProfileSetDefault, PolicyCreate).",
+            "Apply a write command (EttleCreate, EttleUpdate, EttleTombstone, EpCreate, EpUpdate, SnapshotCommit, RelationCreate, RelationUpdate, RelationTombstone, GroupCreate, GroupTombstone, GroupMemberAdd, GroupMemberRemove, ProfileCreate, ProfileSetDefault, PolicyCreate).",
             json!({
                 "type": "object",
                 "required": ["command"],
                 "properties": {
                     "command": {
                         "type": "object",
-                        "description": "Tagged command object. Required field: tag. Tags: EttleCreate {title, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleUpdate {ettle_id, title?, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleTombstone {ettle_id}, EpCreate {ettle_id, ordinal, normative?, why?, what?, how?}, EpUpdate {ep_id, why?, what?, how?, title?}, SnapshotCommit {leaf_ep_id, policy_ref?}, ConstraintCreate {family, kind, scope, payload_json}, ConstraintAttachToEp {ep_id, constraint_id, ordinal}, ProfileCreate {profile_ref, payload_json}, ProfileSetDefault {profile_ref}, PolicyCreate {policy_ref, text}."
+                        "description": "Tagged command object. Required field: tag. Tags: EttleCreate {title, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleUpdate {ettle_id, title?, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleTombstone {ettle_id}, EpCreate {ettle_id, ordinal, normative?, why?, what?, how?}, EpUpdate {ep_id, why?, what?, how?, title?}, SnapshotCommit {leaf_ep_id, policy_ref?}, RelationCreate {relation_type, source_ettle_id, target_ettle_id, properties_json?}, RelationUpdate {relation_id, properties_json}, RelationTombstone {relation_id}, GroupCreate {name}, GroupTombstone {group_id}, GroupMemberAdd {group_id, ettle_id}, GroupMemberRemove {group_id, ettle_id}, ProfileCreate {profile_ref, payload_json}, ProfileSetDefault {profile_ref}, PolicyCreate {policy_ref, text}."
                     },
                     "expected_state_version": {
                         "type": "integer",
@@ -441,30 +441,6 @@ fn handle_tools_list() -> Value {
                     "ettle_id": { "type": "string", "description": "Ettle ID (ettle:...)" },
                     "include_eps": { "type": "boolean", "description": "Include decisions on EPs of this ettle (default false)" },
                     "include_ancestors": { "type": "boolean", "description": "Include decisions from ancestor ettles (default false)" }
-                }
-            }),
-        ),
-        // ── Constraint ───────────────────────────────────────────────────
-        tool_def(
-            "constraint_get",
-            "Get a single constraint by ID.",
-            json!({
-                "type": "object",
-                "required": ["constraint_id"],
-                "properties": {
-                    "constraint_id": { "type": "string", "description": "Constraint ID" }
-                }
-            }),
-        ),
-        tool_def(
-            "constraint_list_by_family",
-            "List constraints by family, optionally including tombstoned constraints.",
-            json!({
-                "type": "object",
-                "required": ["family"],
-                "properties": {
-                    "family": { "type": "string", "description": "Constraint family name (e.g. ABB)" },
-                    "include_tombstoned": { "type": "boolean", "description": "Include deleted constraints (default false)" }
                 }
             }),
         ),

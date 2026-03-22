@@ -1,7 +1,7 @@
 //! Handler for `constraint_predicates.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -52,8 +52,8 @@ pub fn handle_predicate_preview(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
-            use ettlex_engine::commands::read_tools::PreviewStatus;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::read_tools::PreviewStatus;
             if let EngineQueryResult::PredicatePreview(r) = result {
                 let status = match r.status {
                     PreviewStatus::Selected => "Selected",

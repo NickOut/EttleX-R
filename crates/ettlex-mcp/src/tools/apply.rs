@@ -1,8 +1,8 @@
-//! Handler for `ettlex.apply` — dispatches write commands via `apply_mcp_command`.
+//! Handler for `ettlex.apply` — dispatches write commands via `apply_command`.
 
 use ettlex_core::approval_router::ApprovalRouter;
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::mcp_command::{apply_mcp_command, McpCommand, McpCommandResult};
+use ettlex_memory::{apply_command, Command, CommandResult};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -45,7 +45,7 @@ pub fn handle_apply(
         None => return McpResult::Err(McpError::new(MCP_INVALID_INPUT, "missing 'command' field")),
     };
 
-    let cmd: McpCommand = match serde_json::from_value(cmd_value.clone()) {
+    let cmd: Command = match serde_json::from_value(cmd_value.clone()) {
         Ok(c) => c,
         Err(e) => {
             let msg = e.to_string();
@@ -60,7 +60,7 @@ pub fn handle_apply(
     };
 
     // Dispatch
-    match apply_mcp_command(
+    match apply_command(
         cmd,
         expected_sv,
         conn,
@@ -69,7 +69,7 @@ pub fn handle_apply(
         approval_router,
     ) {
         Ok((result, new_sv)) => {
-            let result_json = mcp_command_result_to_json(&result);
+            let result_json = command_result_to_json(&result);
             McpResult::Ok(json!({
                 "new_state_version": new_sv,
                 "result": result_json,
@@ -79,9 +79,9 @@ pub fn handle_apply(
     }
 }
 
-fn mcp_command_result_to_json(r: &McpCommandResult) -> Value {
+fn command_result_to_json(r: &CommandResult) -> Value {
     match r {
-        McpCommandResult::SnapshotCommit {
+        CommandResult::SnapshotCommit {
             snapshot_id,
             manifest_digest,
         } => json!({
@@ -89,30 +89,51 @@ fn mcp_command_result_to_json(r: &McpCommandResult) -> Value {
             "snapshot_id": snapshot_id,
             "manifest_digest": manifest_digest,
         }),
-        McpCommandResult::RoutedForApproval { approval_token } => json!({
+        CommandResult::RoutedForApproval { approval_token } => json!({
             "tag": "RoutedForApproval",
             "approval_token": approval_token,
         }),
-        McpCommandResult::EttleCreate { ettle_id } => json!({
+        CommandResult::EttleCreate { ettle_id } => json!({
             "tag": "EttleCreate",
             "ettle_id": ettle_id,
         }),
-        McpCommandResult::EpCreate { ep_id } => json!({
+        CommandResult::EpCreate { ep_id } => json!({
             "tag": "EpCreate",
             "ep_id": ep_id,
         }),
-        McpCommandResult::ConstraintCreate { constraint_id } => json!({
-            "tag": "ConstraintCreate",
-            "constraint_id": constraint_id,
-        }),
-        McpCommandResult::EpUpdate { ep_id } => json!({ "tag": "EpUpdate", "ep_id": ep_id }),
-        McpCommandResult::ConstraintAttachToEp => json!({ "tag": "ConstraintAttachToEp" }),
-        McpCommandResult::ProfileCreate => json!({ "tag": "ProfileCreate" }),
-        McpCommandResult::ProfileSetDefault => json!({ "tag": "ProfileSetDefault" }),
-        McpCommandResult::PolicyCreate { policy_ref } => {
+        CommandResult::EpUpdate { ep_id } => json!({ "tag": "EpUpdate", "ep_id": ep_id }),
+        CommandResult::ProfileCreate => json!({ "tag": "ProfileCreate" }),
+        CommandResult::ProfileSetDefault => json!({ "tag": "ProfileSetDefault" }),
+        CommandResult::PolicyCreate { policy_ref } => {
             json!({ "tag": "PolicyCreate", "policy_ref": policy_ref })
         }
-        McpCommandResult::EttleUpdate => json!({ "tag": "EttleUpdate" }),
-        McpCommandResult::EttleTombstone => json!({ "tag": "EttleTombstone" }),
+        CommandResult::EttleUpdate => json!({ "tag": "EttleUpdate" }),
+        CommandResult::EttleTombstone => json!({ "tag": "EttleTombstone" }),
+        CommandResult::RelationCreate { relation_id } => {
+            json!({ "tag": "RelationCreate", "relation_id": relation_id })
+        }
+        CommandResult::RelationUpdate => json!({ "tag": "RelationUpdate" }),
+        CommandResult::RelationGet { record } => {
+            json!({ "tag": "RelationGet", "record": record })
+        }
+        CommandResult::RelationList { items } => {
+            json!({ "tag": "RelationList", "items": items })
+        }
+        CommandResult::RelationTombstone => json!({ "tag": "RelationTombstone" }),
+        CommandResult::GroupCreate { group_id } => {
+            json!({ "tag": "GroupCreate", "group_id": group_id })
+        }
+        CommandResult::GroupGet { record } => {
+            json!({ "tag": "GroupGet", "record": record })
+        }
+        CommandResult::GroupList { items } => {
+            json!({ "tag": "GroupList", "items": items })
+        }
+        CommandResult::GroupTombstone => json!({ "tag": "GroupTombstone" }),
+        CommandResult::GroupMemberAdd => json!({ "tag": "GroupMemberAdd" }),
+        CommandResult::GroupMemberRemove => json!({ "tag": "GroupMemberRemove" }),
+        CommandResult::GroupMemberList { items } => {
+            json!({ "tag": "GroupMemberList", "items": items })
+        }
     }
 }

@@ -5,7 +5,10 @@
 #![allow(clippy::result_large_err)]
 
 use crate::errors::{from_rusqlite, Result};
-use crate::model::{EttleCursor, EttleListItem, EttleListOpts, EttleListPage, EttleRecord};
+use crate::model::{
+    EttleCursor, EttleListItem, EttleListOpts, EttleListPage, EttleRecord, GroupMemberRecord,
+    GroupRecord, RelationListOpts, RelationRecord, RelationTypeEntry,
+};
 use base64::Engine as _;
 use ettlex_core::errors::{ExError, ExErrorKind};
 use ettlex_core::model::{
@@ -1538,6 +1541,426 @@ impl SqliteRepo {
             .map_err(from_rusqlite)?;
 
         Ok(decisions)
+    }
+
+    // =========================================================================
+    // Relation Type Registry (Slice 02)
+    // =========================================================================
+
+    /// Get a relation type registry entry by relation_type.
+    pub fn get_relation_type_entry(
+        conn: &Connection,
+        relation_type: &str,
+    ) -> Result<Option<RelationTypeEntry>> {
+        let result = conn
+            .query_row(
+                "SELECT relation_type, properties_json, created_at, tombstoned_at \
+                 FROM relation_type_registry WHERE relation_type = ?1",
+                [relation_type],
+                |row| {
+                    Ok(RelationTypeEntry {
+                        relation_type: row.get(0)?,
+                        properties_json: row.get(1)?,
+                        created_at: row.get(2)?,
+                        tombstoned_at: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+        Ok(result)
+    }
+
+    // =========================================================================
+    // Relations (Slice 02)
+    // =========================================================================
+
+    /// Insert a new relation row.
+    pub fn insert_relation(conn: &Connection, record: &RelationRecord) -> Result<()> {
+        conn.execute(
+            "INSERT INTO relations (id, source_ettle_id, target_ettle_id, relation_type, \
+             properties_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                record.id,
+                record.source_ettle_id,
+                record.target_ettle_id,
+                record.relation_type,
+                record.properties_json,
+                record.created_at,
+            ],
+        )
+        .map_err(from_rusqlite)?;
+        Ok(())
+    }
+
+    /// Get a relation by ID.
+    pub fn get_relation(conn: &Connection, id: &str) -> Result<Option<RelationRecord>> {
+        let result = conn
+            .query_row(
+                "SELECT id, source_ettle_id, target_ettle_id, relation_type, \
+                 properties_json, created_at, tombstoned_at \
+                 FROM relations WHERE id = ?1",
+                [id],
+                |row| {
+                    Ok(RelationRecord {
+                        id: row.get(0)?,
+                        source_ettle_id: row.get(1)?,
+                        target_ettle_id: row.get(2)?,
+                        relation_type: row.get(3)?,
+                        properties_json: row.get(4)?,
+                        created_at: row.get(5)?,
+                        tombstoned_at: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+        Ok(result)
+    }
+
+    /// List relations with optional filters, sorted by (created_at ASC, id ASC).
+    pub fn list_relations(
+        conn: &Connection,
+        opts: &RelationListOpts,
+    ) -> Result<Vec<RelationRecord>> {
+        let mut clauses: Vec<String> = Vec::new();
+        if !opts.include_tombstoned {
+            clauses.push("tombstoned_at IS NULL".to_string());
+        }
+        if let Some(src) = &opts.source_ettle_id {
+            clauses.push(format!("source_ettle_id = '{}'", src.replace('\'', "''")));
+        }
+        if let Some(tgt) = &opts.target_ettle_id {
+            clauses.push(format!("target_ettle_id = '{}'", tgt.replace('\'', "''")));
+        }
+        if let Some(rt) = &opts.relation_type {
+            clauses.push(format!("relation_type = '{}'", rt.replace('\'', "''")));
+        }
+
+        let where_clause = if clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", clauses.join(" AND "))
+        };
+
+        let sql = format!(
+            "SELECT id, source_ettle_id, target_ettle_id, relation_type, \
+             properties_json, created_at, tombstoned_at \
+             FROM relations {} ORDER BY created_at ASC, id ASC",
+            where_clause
+        );
+
+        let mut stmt = conn.prepare(&sql).map_err(from_rusqlite)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(RelationRecord {
+                    id: row.get(0)?,
+                    source_ettle_id: row.get(1)?,
+                    target_ettle_id: row.get(2)?,
+                    relation_type: row.get(3)?,
+                    properties_json: row.get(4)?,
+                    created_at: row.get(5)?,
+                    tombstoned_at: row.get(6)?,
+                })
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(rows)
+    }
+
+    /// Update a relation's properties_json. Returns false if not found.
+    pub fn update_relation_properties(
+        conn: &Connection,
+        id: &str,
+        properties_json: &str,
+    ) -> Result<bool> {
+        let rows_changed = conn
+            .execute(
+                "UPDATE relations SET properties_json = ?1 WHERE id = ?2",
+                rusqlite::params![properties_json, id],
+            )
+            .map_err(from_rusqlite)?;
+        Ok(rows_changed > 0)
+    }
+
+    /// Tombstone a relation. Returns false if not found.
+    pub fn tombstone_relation(conn: &Connection, id: &str, tombstoned_at: &str) -> Result<bool> {
+        let rows_changed = conn
+            .execute(
+                "UPDATE relations SET tombstoned_at = ?1 WHERE id = ?2",
+                rusqlite::params![tombstoned_at, id],
+            )
+            .map_err(from_rusqlite)?;
+        Ok(rows_changed > 0)
+    }
+
+    /// Count active outgoing constraint relations from a source ettle.
+    pub fn count_active_outgoing_constraint_relations(
+        conn: &Connection,
+        source_ettle_id: &str,
+    ) -> Result<u64> {
+        let count: u64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM relations \
+                 WHERE source_ettle_id = ?1 AND relation_type = 'constraint' \
+                 AND tombstoned_at IS NULL",
+                [source_ettle_id],
+                |r| r.get(0),
+            )
+            .map_err(from_rusqlite)?;
+        Ok(count)
+    }
+
+    /// Get target_ettle_ids of active outgoing relations of a given type from source.
+    pub fn get_active_outgoing_relations_of_type(
+        conn: &Connection,
+        source_ettle_id: &str,
+        relation_type: &str,
+    ) -> Result<Vec<String>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT target_ettle_id FROM relations \
+                 WHERE source_ettle_id = ?1 AND relation_type = ?2 AND tombstoned_at IS NULL",
+            )
+            .map_err(from_rusqlite)?;
+        let rows = stmt
+            .query_map(rusqlite::params![source_ettle_id, relation_type], |row| {
+                row.get(0)
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<String>, _>>()
+            .map_err(from_rusqlite)?;
+        Ok(rows)
+    }
+
+    // =========================================================================
+    // Groups (Slice 02)
+    // =========================================================================
+
+    /// Insert a new group row.
+    pub fn insert_group(conn: &Connection, record: &GroupRecord) -> Result<()> {
+        conn.execute(
+            "INSERT INTO groups (id, name, created_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![record.id, record.name, record.created_at],
+        )
+        .map_err(from_rusqlite)?;
+        Ok(())
+    }
+
+    /// Get a group by ID.
+    pub fn get_group(conn: &Connection, id: &str) -> Result<Option<GroupRecord>> {
+        let result = conn
+            .query_row(
+                "SELECT id, name, created_at, tombstoned_at FROM groups WHERE id = ?1",
+                [id],
+                |row| {
+                    Ok(GroupRecord {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        created_at: row.get(2)?,
+                        tombstoned_at: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+        Ok(result)
+    }
+
+    /// List groups sorted by created_at ASC.
+    pub fn list_groups(conn: &Connection, include_tombstoned: bool) -> Result<Vec<GroupRecord>> {
+        let sql = if include_tombstoned {
+            "SELECT id, name, created_at, tombstoned_at FROM groups ORDER BY created_at ASC, id ASC"
+        } else {
+            "SELECT id, name, created_at, tombstoned_at FROM groups \
+             WHERE tombstoned_at IS NULL ORDER BY created_at ASC, id ASC"
+        };
+        let mut stmt = conn.prepare(sql).map_err(from_rusqlite)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(GroupRecord {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    created_at: row.get(2)?,
+                    tombstoned_at: row.get(3)?,
+                })
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+        Ok(rows)
+    }
+
+    /// Tombstone a group. Returns false if not found.
+    pub fn tombstone_group(conn: &Connection, id: &str, tombstoned_at: &str) -> Result<bool> {
+        let rows_changed = conn
+            .execute(
+                "UPDATE groups SET tombstoned_at = ?1 WHERE id = ?2",
+                rusqlite::params![tombstoned_at, id],
+            )
+            .map_err(from_rusqlite)?;
+        Ok(rows_changed > 0)
+    }
+
+    /// Count active (non-tombstoned) members in a group.
+    pub fn count_active_group_members(conn: &Connection, group_id: &str) -> Result<u64> {
+        let count: u64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM group_members WHERE group_id = ?1 AND tombstoned_at IS NULL",
+                [group_id],
+                |r| r.get(0),
+            )
+            .map_err(from_rusqlite)?;
+        Ok(count)
+    }
+
+    // =========================================================================
+    // Group Members (Slice 02)
+    // =========================================================================
+
+    /// Insert a new group member row.
+    pub fn insert_group_member(conn: &Connection, record: &GroupMemberRecord) -> Result<()> {
+        conn.execute(
+            "INSERT INTO group_members (id, group_id, ettle_id, created_at) \
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                record.id,
+                record.group_id,
+                record.ettle_id,
+                record.created_at
+            ],
+        )
+        .map_err(from_rusqlite)?;
+        Ok(())
+    }
+
+    /// Get the active group member record for a (group_id, ettle_id) pair.
+    pub fn get_active_group_member(
+        conn: &Connection,
+        group_id: &str,
+        ettle_id: &str,
+    ) -> Result<Option<GroupMemberRecord>> {
+        let result = conn
+            .query_row(
+                "SELECT id, group_id, ettle_id, created_at, tombstoned_at \
+                 FROM group_members \
+                 WHERE group_id = ?1 AND ettle_id = ?2 AND tombstoned_at IS NULL",
+                rusqlite::params![group_id, ettle_id],
+                |row| {
+                    Ok(GroupMemberRecord {
+                        id: row.get(0)?,
+                        group_id: row.get(1)?,
+                        ettle_id: row.get(2)?,
+                        created_at: row.get(3)?,
+                        tombstoned_at: row.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+        Ok(result)
+    }
+
+    /// Get a group member record by its ID (regardless of tombstone status).
+    pub fn get_group_member_by_id(
+        conn: &Connection,
+        id: &str,
+    ) -> Result<Option<GroupMemberRecord>> {
+        let result = conn
+            .query_row(
+                "SELECT id, group_id, ettle_id, created_at, tombstoned_at \
+                 FROM group_members WHERE id = ?1",
+                [id],
+                |row| {
+                    Ok(GroupMemberRecord {
+                        id: row.get(0)?,
+                        group_id: row.get(1)?,
+                        ettle_id: row.get(2)?,
+                        created_at: row.get(3)?,
+                        tombstoned_at: row.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(from_rusqlite)?;
+        Ok(result)
+    }
+
+    /// List members of a group sorted by created_at ASC.
+    pub fn list_group_members(
+        conn: &Connection,
+        group_id: &str,
+        include_tombstoned: bool,
+    ) -> Result<Vec<GroupMemberRecord>> {
+        let sql = if include_tombstoned {
+            "SELECT id, group_id, ettle_id, created_at, tombstoned_at \
+             FROM group_members WHERE group_id = ?1 ORDER BY created_at ASC, id ASC"
+        } else {
+            "SELECT id, group_id, ettle_id, created_at, tombstoned_at \
+             FROM group_members WHERE group_id = ?1 AND tombstoned_at IS NULL \
+             ORDER BY created_at ASC, id ASC"
+        };
+        let mut stmt = conn.prepare(sql).map_err(from_rusqlite)?;
+        let rows = stmt
+            .query_map([group_id], |row| {
+                Ok(GroupMemberRecord {
+                    id: row.get(0)?,
+                    group_id: row.get(1)?,
+                    ettle_id: row.get(2)?,
+                    created_at: row.get(3)?,
+                    tombstoned_at: row.get(4)?,
+                })
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+        Ok(rows)
+    }
+
+    /// Tombstone a group member by ID. Returns false if not found.
+    pub fn tombstone_group_member(
+        conn: &Connection,
+        member_id: &str,
+        tombstoned_at: &str,
+    ) -> Result<bool> {
+        let rows_changed = conn
+            .execute(
+                "UPDATE group_members SET tombstoned_at = ?1 WHERE id = ?2",
+                rusqlite::params![tombstoned_at, member_id],
+            )
+            .map_err(from_rusqlite)?;
+        Ok(rows_changed > 0)
+    }
+
+    /// Get all active groups that contain the given ettle_id.
+    pub fn get_active_groups_for_ettle(
+        conn: &Connection,
+        ettle_id: &str,
+    ) -> Result<Vec<GroupRecord>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT g.id, g.name, g.created_at, g.tombstoned_at \
+                 FROM groups g \
+                 INNER JOIN group_members gm ON g.id = gm.group_id \
+                 WHERE gm.ettle_id = ?1 AND gm.tombstoned_at IS NULL AND g.tombstoned_at IS NULL \
+                 ORDER BY g.created_at ASC, g.id ASC",
+            )
+            .map_err(from_rusqlite)?;
+        let rows = stmt
+            .query_map([ettle_id], |row| {
+                Ok(GroupRecord {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    created_at: row.get(2)?,
+                    tombstoned_at: row.get(3)?,
+                })
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+        Ok(rows)
     }
 }
 

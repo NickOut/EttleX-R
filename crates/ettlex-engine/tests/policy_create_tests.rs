@@ -24,7 +24,7 @@
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::mcp_command::{apply_mcp_command, McpCommand, McpCommandResult};
+use ettlex_engine::commands::command::{apply_command, Command, CommandResult};
 use ettlex_store::cas::FsStore;
 use ettlex_store::file_policy_provider::FilePolicyProvider;
 use rusqlite::Connection;
@@ -58,7 +58,7 @@ fn seed_leaf(conn: &Connection) {
 }
 
 fn sv(conn: &Connection) -> u64 {
-    conn.query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+    conn.query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap()
 }
 
@@ -72,18 +72,18 @@ fn test_policy_create_succeeds_state_version_increments() {
     let provider = FilePolicyProvider::new(&policies_dir);
     let before = sv(&conn);
 
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "my_policy@0".to_string(),
         text: "# Policy\n<!-- HANDOFF: START -->\nobligation\n<!-- HANDOFF: END -->".to_string(),
     };
-    let result = apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result = apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(
         result.is_ok(),
         "PolicyCreate must succeed: {:?}",
         result.err()
     );
     let (res, new_sv) = result.unwrap();
-    assert!(matches!(res, McpCommandResult::PolicyCreate { .. }));
+    assert!(matches!(res, CommandResult::PolicyCreate { .. }));
     assert_eq!(new_sv, before + 1);
 }
 
@@ -96,13 +96,13 @@ fn test_policy_create_duplicate_rejected() {
     let (_dir, mut conn, cas, policies_dir) = setup();
     let provider = FilePolicyProvider::new(&policies_dir);
 
-    let cmd = || McpCommand::PolicyCreate {
+    let cmd = || Command::PolicyCreate {
         policy_ref: "dup_policy@0".to_string(),
         text: "# Policy content".to_string(),
     };
-    apply_mcp_command(cmd(), None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
+    apply_command(cmd(), None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
 
-    let result2 = apply_mcp_command(cmd(), None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result2 = apply_command(cmd(), None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(result2.is_err(), "Duplicate PolicyCreate must fail");
     assert_eq!(result2.unwrap_err().kind(), ExErrorKind::PolicyConflict);
 }
@@ -116,11 +116,11 @@ fn test_policy_create_empty_text_rejected() {
     let (_dir, mut conn, cas, policies_dir) = setup();
     let provider = FilePolicyProvider::new(&policies_dir);
 
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "empty_text@0".to_string(),
         text: String::new(),
     };
-    let result = apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result = apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(result.is_err(), "Empty text must be rejected");
     assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidInput);
 }
@@ -134,11 +134,11 @@ fn test_policy_create_empty_policy_ref_rejected() {
     let (_dir, mut conn, cas, policies_dir) = setup();
     let provider = FilePolicyProvider::new(&policies_dir);
 
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: String::new(),
         text: "# Content".to_string(),
     };
-    let result = apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result = apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(result.is_err(), "Empty policy_ref must be rejected");
     assert_eq!(result.unwrap_err().kind(), ExErrorKind::InvalidInput);
 }
@@ -152,11 +152,11 @@ fn test_policy_create_malformed_policy_ref_rejected() {
     let (_dir, mut conn, cas, policies_dir) = setup();
     let provider = FilePolicyProvider::new(&policies_dir);
 
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "no_at_separator".to_string(),
         text: "# Content".to_string(),
     };
-    let result = apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result = apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(
         result.is_err(),
         "Malformed policy_ref (no @) must be rejected"
@@ -183,11 +183,11 @@ fn test_policy_create_write_failure_no_state_change() {
     let provider = FilePolicyProvider::new(&policies_dir);
     let before = sv(&conn);
 
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "fail_policy@0".to_string(),
         text: "# Content".to_string(),
     };
-    let result = apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result = apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(result.is_err(), "Write failure must return error");
     assert_eq!(
         sv(&conn),
@@ -207,11 +207,11 @@ fn test_policy_create_max_length_policy_ref_succeeds() {
 
     // 200-char policy_ref with @ separator
     let policy_ref = format!("{}@0", "a".repeat(200));
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref,
         text: "# Content".to_string(),
     };
-    let result = apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result = apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(
         result.is_ok(),
         "Max-length policy_ref must succeed: {:?}",
@@ -229,11 +229,11 @@ fn test_policy_create_large_text_succeeds() {
     let provider = FilePolicyProvider::new(&policies_dir);
 
     let large_text = "# Large\n".repeat(10_000); // ~80KB
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "large_policy@0".to_string(),
         text: large_text.clone(),
     };
-    let result = apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result = apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(
         result.is_ok(),
         "Large text must succeed: {:?}",
@@ -255,11 +255,11 @@ fn test_policy_create_stable_retrieval_key() {
     let provider = FilePolicyProvider::new(&policies_dir);
 
     let text = "# My stable policy\nObligation: do the thing.".to_string();
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "stable_key@1".to_string(),
         text: text.clone(),
     };
-    apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
+    apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
 
     let retrieved = provider.policy_read("stable_key@1").unwrap();
     assert_eq!(
@@ -277,13 +277,13 @@ fn test_policy_create_not_idempotent() {
     let (_dir, mut conn, cas, policies_dir) = setup();
     let provider = FilePolicyProvider::new(&policies_dir);
 
-    let mk = || McpCommand::PolicyCreate {
+    let mk = || Command::PolicyCreate {
         policy_ref: "idem@0".to_string(),
         text: "# Identical".to_string(),
     };
-    apply_mcp_command(mk(), None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
+    apply_command(mk(), None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
 
-    let result2 = apply_mcp_command(mk(), None, &mut conn, &cas, &provider, &NoopApprovalRouter);
+    let result2 = apply_command(mk(), None, &mut conn, &cas, &provider, &NoopApprovalRouter);
     assert!(result2.is_err(), "Second identical PolicyCreate must fail");
     assert_eq!(result2.unwrap_err().kind(), ExErrorKind::PolicyConflict);
 }
@@ -297,11 +297,11 @@ fn test_policy_create_appears_in_list() {
     let (_dir, mut conn, cas, policies_dir) = setup();
     let provider = FilePolicyProvider::new(&policies_dir);
 
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "list_check@0".to_string(),
         text: "# Listed policy".to_string(),
     };
-    apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
+    apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
 
     let list = provider.policy_list().unwrap();
     assert!(
@@ -321,21 +321,21 @@ fn test_policy_create_usable_in_snapshot_commit() {
     seed_leaf(&conn);
 
     // Create policy
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "usable_policy@0".to_string(),
         text: "# Usable\n<!-- HANDOFF: START -->\nobligation\n<!-- HANDOFF: END -->".to_string(),
     };
-    apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
+    apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
 
     // SnapshotCommit with the new policy_ref
-    let commit_cmd = McpCommand::SnapshotCommit {
+    let commit_cmd = Command::SnapshotCommit {
         leaf_ep_id: "ep:pc:0".to_string(),
         policy_ref: Some("usable_policy@0".to_string()),
         profile_ref: None,
         dry_run: false,
         expected_head: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         commit_cmd,
         None,
         &mut conn,
@@ -360,12 +360,12 @@ fn test_policy_create_state_version_incremented() {
     let provider = FilePolicyProvider::new(&policies_dir);
 
     let v0 = sv(&conn);
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "sv_check@0".to_string(),
         text: "# Content".to_string(),
     };
     let (_, returned_sv) =
-        apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
+        apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
 
     let v1 = sv(&conn);
     assert_eq!(v1, v0 + 1, "state_version must increment by 1");
@@ -384,11 +384,11 @@ fn test_policy_create_existing_policies_retrievable() {
     let provider = FilePolicyProvider::new(&policies_dir);
 
     // Create a new policy
-    let cmd = McpCommand::PolicyCreate {
+    let cmd = Command::PolicyCreate {
         policy_ref: "new_one@0".to_string(),
         text: "# New policy".to_string(),
     };
-    apply_mcp_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
+    apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
 
     // Both must be retrievable
     let existing_text = provider.policy_read("existing@0").unwrap();
@@ -408,8 +408,8 @@ fn test_policy_create_must_not_overwrite_existing() {
 
     // First create
     let original = "# Original content".to_string();
-    apply_mcp_command(
-        McpCommand::PolicyCreate {
+    apply_command(
+        Command::PolicyCreate {
             policy_ref: "no_overwrite@0".to_string(),
             text: original.clone(),
         },
@@ -422,8 +422,8 @@ fn test_policy_create_must_not_overwrite_existing() {
     .unwrap();
 
     // Second create (attempt overwrite)
-    let result = apply_mcp_command(
-        McpCommand::PolicyCreate {
+    let result = apply_command(
+        Command::PolicyCreate {
             policy_ref: "no_overwrite@0".to_string(),
             text: "# Replacement content".to_string(),
         },

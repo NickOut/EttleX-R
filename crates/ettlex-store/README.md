@@ -128,18 +128,22 @@ Filesystem-based CAS with SHA-256 addressing. Provides immutable blob storage wi
 
 SQL migration framework with automatic version tracking and application.
 
-**Migrations**:
+**Migrations** (14 total as of Slice 02):
 
-- `001_initial_schema.sql` - Ettles, EPs, provenance_events, facet_snapshots stub
-- `002_snapshots_ledger.sql` - Snapshots ledger for committed manifests
-- `003_constraints_schema.sql` - Constraints and EP-constraint attachment tables
+- `001_initial_schema.sql` - Ettles, EPs, provenance_events
+- `002_snapshot_ledger.sql` - Snapshots ledger for committed manifests
+- `003_constraints_schema.sql` - Constraints and EP-constraint attachment tables *(dropped in 014)*
 - `004_decisions_schema.sql` - Decisions and decision links
 - `005_profiles_schema.sql` - Profiles table
 - `006_approval_requests_schema.sql` - Approval requests
 - `007_approval_cas_schema.sql` - `request_digest` on approval_requests (CAS-backed)
-- `008_mcp_command_log.sql` - OCC log for MCP write commands
-- `009_parent_ep_id.sql` - `parent_ep_id TEXT` on ettles (authoritative EP→child join)
-- `010_backfill_parent_ep_id.sql` - Backfill `parent_ep_id` from `eps.child_ettle_id` for pre-migration rows
+- `008_mcp_command_log.sql` - OCC log *(renamed to `command_log` in 014)*
+- `009_parent_ep_id.sql` - `parent_ep_id TEXT` on ettles *(legacy, superseded by EP model in future slice)*
+- `010_backfill_parent_ep_id.sql` - Backfill `parent_ep_id`
+- `011_eps_title.sql` - Nullable `title TEXT` on `eps`
+- `012_ettle_v2_schema.sql` - Add `why`, `what`, `how`, `reasoning_link_id`, `reasoning_link_type`, `tombstoned_at` to `ettles`
+- `013_ettle_timestamps_iso8601.sql` - Migrate `ettles.created_at`/`updated_at` from INTEGER to TEXT ISO-8601
+- `014_slice02_schema.sql` - Rename `mcp_command_log`→`command_log`; rename `provenance_events.timestamp`→`occurred_at` (ISO-8601); drop `constraints`/`ep_constraint_refs` and related tables; add `relation_type_registry`, `relations`, `groups`, `group_members`; seed 4 built-in relation types
 
 **Public API**:
 
@@ -156,24 +160,35 @@ SQL migration framework with automatic version tracking and application.
 
 Bridges between domain models (`ettlex_core::model`) and SQLite persistence.
 
-**Public API**:
+**Ettle/EP functions** (all on `&Connection` unless noted):
 
-- `SqliteRepo::persist_ettle()` - Insert/update Ettle
-- `SqliteRepo::persist_ep()` - Insert/update EP
-- `SqliteRepo::persist_constraint()` - Insert/update Constraint
-- `SqliteRepo::persist_ep_constraint_ref()` - Insert EP-constraint attachment
-- `SqliteRepo::get_ettle()` - Load Ettle by ID
-- `SqliteRepo::get_ep()` - Load EP by ID
-- `SqliteRepo::get_constraint()` - Load Constraint by ID
-- `SqliteRepo::list_constraints()` - Load all Constraints
-- `SqliteRepo::list_ep_constraint_refs()` - Load attachments for EP
-- `hydration::load_tree()` - Hydrate full tree into Store (includes constraints)
+- `insert_ettle(conn, record)` — Insert new Ettle
+- `get_ettle(conn, id)` — Load `EttleRecord` by ID (returns `Option`)
+- `list_ettles(conn, opts)` — Paginated `EttleListPage`
+- `update_ettle(conn, id, patch)` — Update Ettle fields
+- `tombstone_ettle(conn, id)` — Set `tombstoned_at`
+- `insert_ep(conn, record)` — Insert new EP
+- `get_ep(conn, id)` — Load EP by ID
 
-**Transaction support**:
+**Relation functions**:
 
-- `persist_ettle_tx(tx, ettle)` - Within transaction
-- `persist_ep_tx(tx, ep)` - Within transaction
-- `persist_constraint_tx(tx, constraint)` - Within transaction
+- `insert_relation(conn, record)` — Insert new `RelationRecord`
+- `get_relation(conn, id)` — Load relation by ID
+- `update_relation_properties(conn, id, props)` — Update `properties_json`
+- `tombstone_relation(conn, id)` — Set `tombstoned_at`
+- `list_relations(conn, filter)` — Filter by `source_ettle_id` and/or `relation_type`
+- `count_active_constraint_relations(conn, ettle_id)` — Used by `EttleTombstone` guard
+
+**Group functions**:
+
+- `insert_group(conn, record)` — Insert new `GroupRecord`
+- `get_group(conn, id)` — Load group by ID
+- `list_groups(conn)` — All active groups
+- `tombstone_group(conn, id)` — Set `tombstoned_at` (blocked if active members exist)
+- `insert_group_member(conn, record)` — Add `GroupMemberRecord`
+- `tombstone_group_member(conn, group_id, ettle_id)` — Tombstone membership
+- `list_group_members(conn, group_id, include_tombstoned)` — Members of a group
+- `count_active_group_members(conn, group_id)` — Used by `GroupTombstone` guard
 
 ### `seed` - Seed Import
 
@@ -231,118 +246,123 @@ Atomic snapshot commit pipeline: EPT → manifest → CAS + ledger.
 
 ## Database Schema
 
-### `ettles` Table
+Current as of migration 014 (Slice 02). Total: 17 tables.
 
-Stores Ettle entities (architectural concepts/decisions).
+### `ettles` Table
 
 ```sql
 CREATE TABLE ettles (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    parent_id TEXT,
-    deleted INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    metadata TEXT,       -- JSON
-    parent_ep_id TEXT,   -- added by migration 009; authoritative EP→child join
-    FOREIGN KEY (parent_id) REFERENCES ettles(id)
+    id           TEXT PRIMARY KEY,
+    title        TEXT NOT NULL,
+    why          TEXT NOT NULL DEFAULT '',
+    what         TEXT NOT NULL DEFAULT '',
+    how          TEXT NOT NULL DEFAULT '',
+    reasoning_link_id   TEXT REFERENCES ettles(id),
+    reasoning_link_type TEXT,
+    tombstoned_at TEXT,          -- ISO-8601 or NULL
+    created_at   TEXT NOT NULL,  -- ISO-8601
+    updated_at   TEXT NOT NULL   -- ISO-8601
+    -- legacy columns (parent_id, deleted, metadata) retained for migration compatibility
 );
 ```
-
-`parent_ep_id` is the authoritative field recording which EP a child Ettle belongs
-to. It is set by `refinement_ops::link_child()` and used by EPT traversal instead of
-scanning `eps.child_ettle_id`. One EP may own multiple children (fan-out); each child
-has exactly one `parent_ep_id`.
 
 ### `eps` Table
 
-Stores EP entities (refinement points with WHY/WHAT/HOW).
-
 ```sql
 CREATE TABLE eps (
-    id TEXT PRIMARY KEY,
-    ettle_id TEXT NOT NULL,
-    ordinal INTEGER NOT NULL,
-    normative INTEGER NOT NULL DEFAULT 1,
-    why TEXT NOT NULL,
-    what TEXT NOT NULL,
-    how TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    deleted_at TEXT,
-    child_ettle_id TEXT,
-    FOREIGN KEY (ettle_id) REFERENCES ettles(id),
-    FOREIGN KEY (child_ettle_id) REFERENCES ettles(id)
+    id           TEXT PRIMARY KEY,
+    ettle_id     TEXT NOT NULL REFERENCES ettles(id),
+    ordinal      INTEGER NOT NULL,
+    normative    INTEGER NOT NULL DEFAULT 1,
+    title        TEXT,            -- nullable, added in migration 011
+    why          TEXT,
+    what         TEXT,
+    how          TEXT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    deleted_at   TEXT,
+    child_ettle_id TEXT REFERENCES ettles(id)
 );
 ```
 
-### `constraints` Table
+### `relation_type_registry` Table (Migration 014)
 
-Stores constraint entities with family-agnostic design (Migration 003).
-
-```sql
-CREATE TABLE constraints (
-    constraint_id TEXT PRIMARY KEY NOT NULL,
-    family TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    scope TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    payload_digest TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    deleted_at INTEGER
-) STRICT;
-```
-
-**Fields**:
-
-- `family` - Constraint family (e.g., "ABB", "observability", "custom-org")
-- `kind` - Constraint kind (e.g., "Rule", "Metric", "Policy")
-- `scope` - Constraint scope (e.g., "EP", "Ettle", "Global")
-- `payload_json` - JSON payload with constraint data
-- `payload_digest` - SHA-256 digest of payload (for content-addressable deduplication)
-
-**Design**:
-
-- No closed enums - arbitrary family/kind/scope strings for open extension
-- Tombstone pattern with `deleted_at` for historical preservation
-- Content-addressable via `payload_digest`
-
-### `ep_constraint_refs` Table
-
-Many-to-many relationship between EPs and constraints (Migration 003).
+Canonical registry of allowed relation types. Seeded with 4 built-in entries.
 
 ```sql
-CREATE TABLE ep_constraint_refs (
-    ep_id TEXT NOT NULL,
-    constraint_id TEXT NOT NULL,
-    ordinal INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    PRIMARY KEY (ep_id, constraint_id),
-    FOREIGN KEY (ep_id) REFERENCES eps(id) ON DELETE CASCADE,
-    FOREIGN KEY (constraint_id) REFERENCES constraints(constraint_id) ON DELETE CASCADE
-) STRICT;
+CREATE TABLE relation_type_registry (
+    relation_type     TEXT PRIMARY KEY,
+    label             TEXT NOT NULL,
+    properties_schema TEXT,        -- JSON Schema for properties_json validation (nullable)
+    cycle_check       INTEGER NOT NULL DEFAULT 0,
+    tombstoned_at     TEXT         -- ISO-8601 or NULL
+);
 ```
 
-**Fields**:
+Built-in types (seeded): `constraint`, `realises`, `semantic_peer`, `depends_on`.
 
-- `ordinal` - Deterministic ordering within EP (for manifest serialization)
+### `relations` Table (Migration 014)
 
-**Invariants**:
+```sql
+CREATE TABLE relations (
+    relation_id      TEXT PRIMARY KEY,
+    relation_type    TEXT NOT NULL REFERENCES relation_type_registry(relation_type),
+    source_ettle_id  TEXT NOT NULL REFERENCES ettles(id),
+    target_ettle_id  TEXT NOT NULL REFERENCES ettles(id),
+    properties_json  TEXT,
+    tombstoned_at    TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL
+);
+```
 
-- Composite primary key prevents duplicate attachments
-- Cascade deletes maintain referential integrity
+### `groups` Table (Migration 014)
+
+```sql
+CREATE TABLE groups (
+    group_id      TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    tombstoned_at TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+```
+
+### `group_members` Table (Migration 014)
+
+```sql
+CREATE TABLE group_members (
+    group_id      TEXT NOT NULL REFERENCES groups(group_id),
+    ettle_id      TEXT NOT NULL REFERENCES ettles(id),
+    tombstoned_at TEXT,
+    created_at    TEXT NOT NULL,
+    PRIMARY KEY (group_id, ettle_id)
+);
+```
 
 ### `provenance_events` Table
 
-Append-only event log for seed import and operations.
+Append-only event log. `occurred_at` is ISO-8601 (renamed from `timestamp` in migration 014).
 
 ```sql
 CREATE TABLE provenance_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type TEXT NOT NULL,
-    event_payload TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind           TEXT NOT NULL,
+    correlation_id TEXT NOT NULL,
+    occurred_at    TEXT NOT NULL,  -- ISO-8601
+    metadata       TEXT            -- JSON
+);
+```
+
+### `command_log` Table (renamed from `mcp_command_log` in Migration 014)
+
+OCC counter. One row per successful write command.
+
+```sql
+CREATE TABLE command_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    command    TEXT NOT NULL,
+    applied_at TEXT NOT NULL  -- ISO-8601
 );
 ```
 
@@ -539,16 +559,8 @@ See [`docs/policy-system.md`](../../docs/policy-system.md) for the full HANDOFF 
 
 ## Future Work
 
-Planned enhancements:
-
-- [x] Migration 002: Snapshot ledger schema (completed)
-- [x] Migration 003: Constraint persistence tables (completed)
-- [x] Migration 005: Profiles table (completed)
-- [x] Migration 006: Approval requests table (completed)
-- [x] Migration 007: Approval CAS storage (`request_digest`) (completed)
-- [x] Migration 008: MCP command log for OCC (completed)
-- [x] Migration 009: `parent_ep_id` — authoritative EP→child join field (completed)
-- [x] Migration 010: Backfill `parent_ep_id` for existing rows via `eps.child_ettle_id` (completed)
-- [ ] Event sourcing for all CRUD operations
+- [x] Migrations 001–014 complete
+- [ ] Slice 03: Remove EP concept entirely (drop legacy EP and parent_ep_id columns)
+- [ ] Slice 04: Remove seed import capability
 - [ ] Read-optimized views (materialized EPT)
 - [ ] Multi-repository support

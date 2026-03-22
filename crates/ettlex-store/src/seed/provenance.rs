@@ -35,13 +35,13 @@ pub fn emit_event(
     correlation_id: &str,
     metadata: Option<serde_json::Value>,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let metadata_str = metadata
         .map(|m| serde_json::to_string(&m).unwrap_or_else(|_| "{}".to_string()))
         .unwrap_or_else(|| "{}".to_string());
 
     conn.execute(
-        "INSERT INTO provenance_events (kind, correlation_id, timestamp, metadata) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO provenance_events (kind, correlation_id, occurred_at, metadata) VALUES (?1, ?2, ?3, ?4)",
         rusqlite::params![kind.as_str(), correlation_id, now, metadata_str],
     )
     .map_err(from_rusqlite)?;
@@ -56,13 +56,13 @@ pub fn emit_event_tx(
     correlation_id: &str,
     metadata: Option<serde_json::Value>,
 ) -> Result<()> {
-    let now = chrono::Utc::now().timestamp();
+    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let metadata_str = metadata
         .map(|m| serde_json::to_string(&m).unwrap_or_else(|_| "{}".to_string()))
         .unwrap_or_else(|| "{}".to_string());
 
     tx.execute(
-        "INSERT INTO provenance_events (kind, correlation_id, timestamp, metadata) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO provenance_events (kind, correlation_id, occurred_at, metadata) VALUES (?1, ?2, ?3, ?4)",
         rusqlite::params![kind.as_str(), correlation_id, now, metadata_str],
     )
     .map_err(from_rusqlite)?;

@@ -1,0 +1,485 @@
+seed_id: seed_codegen_agent_motivation_v9_parent_children
+seed_version: "0.9"
+title: "EttleX Coding Agent — Facet Delivery Agent (Parent + Child Ettles)"
+notes: |-
+  Version v9 preserves the interleaved narrative + motivational style from v8 and
+  explicitly reuses architectural drivers, assessments, and goals across multiple EPs
+  where they are genuinely shared. Each EP remains a semantically cohesive container
+  for refinement to a realisable Facet (EPT). No content is introduced outside EPs.
+
+ettles:
+
+  - id: ettle:codegen_agent_parent
+    title: "Coding Agent — Trunk Contract (Facet Delivery)"
+    status: draft
+
+    eps:
+
+      - id: ep:context_efficiency:0
+        ordinal: 0
+        title: "Context Assembly and Execution Efficiency"
+        normative: true
+
+        why: |-
+          The first architectural pressure motivating the EttleX Coding Agent is
+          the inefficiency observed in generic conversational coding assistants
+          when they are applied to structured implementation work.
+
+          These tools are designed around exploratory reasoning. When developers
+          use them to implement concrete changes in a repository, the interaction
+          loop tends to repeatedly rediscover repository structure and recreate
+          contextual understanding. Over time this produces very large prompts,
+          inflated token consumption, and a growing conversational history that
+          becomes increasingly disconnected from the actual implementation step.
+
+          This pressure can be expressed through two key drivers.
+
+          D1: Token inefficiency of generic coding agents
+          D2: Repository rediscovery and context inflation
+
+          From these drivers we can observe a recurring structural behaviour.
+
+          A1: Generic coding agents optimise for exploration rather than execution discipline.
+
+          The EttleX Coding Agent is therefore designed around a different
+          operational goal. Instead of optimising for exploration, it optimises
+          for disciplined implementation of bounded units of work.
+
+          G1: Efficient structured implementation of leaf Facets.
+
+          Achieving this goal requires the agent to acquire repository knowledge
+          through stable structural artefacts rather than through conversational
+          rediscovery.
+
+          P1: Efficiency derives from structure rather than model size.
+
+          The repository must therefore expose index artefacts describing its
+          structure. These artefacts allow the agent to retrieve precisely the
+          context required for a particular implementation step.
+
+          R1: Repository index artefacts MUST be maintained.
+          R2: Execution steps MUST use index-first context acquisition.
+
+          Because conversational exploration can easily reappear during
+          implementation sessions, explicit constraints are required.
+
+          C1: The agent MUST NOT perform broad repository scanning unless structurally justified.
+
+          Finally, the architecture must provide measurable evidence that the
+          approach improves efficiency.
+
+          R3: Efficiency metrics MUST be captured for every execution session.
+
+        what: |-
+          The resulting architecture introduces a bounded context assembly model
+          designed specifically for deterministic implementation tasks.
+
+          Drivers:
+
+          D1: Token inefficiency of generic coding agents
+          D2: Repository rediscovery and context inflation
+          D3: Conversational context expansion
+
+          Assessments:
+
+          A1: Exploration-oriented workflows inflate context windows
+          A2: Repository rediscovery dominates conversational sessions
+
+          Goals:
+
+          G1: Efficient structured implementation of leaf Facets
+          G2: Bounded context assembly for execution steps
+
+          Principles:
+
+          P1: Efficiency derives from structure rather than model size
+          P2: Context must be intentional and minimal
+
+          Requirements:
+
+          R1: Repository indexes MUST exist
+          R2: Execution context MUST be assembled from indexes
+          R3: Context packages MUST contain only step-relevant artefacts
+
+          Constraints:
+
+          C1: Repository scanning must be structurally justified
+          C2: Conversational rediscovery must not dominate execution
+
+          Ownership declaration:
+
+          O1: Repository index structure
+          O2: Context assembly rules
+          O3: Efficiency measurement artefacts
+
+        how: |-
+          The operational mechanism for this EP is straightforward: repository
+          structure is externalised into index artefacts which are consulted
+          before any implementation step. The coding agent therefore assembles
+          its working context from deterministic artefacts rather than by
+          exploring the repository interactively.
+
+          Measurement metrics allow the architecture to confirm that the
+          intended efficiency improvements are realised.
+
+          METRICS:
+            M1: Tokens per Facet delivered
+            M2: Context size per execution step
+            M3: Repository rediscovery events
+
+      - id: ep:facet_delivery_spine:1
+        ordinal: 1
+        title: "Facet Delivery Spine Ownership"
+        normative: true
+
+        why: |-
+          Delivering a Facet is not a single action but a sequence of
+          implementation activities that must occur in a predictable order.
+
+          When coding assistants operate purely through conversational
+          interaction, the sequence of actions required to deliver a change
+          is implicit. One implementation session might begin with repository
+          exploration, another with planning, and another directly with code
+          editing. This variability makes the behaviour of the system difficult
+          to reason about and even harder to govern.
+
+          The same efficiency pressures identified in EP-0 continue to apply
+          here because an unstable lifecycle causes repeated rediscovery,
+          unnecessary context switching, and inconsistent execution paths.
+
+          D1: Token inefficiency of generic coding agents
+          D2: Repository rediscovery and context inflation
+          D4: Need for repeatable implementation lifecycle
+          D5: Risk of fragmented execution pipelines
+
+          Observing these drivers leads to the following architectural assessment.
+
+          A1: Generic coding agents optimise for exploration rather than execution discipline.
+          A3: Implementation work requires a coherent delivery spine.
+
+          The architecture therefore defines a goal that complements the
+          efficiency goal of EP-0 and directly contributes to it.
+
+          G1: Efficient structured implementation of leaf Facets.
+          G3: Establish a stable Facet delivery lifecycle.
+
+          The lifecycle provides the structural backbone through which the
+          coding agent performs implementation work. Instead of ad-hoc
+          conversational execution, work progresses through defined stages.
+
+          P3: Delivery is a pipeline of verifiable stages.
+
+          Each stage of the spine produces artefacts which allow governance
+          and traceability mechanisms to observe the behaviour of the agent.
+
+          R10: Canonical lifecycle stages MUST exist.
+          R11: Stage transitions MUST be gated.
+
+          Constraints prevent implementations from bypassing the lifecycle.
+
+          C10: Implementations MUST NOT omit lifecycle stages implicitly.
+
+        what: |-
+          Drivers:
+
+          D1: Token inefficiency of generic coding agents
+          D2: Repository rediscovery and context inflation
+          D4: Need for repeatable implementation lifecycle
+          D5: Fragmented execution pipelines
+
+          Assessments:
+
+          A1: Exploration-oriented execution is inefficient
+          A3: Lifecycle ownership required
+
+          Goals:
+
+          G1: Efficient structured implementation of leaf Facets
+          G3: Stable Facet delivery lifecycle
+
+          Principles:
+
+          P3: Delivery occurs through pipeline stages
+          P4: Each stage emits evidence artefacts
+
+          Requirements:
+
+          R10: Canonical stages defined
+          R11: Stage transitions gated
+          R12: Stage outputs recorded
+
+          Constraints:
+
+          C10: Lifecycle stages cannot be skipped
+
+          Ownership:
+
+          O10: Lifecycle stage definitions
+          O11: Stage gate semantics
+
+        how: |-
+          The delivery spine acts as the deterministic structure within which
+          all coding agent activities occur. Later EPs constrain specific
+          behaviours within these stages but do not alter the existence of
+          the lifecycle itself.
+
+      - id: ep:orchestration_boundary:2
+        ordinal: 2
+        title: "Orchestration–Generation Boundary"
+        normative: true
+
+        why: |-
+          Coding agents combine two fundamentally different types of behaviour.
+          On the one hand they must execute deterministic control logic such as
+          sequencing stages, validating inputs, and enforcing governance rules.
+          On the other hand they rely on probabilistic generation when proposing
+          code changes.
+
+          When these two responsibilities become mixed the behaviour of the
+          system becomes unpredictable. Generative reasoning may begin to
+          influence decisions that should remain deterministic.
+
+          This ambiguity is not only a governance issue. It also directly harms
+          efficiency because unbounded generation tends to expand context,
+          reopen exploratory loops, and weaken the delivery discipline sought
+          in earlier EPs.
+
+          D1: Token inefficiency of generic coding agents
+          D3: Conversational context expansion
+          D6: Ambiguity between orchestration and generation behaviour
+
+          From these drivers we can derive a clear architectural assessment.
+
+          A1: Generic coding agents optimise for exploration rather than execution discipline.
+          A4: Execution authority must remain deterministic.
+
+          The Coding Agent therefore enforces a strict separation between
+          orchestration and generation.
+
+          G1: Efficient structured implementation of leaf Facets.
+          G4: Enforce separation between orchestration and generation.
+
+          This goal supports efficient Facet delivery because it ensures that
+          generative models operate within clearly bounded execution structures.
+
+          P5: Orchestration is deterministic; generation is probabilistic.
+
+          Requirements follow directly from this principle.
+
+          R20: Orchestration MUST control execution sequencing.
+          R21: Generative components MUST produce proposals only.
+
+          Constraints prevent generative behaviour from bypassing the
+          orchestrator.
+
+          C20: Generation MUST NOT bypass orchestration gates.
+
+        what: |-
+          Drivers:
+
+          D1: Token inefficiency of generic coding agents
+          D3: Conversational context expansion
+          D6: Orchestration/generation ambiguity
+
+          Assessments:
+
+          A1: Exploration-oriented behaviour expands execution cost
+          A4: Deterministic control required
+
+          Goals:
+
+          G1: Efficient structured implementation of leaf Facets
+          G4: Strict orchestration/generation separation
+
+          Principles:
+
+          P5: Deterministic orchestration
+          P6: Probabilistic proposal generation
+
+          Requirements:
+
+          R20: Orchestrator defines execution order
+          R21: Generator produces candidate implementations
+
+          Constraints:
+
+          C20: No bypass of orchestration gates
+
+          Ownership:
+
+          O20: Orchestrator decision model
+          O21: Generator proposal contract
+
+        how: |-
+          The orchestrator acts as the authoritative execution controller.
+          Generative systems propose candidate changes but do not control
+          delivery decisions. This preserves bounded execution while still
+          allowing the system to exploit probabilistic generation where it
+          adds value.
+
+      - id: ep:intent_authority:3
+        ordinal: 3
+        title: "Intent Authority, Traceability, and Scope Guard"
+        normative: true
+
+        why: |-
+          A generative coding system can easily drift beyond the scope of the
+          change it was asked to implement. When instructions are incomplete
+          the model may infer additional behaviour and introduce functionality
+          that was never authorised.
+
+          This risk is amplified by the same exploratory tendencies already
+          identified elsewhere in the trunk. When execution authority is weak,
+          the agent compensates by inventing structure conversationally.
+
+          D3: Conversational context expansion
+          D7: Risk of generative scope expansion
+
+          This behaviour is particularly problematic within the EttleX
+          refinement model because implementation must remain faithful to
+          the authoritative intent expressed in the Ettle structure.
+
+          A5: Implementation authority must be anchored in Ettle intent.
+
+          The Coding Agent therefore introduces a strict authority model
+          governing when execution is allowed to occur.
+
+          G5: Maintain fidelity between implementation and authoritative intent.
+
+          This goal protects the integrity of the refinement pipeline and
+          supports efficient implementation by eliminating rework caused by
+          unauthorised scope expansion.
+
+          G1: Efficient structured implementation of leaf Facets.
+
+          P7: The agent executes intent; it does not create intent.
+
+          The agent must therefore verify that the intent it is acting on
+          represents a closed leaf of the refinement tree.
+
+          R30: Execution MUST require closed leaf intent.
+          R31: Implemented behaviour MUST map to intent statements.
+
+          If sufficient authority is not present, execution must halt.
+
+          C30: The agent MUST reject execution without intent authority.
+
+        what: |-
+          Drivers:
+
+          D3: Conversational context expansion
+          D7: Generative scope expansion risk
+
+          Assessments:
+
+          A5: Intent authority must remain external
+
+          Goals:
+
+          G1: Efficient structured implementation of leaf Facets
+          G5: Implementation fidelity
+          G6: Prevent scope expansion
+
+          Principles:
+
+          P7: Execution authority derives from intent
+
+          Requirements:
+
+          R30: Closed leaf intent required
+          R31: Behaviour traceable to intent
+
+          Constraints:
+
+          C30: Reject execution without authority
+
+          Ownership:
+
+          O30: Intent authority evaluation
+          O31: Traceability mapping
+
+        how: |-
+          Intent closure defines the execution boundary for Facet delivery.
+          If intent authority cannot be demonstrated the agent refuses to
+          proceed with implementation. This keeps the delivery process bounded
+          and prevents the system from wandering into exploratory invention.
+
+      - id: ep:verification_quality:4
+        ordinal: 4
+        title: "Verification and Quality Gates Ownership"
+        normative: true
+
+        why: |-
+          Producing a code change is not sufficient to claim that a Facet
+          has been delivered. The change must be verified to ensure that it
+          behaves correctly and integrates with the repository.
+
+          Verification is also a necessary completion condition for the
+          efficiency and lifecycle goals already established elsewhere in
+          the trunk. Without independent evidence, the system cannot
+          distinguish apparent success from actual success.
+
+          D4: Need for repeatable implementation lifecycle
+          D8: Need for independent verification
+
+          These drivers lead to the following assessment.
+
+          A6: Verification must be part of the delivery lifecycle.
+
+          The Coding Agent therefore treats verification as a first-class
+          stage of the implementation pipeline.
+
+          G3: Establish a stable Facet delivery lifecycle.
+          G7: Verified implementation of Facets.
+
+          P8: Evidence precedes approval.
+
+          Verification stages must therefore exist within the delivery
+          lifecycle.
+
+          R40: Verification stages MUST exist.
+          R41: Verification artefacts MUST be recorded.
+
+          Constraints ensure that the system does not declare success
+          prematurely.
+
+          C40: The agent MUST NOT declare success without evidence.
+
+        what: |-
+          Drivers:
+
+          D4: Need for repeatable implementation lifecycle
+          D8: Need for independent oracle
+
+          Assessments:
+
+          A6: Verification mandatory
+
+          Goals:
+
+          G3: Stable lifecycle with evidence-bearing stages
+          G7: Evidence-based delivery
+
+          Principles:
+
+          P8: Evidence precedes approval
+
+          Requirements:
+
+          R40: Verification stages present
+          R41: Evidence artefacts captured
+
+          Constraints:
+
+          C40: No success without verification
+
+          Ownership:
+
+          O40: Verification gate definitions
+          O41: Evidence artefact schema
+
+        how: |-
+          Verification outputs become part of the governance artefacts
+          emitted by the Facet delivery spine. They provide the evidence
+          required to close the lifecycle and to justify completion claims.
+links:

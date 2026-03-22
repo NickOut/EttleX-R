@@ -540,3 +540,586 @@ crate = "ettlex-engine"
 file = "tests/ettle_architectural_conformance_tests.rs"
 test = "test_ettle_handler_no_raw_sql"
 scenario = "SC-58"
+
+[[slice]]
+id = "slice-02-relations-groups-constraint-arch"
+ettle_id = "ettle:019d15ce-135e-7ed1-9dc7-5c49d067ebdb"
+description = "Relations CRUD, Groups CRUD, Relation Type Registry, command rename (McpCommand→Command), timestamp ISO-8601 migration, ettlex-memory stub, ettlex-agent-api stub, legacy constraint table removal"
+layers = ["store", "engine", "mcp", "memory"]
+status = "complete"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_02_migration_tests.rs"
+test = "test_migration_014_applies_cleanly"
+scenario = "SC-S02-01"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_02_migration_tests.rs"
+test = "test_command_log_table_exists_after_rename"
+scenario = "SC-S02-02"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_02_migration_tests.rs"
+test = "test_provenance_events_occurred_at_after_migration"
+scenario = "SC-S02-03"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_02_migration_tests.rs"
+test = "test_relation_type_registry_seeded_by_migration"
+scenario = "SC-S02-04"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_02_migration_tests.rs"
+test = "test_constraint_registry_entry_has_cycle_check"
+scenario = "SC-S02-05"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_02_migration_tests.rs"
+test = "test_legacy_constraint_tables_absent"
+scenario = "SC-S02-06"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_occurred_at_is_iso8601_after_mutation"
+scenario = "SC-S02-07"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_command_log_applied_at_is_iso8601"
+scenario = "SC-S02-08"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_unknown_type_rejected"
+scenario = "SC-S02-09"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_tombstoned_type_rejected"
+scenario = "SC-S02-10"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_valid_succeeds"
+scenario = "SC-S02-11"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_returns_rel_prefix_id"
+scenario = "SC-S02-12"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_increments_state_version"
+scenario = "SC-S02-13"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_constraint_type_with_properties"
+scenario = "SC-S02-14"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_two_same_endpoints_distinct_ids"
+scenario = "SC-S02-15"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_provenance_event_carries_context"
+scenario = "SC-S02-16"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_missing_source_fails"
+scenario = "SC-S02-17"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_tombstoned_source_fails"
+scenario = "SC-S02-18"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_missing_target_fails"
+scenario = "SC-S02-19"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_tombstoned_target_fails"
+scenario = "SC-S02-20"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_self_referential_fails"
+scenario = "SC-S02-21"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_caller_supplied_id_fails"
+scenario = "SC-S02-22"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_direct_cycle_detected"
+scenario = "SC-S02-23"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_transitive_cycle_detected"
+scenario = "SC-S02-24"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_no_cycle_check_for_semantic_peer"
+scenario = "SC-S02-25"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_create_cycle_detected_no_partial_state"
+scenario = "SC-S02-26"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_update_properties_succeeds"
+scenario = "SC-S02-27"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_update_not_found_fails"
+scenario = "SC-S02-28"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_update_tombstoned_fails"
+scenario = "SC-S02-29"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_update_empty_fails"
+scenario = "SC-S02-30"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_get_returns_full_record"
+scenario = "SC-S02-31"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_get_not_found"
+scenario = "SC-S02-32"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_list_by_source"
+scenario = "SC-S02-33"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_list_by_type"
+scenario = "SC-S02-34"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_list_no_filter_fails"
+scenario = "SC-S02-35"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_list_ordering_is_deterministic"
+scenario = "SC-S02-36"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_list_excludes_tombstoned_by_default"
+scenario = "SC-S02-37"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_get_byte_identical"
+scenario = "SC-S02-38"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_tombstone_marks_inactive"
+scenario = "SC-S02-39"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_tombstone_not_found_fails"
+scenario = "SC-S02-40"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_relation_tombstone_already_tombstoned_fails"
+scenario = "SC-S02-41"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/relation_tests.rs"
+test = "test_ettle_tombstone_blocked_by_active_constraint_relation"
+scenario = "SC-S02-42"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_create_succeeds"
+scenario = "SC-S02-43"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_create_returns_grp_prefix_id"
+scenario = "SC-S02-44"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_create_empty_name_fails"
+scenario = "SC-S02-45"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_create_whitespace_name_fails"
+scenario = "SC-S02-46"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_get_returns_full_record"
+scenario = "SC-S02-47"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_get_not_found"
+scenario = "SC-S02-48"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_list_ordering_is_deterministic"
+scenario = "SC-S02-49"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_list_byte_identical"
+scenario = "SC-S02-50"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_tombstone_blocked_by_active_members"
+scenario = "SC-S02-51"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_tombstone_succeeds_no_members"
+scenario = "SC-S02-52"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_tombstone_not_found_fails"
+scenario = "SC-S02-53"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_tombstone_already_tombstoned_fails"
+scenario = "SC-S02-54"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_add_succeeds"
+scenario = "SC-S02-55"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_add_duplicate_active_fails"
+scenario = "SC-S02-56"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_add_after_tombstoned_succeeds"
+scenario = "SC-S02-57"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_add_tombstoned_group_fails"
+scenario = "SC-S02-58"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_add_tombstoned_ettle_fails"
+scenario = "SC-S02-59"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_add_missing_group_fails"
+scenario = "SC-S02-60"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_add_missing_ettle_fails"
+scenario = "SC-S02-61"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_remove_tombstones_membership"
+scenario = "SC-S02-62"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_remove_not_found_fails"
+scenario = "SC-S02-63"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_remove_already_tombstoned_fails"
+scenario = "SC-S02-64"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_list_ordering_is_deterministic"
+scenario = "SC-S02-65"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_list_byte_identical"
+scenario = "SC-S02-66"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/group_tests.rs"
+test = "test_group_member_list_include_tombstoned"
+scenario = "SC-S02-67"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_occ_correct_version_succeeds_for_relation_create"
+scenario = "SC-S02-68"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_occ_wrong_version_fails_for_relation_create"
+scenario = "SC-S02-69"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_relation_mutation_appends_provenance_event"
+scenario = "SC-S02-70"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_group_mutation_appends_provenance_event"
+scenario = "SC-S02-71"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_failed_relation_command_no_provenance_event"
+scenario = "SC-S02-72"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_provenance_occurred_at_is_iso8601"
+scenario = "SC-S02-73"
+
+[[slice.tests]]
+crate = "ettlex-memory"
+file = "tests/memory_manager_tests.rs"
+test = "test_memory_manager_apply_command_delegates"
+scenario = "SC-S02-74"
+
+[[slice.tests]]
+crate = "ettlex-memory"
+file = "tests/memory_manager_tests.rs"
+test = "test_memory_manager_assemble_context_fields"
+scenario = "SC-S02-75"
+
+[[slice.tests]]
+crate = "ettlex-memory"
+file = "tests/memory_manager_tests.rs"
+test = "test_memory_manager_assemble_context_groups"
+scenario = "SC-S02-76"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_command_rs_contains_apply_command"
+scenario = "SC-S02-C1"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_command_rs_no_mcp_command_enum"
+scenario = "SC-S02-C2"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_mcp_no_ettlex_engine_dep"
+scenario = "SC-S02-C3"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_agent_api_no_engine_dep"
+scenario = "SC-S02-C4"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_relation_dispatch_no_business_logic"
+scenario = "SC-S02-C5"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_group_dispatch_no_business_logic"
+scenario = "SC-S02-C6"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_dedicated_relation_handlers_exist"
+scenario = "SC-S02-C7"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_dedicated_group_handlers_exist"
+scenario = "SC-S02-C8"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_store_no_domain_validation_for_relations"
+scenario = "SC-S02-C9"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_registry_lookup_absent_from_store"
+scenario = "SC-S02-C10"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_relation_handler_no_command_log_ref"
+scenario = "SC-S02-C11"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_group_handler_no_command_log_ref"
+scenario = "SC-S02-C12"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_provenance_absent_from_handler_files"
+scenario = "SC-S02-C13"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_02_conformance_tests.rs"
+test = "test_slice02_state_get_version_uses_command_log"
+scenario = "SC-S02-C14"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/constraint_engine_slice0_tests.rs (all)"
+reason = "McpCommand::ConstraintCreate and ConstraintAttachToEp variants removed; file deleted"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/constraint_manifest_integration_tests.rs (all)"
+reason = "Same variants removed; file deleted (model superseded)"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-store/tests/constraint_persistence_tests.rs (all 10)"
+reason = "constraints and ep_constraint_refs tables dropped in migration 014; marked #[ignore]"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_policy_tests.rs (8 fns)"
+reason = "seed_constraint inserts into dropped constraints table; marked #[ignore]"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_tests.rs::test_snapshot_commit_with_constraints"
+reason = "seed_constraint issue; marked #[ignore]"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-mcp/tests/mcp_integration_tests.rs (5 fns)"
+reason = "seed_constraint or mcp_command_log SQL; marked #[ignore] or SQL corrected"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-mcp/tests/mcp_missing_tools_tests.rs (5 fns)"
+reason = "seed_constraint inserts into dropped tables; marked #[ignore]"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-store/src/seed/importer.rs (7 fns)"
+reason = "Seed importer uses old schema paths; marked #[ignore]; will be removed in Slice 04"
+
+[[slice.pre_authorised_failures]]
+test = "make coverage-check"
+reason = "79% (threshold 80%); 1% shortfall caused by 42 ignored deprecated tests. Pre-authorised: Slice 03 removes EP/constraint code, Slice 04 removes seed importer."

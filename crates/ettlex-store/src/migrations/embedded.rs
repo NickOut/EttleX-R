@@ -59,5 +59,13 @@ pub fn get_migrations() -> Vec<Migration> {
             id: "012_ettle_v2_schema",
             sql: include_str!("../../migrations/012_ettle_v2_schema.sql"),
         },
+        Migration {
+            id: "013_ettle_timestamps_iso8601",
+            sql: include_str!("../../migrations/013_ettle_timestamps_iso8601.sql"),
+        },
+        Migration {
+            id: "014_slice02_schema",
+            sql: include_str!("../../migrations/014_slice02_schema.sql"),
+        },
     ]
 }

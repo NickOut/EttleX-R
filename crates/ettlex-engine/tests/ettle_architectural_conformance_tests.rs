@@ -3,7 +3,7 @@
 //! SC-52  test_dispatch_no_ettle_business_logic          (INV-1)
 //! SC-53  test_dedicated_handler_functions_exist          (INV-2)
 //! SC-54  test_store_functions_no_domain_validation       (INV-3)
-//! SC-55  test_state_version_owned_by_apply_mcp_command   (INV-6)
+//! SC-55  test_state_version_owned_by_apply_mcp_command   (INV-6) — checks command.rs / command_log
 //! SC-56  test_provenance_owned_by_engine_action          (INV-7)
 //! SC-57  test_no_ettle_delete_variant                    (INV-8)
 //! SC-58  test_ettle_handler_no_raw_sql                   (INV-9)
@@ -11,25 +11,25 @@
 #![allow(clippy::unwrap_used)]
 
 // ---------------------------------------------------------------------------
-// SC-52: INV-1 — dispatch arm delegates; no business logic in mcp_command.rs EttleCreate arm
+// SC-52: INV-1 — dispatch arm delegates; no business logic in command.rs EttleCreate arm
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_dispatch_no_ettle_business_logic() {
     let src = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/src/commands/mcp_command.rs"
+        "/src/commands/command.rs"
     ))
     .unwrap();
 
     // The EttleCreate arm must delegate to handle_ettle_create — not directly call SqliteRepo
     assert!(
         !src.contains("SqliteRepo::persist_ettle"),
-        "mcp_command.rs EttleCreate arm must NOT call SqliteRepo::persist_ettle directly"
+        "command.rs EttleCreate arm must NOT call SqliteRepo::persist_ettle directly"
     );
     assert!(
         !src.contains("Ettle::new("),
-        "mcp_command.rs must NOT call Ettle::new directly in EttleCreate arm"
+        "command.rs must NOT call Ettle::new directly in EttleCreate arm"
     );
 }
 
@@ -72,14 +72,14 @@ fn test_store_functions_no_domain_validation() {
 }
 
 // ---------------------------------------------------------------------------
-// SC-55: INV-6 — state_version increment owned by apply_mcp_command, not ettle.rs
+// SC-55: INV-6 — state_version increment owned by apply_command (command.rs), not ettle.rs
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_state_version_owned_by_apply_mcp_command() {
-    let mcp_src = std::fs::read_to_string(concat!(
+    let cmd_src = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/src/commands/mcp_command.rs"
+        "/src/commands/command.rs"
     ))
     .unwrap();
 
@@ -90,12 +90,12 @@ fn test_state_version_owned_by_apply_mcp_command() {
     .unwrap();
 
     assert!(
-        mcp_src.contains("mcp_command_log"),
-        "mcp_command.rs must manage mcp_command_log (state_version)"
+        cmd_src.contains("command_log"),
+        "command.rs must manage command_log (state_version)"
     );
     assert!(
-        !ettle_src.contains("mcp_command_log"),
-        "ettle.rs (handler) must NOT touch mcp_command_log"
+        !ettle_src.contains("command_log"),
+        "ettle.rs (handler) must NOT touch command_log"
     );
 }
 
@@ -125,7 +125,7 @@ fn test_provenance_owned_by_engine_action() {
 fn test_no_ettle_delete_variant() {
     let src = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/src/commands/mcp_command.rs"
+        "/src/commands/command.rs"
     ))
     .unwrap();
 

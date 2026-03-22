@@ -1,5 +1,10 @@
 # Constraint: Architectural Layering
 
+> **SUPERSEDED**
+> This document has been converted to a first-class EttleX Ettle and updated to reflect the current architecture.
+> Authoritative constraint: `ettle:019d15d6-9cf1-73a3-b366-9e31b2a7bdd8` — EttleX — Architectural Layering Constraint
+> This file is retained as a historical artefact only. Code generators and reviewers MUST use the Ettle, not this file.
+
 **Constraint ID:** constraint/architectural-layering/v1
 **Family:** cross-cutting
 **Kind:** architectural

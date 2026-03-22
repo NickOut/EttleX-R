@@ -14,7 +14,7 @@ path = "src/main.rs"
 [dependencies]
 ettlex-core = { path = "../ettlex-core" }
 ettlex-store = { path = "../ettlex-store" }
-ettlex-engine = { path = "../ettlex-engine" }
+ettlex-memory = { path = "../ettlex-memory" }
 rusqlite = { version = "0.29", features = ["bundled", "serde_json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -17,6 +17,7 @@ fn setup_test_db() -> Connection {
     conn
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_persist_and_get_constraint_roundtrip() {
     let conn = setup_test_db();
@@ -46,6 +47,7 @@ fn test_persist_and_get_constraint_roundtrip() {
     assert!(!retrieved.is_deleted());
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_upsert_constraint_behavior() {
     let conn = setup_test_db();
@@ -75,6 +77,7 @@ fn test_upsert_constraint_behavior() {
     assert_eq!(retrieved.payload_json, payload2);
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_constraint_tombstoning_preserves_history() {
     let conn = setup_test_db();
@@ -104,6 +107,7 @@ fn test_constraint_tombstoning_preserves_history() {
     assert!(retrieved.deleted_at.is_some());
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_ep_constraint_ref_persistence() {
     let conn = setup_test_db();
@@ -148,6 +152,7 @@ fn test_ep_constraint_ref_persistence() {
 }
 
 // Scenario 1: Arbitrary Family Support
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_scenario_1_arbitrary_family_support() {
     let conn = setup_test_db();
@@ -181,6 +186,7 @@ fn test_scenario_1_arbitrary_family_support() {
 }
 
 // Scenario 2: Stable Ordering
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_scenario_2_stable_ordinal_ordering() {
     let conn = setup_test_db();
@@ -230,6 +236,7 @@ fn test_scenario_2_stable_ordinal_ordering() {
 }
 
 // Scenario 3: Historical Preservation
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_scenario_3_historical_preservation() {
     let conn = setup_test_db();
@@ -263,6 +270,7 @@ fn test_scenario_3_historical_preservation() {
     assert!(all_constraints[0].is_deleted());
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_foreign_key_constraint_ep_id() {
     let conn = setup_test_db();
@@ -275,6 +283,7 @@ fn test_foreign_key_constraint_ep_id() {
     assert!(result.is_err());
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_foreign_key_constraint_constraint_id() {
     let conn = setup_test_db();
@@ -303,6 +312,7 @@ fn test_foreign_key_constraint_constraint_id() {
     assert!(result.is_err());
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_hydration_loads_constraints() {
     let conn = setup_test_db();
@@ -348,6 +358,7 @@ fn test_hydration_loads_constraints() {
     assert!(store.is_constraint_attached_to_ep("ep-1", "c1"));
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_hydration_loads_multiple_constraints_with_different_families() {
     let conn = setup_test_db();
@@ -394,6 +405,7 @@ fn test_hydration_loads_multiple_constraints_with_different_families() {
     }
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_hydration_loads_deleted_constraints() {
     let conn = setup_test_db();
@@ -419,6 +431,7 @@ fn test_hydration_loads_deleted_constraints() {
     assert_eq!(loaded.unwrap_err().kind(), ExErrorKind::Deleted);
 }
 
+#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
 #[test]
 fn test_hydration_loads_multiple_refs_for_same_ep() {
     let conn = setup_test_db();

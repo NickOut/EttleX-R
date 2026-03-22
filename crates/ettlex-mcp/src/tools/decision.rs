@@ -2,7 +2,7 @@
 
 use ettlex_core::model::Decision;
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -46,7 +46,7 @@ pub fn handle_decision_get(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::DecisionGet(d) = result {
                 McpResult::Ok(decision_to_json(&d))
             } else {
@@ -78,7 +78,7 @@ pub fn handle_decision_list(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::DecisionList(page) = result {
                 let items: Vec<Value> = page.items.iter().map(decision_to_json).collect();
                 let mut resp = json!({ "items": items });
@@ -137,7 +137,7 @@ pub fn handle_decision_list_by_target(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::DecisionListByTarget(ds) = result {
                 let items: Vec<Value> = ds.iter().map(decision_to_json).collect();
                 McpResult::Ok(json!({ "items": items }))

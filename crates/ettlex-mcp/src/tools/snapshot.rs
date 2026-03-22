@@ -1,8 +1,8 @@
 //! Handlers for `snapshot.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery, SnapshotRef};
-use ettlex_engine::commands::read_tools::ListOptions;
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery, SnapshotRef};
+use ettlex_memory::commands::read_tools::ListOptions;
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -39,7 +39,7 @@ pub fn handle_snapshot_list(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::SnapshotList(rows) = result {
                 let cap = limit.unwrap_or(100);
                 let has_more = rows.len() > cap;
@@ -60,7 +60,7 @@ pub fn handle_snapshot_list(
                 if has_more {
                     // Opaque cursor: just the index for now; engine handles real cursor
                     resp["cursor"] = Value::String(
-                        ettlex_engine::commands::read_tools::base64_encode(&cap.to_string()),
+                        ettlex_memory::commands::read_tools::base64_encode(&cap.to_string()),
                     );
                 }
                 McpResult::Ok(resp)
@@ -98,7 +98,7 @@ pub fn handle_snapshot_get(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::SnapshotGet(r) = result {
                 McpResult::Ok(json!({
                     "snapshot_id": r.snapshot_id,
@@ -142,7 +142,7 @@ pub fn handle_snapshot_get_head(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::SnapshotGetHead(digest) = result {
                 match digest {
                     Some(d) => McpResult::Ok(json!({ "manifest_digest": d })),
@@ -182,7 +182,7 @@ pub fn handle_snapshot_get_manifest(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ManifestGet(r) = result {
                 let manifest_bytes = String::from_utf8_lossy(&r.manifest_bytes).to_string();
                 McpResult::Ok(json!({
@@ -233,7 +233,7 @@ pub fn handle_snapshot_diff(
 
     match apply_engine_query(query, conn, cas, Some(policy_provider)) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::SnapshotDiff(r) = result {
                 let structured =
                     serde_json::to_value(&r.structured_diff).unwrap_or(serde_json::Value::Null);
@@ -275,7 +275,7 @@ pub fn handle_manifest_get_by_digest(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ManifestGet(r) = result {
                 let manifest_json: Value =
                     serde_json::from_slice(&r.manifest_bytes).unwrap_or(Value::Null);

@@ -55,8 +55,8 @@
 use ettlex_core::approval_router::NoopApprovalRouter;
 use ettlex_core::errors::ExErrorKind;
 use ettlex_core::policy_provider::NoopPolicyProvider;
+use ettlex_engine::commands::command::{apply_command, Command, CommandResult};
 use ettlex_engine::commands::ettle::{handle_ettle_get, handle_ettle_list};
-use ettlex_engine::commands::mcp_command::{apply_mcp_command, McpCommand, McpCommandResult};
 use ettlex_store::cas::FsStore;
 use ettlex_store::model::{EttleListOpts, EttleListPage};
 use rusqlite::Connection;
@@ -72,7 +72,7 @@ fn setup() -> (TempDir, Connection, FsStore) {
 }
 
 fn create_ettle(conn: &mut Connection, cas: &FsStore, title: &str) -> String {
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: title.to_string(),
         ettle_id: None,
         why: None,
@@ -81,7 +81,7 @@ fn create_ettle(conn: &mut Connection, cas: &FsStore, title: &str) -> String {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let (result, _) = apply_mcp_command(
+    let (result, _) = apply_command(
         cmd,
         None,
         conn,
@@ -91,7 +91,7 @@ fn create_ettle(conn: &mut Connection, cas: &FsStore, title: &str) -> String {
     )
     .unwrap();
     match result {
-        McpCommandResult::EttleCreate { ettle_id } => ettle_id,
+        CommandResult::EttleCreate { ettle_id } => ettle_id,
         _ => panic!("expected EttleCreate result"),
     }
 }
@@ -103,7 +103,7 @@ fn create_ettle(conn: &mut Connection, cas: &FsStore, title: &str) -> String {
 #[test]
 fn test_create_minimal_ettle_succeeds() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "My Ettle".to_string(),
         ettle_id: None,
         why: None,
@@ -112,7 +112,7 @@ fn test_create_minimal_ettle_succeeds() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -149,7 +149,7 @@ fn test_create_returns_ettle_id() {
 #[test]
 fn test_create_with_all_fields_succeeds() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Full Ettle".to_string(),
         ettle_id: None,
         why: Some("Because we must".to_string()),
@@ -158,7 +158,7 @@ fn test_create_with_all_fields_succeeds() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -173,7 +173,7 @@ fn test_create_with_all_fields_succeeds() {
     );
 
     // Verify fields persisted
-    if let Ok((McpCommandResult::EttleCreate { ettle_id }, _)) = result {
+    if let Ok((CommandResult::EttleCreate { ettle_id }, _)) = result {
         let record = handle_ettle_get(&conn, &ettle_id).unwrap();
         assert_eq!(record.why, "Because we must");
         assert_eq!(record.what, "The thing we do");
@@ -190,7 +190,7 @@ fn test_create_with_reasoning_link_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let link_id = create_ettle(&mut conn, &cas, "Link Target");
 
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Linked Ettle".to_string(),
         ettle_id: None,
         why: None,
@@ -199,7 +199,7 @@ fn test_create_with_reasoning_link_succeeds() {
         reasoning_link_id: Some(link_id.clone()),
         reasoning_link_type: Some("refines".to_string()),
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -213,7 +213,7 @@ fn test_create_with_reasoning_link_succeeds() {
         result.err()
     );
 
-    if let Ok((McpCommandResult::EttleCreate { ettle_id }, _)) = result {
+    if let Ok((CommandResult::EttleCreate { ettle_id }, _)) = result {
         let record = handle_ettle_get(&conn, &ettle_id).unwrap();
         assert_eq!(record.reasoning_link_id, Some(link_id));
         assert_eq!(record.reasoning_link_type, Some("refines".to_string()));
@@ -227,7 +227,7 @@ fn test_create_with_reasoning_link_succeeds() {
 #[test]
 fn test_create_empty_title_fails() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: String::new(),
         ettle_id: None,
         why: None,
@@ -236,7 +236,7 @@ fn test_create_empty_title_fails() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -255,7 +255,7 @@ fn test_create_empty_title_fails() {
 #[test]
 fn test_create_rejects_caller_supplied_id() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Ettle".to_string(),
         ettle_id: Some("ettle:caller-supplied".to_string()),
         why: None,
@@ -264,7 +264,7 @@ fn test_create_rejects_caller_supplied_id() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -285,7 +285,7 @@ fn test_create_link_without_type_fails() {
     let (_dir, mut conn, cas) = setup();
     let link_id = create_ettle(&mut conn, &cas, "Link Target");
 
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Broken Link".to_string(),
         ettle_id: None,
         why: None,
@@ -294,7 +294,7 @@ fn test_create_link_without_type_fails() {
         reasoning_link_id: Some(link_id),
         reasoning_link_type: None, // Missing type
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -313,7 +313,7 @@ fn test_create_link_without_type_fails() {
 #[test]
 fn test_create_type_without_link_fails() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Type Only".to_string(),
         ettle_id: None,
         why: None,
@@ -322,7 +322,7 @@ fn test_create_type_without_link_fails() {
         reasoning_link_id: None, // No link
         reasoning_link_type: Some("refines".to_string()),
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -341,7 +341,7 @@ fn test_create_type_without_link_fails() {
 #[test]
 fn test_create_link_to_nonexistent_ettle_fails() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Bad Link".to_string(),
         ettle_id: None,
         why: None,
@@ -350,7 +350,7 @@ fn test_create_link_to_nonexistent_ettle_fails() {
         reasoning_link_id: Some("ettle:does-not-exist".to_string()),
         reasoning_link_type: Some("refines".to_string()),
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -372,10 +372,10 @@ fn test_create_link_to_tombstoned_ettle_fails() {
     let link_id = create_ettle(&mut conn, &cas, "Link Target");
 
     // Tombstone the link target
-    let tombstone_cmd = McpCommand::EttleTombstone {
+    let tombstone_cmd = Command::EttleTombstone {
         ettle_id: link_id.clone(),
     };
-    apply_mcp_command(
+    apply_command(
         tombstone_cmd,
         None,
         &mut conn,
@@ -386,7 +386,7 @@ fn test_create_link_to_tombstoned_ettle_fails() {
     .unwrap();
 
     // Now try to link to it
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Link to Tombstoned".to_string(),
         ettle_id: None,
         why: None,
@@ -395,7 +395,7 @@ fn test_create_link_to_tombstoned_ettle_fails() {
         reasoning_link_id: Some(link_id),
         reasoning_link_type: Some("refines".to_string()),
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -414,7 +414,7 @@ fn test_create_link_to_tombstoned_ettle_fails() {
 #[test]
 fn test_create_whitespace_only_title_fails() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "   ".to_string(),
         ettle_id: None,
         why: None,
@@ -423,7 +423,7 @@ fn test_create_whitespace_only_title_fails() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -442,7 +442,7 @@ fn test_create_whitespace_only_title_fails() {
 #[test]
 fn test_get_returns_all_fields() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Full".to_string(),
         ettle_id: None,
         why: Some("Because".to_string()),
@@ -451,7 +451,7 @@ fn test_get_returns_all_fields() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let (result, _) = apply_mcp_command(
+    let (result, _) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -460,7 +460,7 @@ fn test_get_returns_all_fields() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = result else {
+    let CommandResult::EttleCreate { ettle_id } = result else {
         panic!()
     };
 
@@ -636,8 +636,8 @@ fn test_list_excludes_tombstoned_by_default() {
     let id2 = create_ettle(&mut conn, &cas, "Tombstoned");
 
     // Tombstone id2
-    apply_mcp_command(
-        McpCommand::EttleTombstone {
+    apply_command(
+        Command::EttleTombstone {
             ettle_id: id2.clone(),
         },
         None,
@@ -672,8 +672,8 @@ fn test_list_include_tombstoned_flag() {
     let id1 = create_ettle(&mut conn, &cas, "Active");
     let id2 = create_ettle(&mut conn, &cas, "Tombstoned");
 
-    apply_mcp_command(
-        McpCommand::EttleTombstone {
+    apply_command(
+        Command::EttleTombstone {
             ettle_id: id2.clone(),
         },
         None,
@@ -707,8 +707,8 @@ fn test_update_title_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "Old Title");
 
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: Some("New Title".to_string()),
             why: None,
@@ -738,8 +738,8 @@ fn test_update_why_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "Ettle");
 
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: None,
             why: Some("New Why".to_string()),
@@ -769,8 +769,8 @@ fn test_update_what_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "Ettle");
 
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: None,
             why: None,
@@ -800,8 +800,8 @@ fn test_update_how_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "Ettle");
 
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: None,
             why: None,
@@ -832,8 +832,8 @@ fn test_update_sets_reasoning_link() {
     let id = create_ettle(&mut conn, &cas, "Ettle");
     let link_id = create_ettle(&mut conn, &cas, "Link Target");
 
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: None,
             why: None,
@@ -865,7 +865,7 @@ fn test_update_changes_reasoning_link() {
     let link_id1 = create_ettle(&mut conn, &cas, "Link 1");
     let link_id2 = create_ettle(&mut conn, &cas, "Link 2");
 
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Linked".to_string(),
         ettle_id: None,
         why: None,
@@ -874,7 +874,7 @@ fn test_update_changes_reasoning_link() {
         reasoning_link_id: Some(link_id1.clone()),
         reasoning_link_type: Some("refines".to_string()),
     };
-    let (result, _) = apply_mcp_command(
+    let (result, _) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -883,13 +883,13 @@ fn test_update_changes_reasoning_link() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = result else {
+    let CommandResult::EttleCreate { ettle_id } = result else {
         panic!()
     };
 
     // Change link to link_id2
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: ettle_id.clone(),
             title: None,
             why: None,
@@ -920,7 +920,7 @@ fn test_update_clears_reasoning_link() {
     let (_dir, mut conn, cas) = setup();
     let link_id = create_ettle(&mut conn, &cas, "Link Target");
 
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Linked".to_string(),
         ettle_id: None,
         why: None,
@@ -929,7 +929,7 @@ fn test_update_clears_reasoning_link() {
         reasoning_link_id: Some(link_id),
         reasoning_link_type: Some("refines".to_string()),
     };
-    let (result, _) = apply_mcp_command(
+    let (result, _) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -938,13 +938,13 @@ fn test_update_clears_reasoning_link() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = result else {
+    let CommandResult::EttleCreate { ettle_id } = result else {
         panic!()
     };
 
     // Clear the link
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: ettle_id.clone(),
             title: None,
             why: None,
@@ -976,7 +976,7 @@ fn test_update_clears_reasoning_link() {
 #[test]
 fn test_update_preserves_unspecified_fields() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Preserve".to_string(),
         ettle_id: None,
         why: Some("Original Why".to_string()),
@@ -985,7 +985,7 @@ fn test_update_preserves_unspecified_fields() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let (result, _) = apply_mcp_command(
+    let (result, _) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -994,13 +994,13 @@ fn test_update_preserves_unspecified_fields() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate { ettle_id } = result else {
+    let CommandResult::EttleCreate { ettle_id } = result else {
         panic!()
     };
 
     // Only update title
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: ettle_id.clone(),
             title: Some("New Title".to_string()),
             why: None,
@@ -1033,8 +1033,8 @@ fn test_update_rejects_self_referential_link() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "Self Ref");
 
-    let result = apply_mcp_command(
-        McpCommand::EttleUpdate {
+    let result = apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: None,
             why: None,
@@ -1060,8 +1060,8 @@ fn test_update_rejects_self_referential_link() {
 #[test]
 fn test_update_nonexistent_ettle_fails() {
     let (_dir, mut conn, cas) = setup();
-    let result = apply_mcp_command(
-        McpCommand::EttleUpdate {
+    let result = apply_command(
+        Command::EttleUpdate {
             ettle_id: "ettle:does-not-exist".to_string(),
             title: Some("New Title".to_string()),
             why: None,
@@ -1089,8 +1089,8 @@ fn test_update_tombstoned_ettle_fails() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "To Tombstone");
 
-    apply_mcp_command(
-        McpCommand::EttleTombstone {
+    apply_command(
+        Command::EttleTombstone {
             ettle_id: id.clone(),
         },
         None,
@@ -1101,8 +1101,8 @@ fn test_update_tombstoned_ettle_fails() {
     )
     .unwrap();
 
-    let result = apply_mcp_command(
-        McpCommand::EttleUpdate {
+    let result = apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: Some("New Title".to_string()),
             why: None,
@@ -1130,8 +1130,8 @@ fn test_update_empty_update_fails() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "Ettle");
 
-    let result = apply_mcp_command(
-        McpCommand::EttleUpdate {
+    let result = apply_command(
+        Command::EttleUpdate {
             ettle_id: id,
             title: None,
             why: None,
@@ -1159,8 +1159,8 @@ fn test_update_link_to_nonexistent_fails() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "Ettle");
 
-    let result = apply_mcp_command(
-        McpCommand::EttleUpdate {
+    let result = apply_command(
+        Command::EttleUpdate {
             ettle_id: id,
             title: None,
             why: None,
@@ -1190,8 +1190,8 @@ fn test_update_link_without_type_fails() {
     let link_id = create_ettle(&mut conn, &cas, "Link Target");
 
     // Set a link with no type (existing record also has no type)
-    let result = apply_mcp_command(
-        McpCommand::EttleUpdate {
+    let result = apply_command(
+        Command::EttleUpdate {
             ettle_id: id,
             title: None,
             why: None,
@@ -1219,8 +1219,8 @@ fn test_tombstone_active_ettle_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let id = create_ettle(&mut conn, &cas, "To Tombstone");
 
-    let result = apply_mcp_command(
-        McpCommand::EttleTombstone {
+    let result = apply_command(
+        Command::EttleTombstone {
             ettle_id: id.clone(),
         },
         None,
@@ -1246,8 +1246,8 @@ fn test_tombstone_active_ettle_succeeds() {
 #[test]
 fn test_tombstone_nonexistent_ettle_fails() {
     let (_dir, mut conn, cas) = setup();
-    let result = apply_mcp_command(
-        McpCommand::EttleTombstone {
+    let result = apply_command(
+        Command::EttleTombstone {
             ettle_id: "ettle:does-not-exist".to_string(),
         },
         None,
@@ -1270,8 +1270,8 @@ fn test_tombstone_already_tombstoned_fails() {
     let id = create_ettle(&mut conn, &cas, "Ettle");
 
     // First tombstone
-    apply_mcp_command(
-        McpCommand::EttleTombstone {
+    apply_command(
+        Command::EttleTombstone {
             ettle_id: id.clone(),
         },
         None,
@@ -1283,8 +1283,8 @@ fn test_tombstone_already_tombstoned_fails() {
     .unwrap();
 
     // Second tombstone
-    let result = apply_mcp_command(
-        McpCommand::EttleTombstone { ettle_id: id },
+    let result = apply_command(
+        Command::EttleTombstone { ettle_id: id },
         None,
         &mut conn,
         &cas,
@@ -1305,8 +1305,8 @@ fn test_tombstone_with_active_dependants_fails() {
     let target_id = create_ettle(&mut conn, &cas, "Target");
 
     // Create an ettle that links to target
-    apply_mcp_command(
-        McpCommand::EttleCreate {
+    apply_command(
+        Command::EttleCreate {
             title: "Dependant".to_string(),
             ettle_id: None,
             why: None,
@@ -1324,8 +1324,8 @@ fn test_tombstone_with_active_dependants_fails() {
     .unwrap();
 
     // Try to tombstone the target while dependant is active
-    let result = apply_mcp_command(
-        McpCommand::EttleTombstone {
+    let result = apply_command(
+        Command::EttleTombstone {
             ettle_id: target_id,
         },
         None,
@@ -1351,7 +1351,7 @@ fn test_tombstone_allows_tombstoned_dependant() {
     let target_id = create_ettle(&mut conn, &cas, "Target");
 
     // Create an ettle that links to target
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Dependant".to_string(),
         ettle_id: None,
         why: None,
@@ -1360,7 +1360,7 @@ fn test_tombstone_allows_tombstoned_dependant() {
         reasoning_link_id: Some(target_id.clone()),
         reasoning_link_type: Some("refines".to_string()),
     };
-    let (result, _) = apply_mcp_command(
+    let (result, _) = apply_command(
         cmd,
         None,
         &mut conn,
@@ -1369,7 +1369,7 @@ fn test_tombstone_allows_tombstoned_dependant() {
         &NoopApprovalRouter,
     )
     .unwrap();
-    let McpCommandResult::EttleCreate {
+    let CommandResult::EttleCreate {
         ettle_id: dependant_id,
     } = result
     else {
@@ -1377,8 +1377,8 @@ fn test_tombstone_allows_tombstoned_dependant() {
     };
 
     // Tombstone the dependant first
-    apply_mcp_command(
-        McpCommand::EttleTombstone {
+    apply_command(
+        Command::EttleTombstone {
             ettle_id: dependant_id,
         },
         None,
@@ -1390,8 +1390,8 @@ fn test_tombstone_allows_tombstoned_dependant() {
     .unwrap();
 
     // Now tombstone the target (all dependants are tombstoned, so this should work)
-    let result = apply_mcp_command(
-        McpCommand::EttleTombstone {
+    let result = apply_command(
+        Command::EttleTombstone {
             ettle_id: target_id,
         },
         None,
@@ -1413,17 +1413,14 @@ fn test_tombstone_allows_tombstoned_dependant() {
 
 #[test]
 fn test_hard_delete_not_exposed() {
-    let src = std::fs::read_to_string("src/commands/mcp_command.rs").unwrap_or_else(|_| {
-        // Try with full path
-        std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/src/commands/mcp_command.rs"
-        ))
-        .unwrap()
-    });
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/commands/command.rs"
+    ))
+    .unwrap();
     assert!(
         !src.contains("EttleDelete"),
-        "EttleDelete must not exist in McpCommand — only soft tombstone is exposed"
+        "EttleDelete must not exist in Command — only soft tombstone is exposed"
     );
 }
 
@@ -1437,10 +1434,10 @@ fn test_occ_correct_version_succeeds() {
 
     // Get current state_version (0 initially)
     let sv: u64 = conn
-        .query_row("SELECT COUNT(*) FROM mcp_command_log", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap();
 
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "OCC Test".to_string(),
         ettle_id: None,
         why: None,
@@ -1449,7 +1446,7 @@ fn test_occ_correct_version_succeeds() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         Some(sv), // correct version
         &mut conn,
@@ -1471,7 +1468,7 @@ fn test_occ_correct_version_succeeds() {
 #[test]
 fn test_occ_wrong_version_fails() {
     let (_dir, mut conn, cas) = setup();
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "OCC Test".to_string(),
         ettle_id: None,
         why: None,
@@ -1480,7 +1477,7 @@ fn test_occ_wrong_version_fails() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         Some(9999), // wrong version
         &mut conn,
@@ -1516,8 +1513,8 @@ fn test_each_mutation_appends_one_provenance_event() {
     );
 
     // Update
-    apply_mcp_command(
-        McpCommand::EttleUpdate {
+    apply_command(
+        Command::EttleUpdate {
             ettle_id: id.clone(),
             title: Some("Updated".to_string()),
             why: None,
@@ -1540,8 +1537,8 @@ fn test_each_mutation_appends_one_provenance_event() {
     );
 
     // Tombstone
-    apply_mcp_command(
-        McpCommand::EttleTombstone { ettle_id: id },
+    apply_command(
+        Command::EttleTombstone { ettle_id: id },
         None,
         &mut conn,
         &cas,
@@ -1572,8 +1569,8 @@ fn test_failed_command_no_provenance_event() {
     let before = count_prov(&conn);
 
     // Attempt a failing command (empty title)
-    let _ = apply_mcp_command(
-        McpCommand::EttleCreate {
+    let _ = apply_command(
+        Command::EttleCreate {
             title: String::new(),
             ettle_id: None,
             why: None,
@@ -1656,7 +1653,7 @@ fn test_ettle_list_byte_identical() {
 fn test_create_large_fields_succeeds() {
     let (_dir, mut conn, cas) = setup();
     let big = "X".repeat(10_000);
-    let cmd = McpCommand::EttleCreate {
+    let cmd = Command::EttleCreate {
         title: "Big Ettle".to_string(),
         ettle_id: None,
         why: Some(big.clone()),
@@ -1665,7 +1662,7 @@ fn test_create_large_fields_succeeds() {
         reasoning_link_id: None,
         reasoning_link_type: None,
     };
-    let result = apply_mcp_command(
+    let result = apply_command(
         cmd,
         None,
         &mut conn,
@@ -1679,7 +1676,7 @@ fn test_create_large_fields_succeeds() {
         result.err()
     );
 
-    if let Ok((McpCommandResult::EttleCreate { ettle_id }, _)) = result {
+    if let Ok((CommandResult::EttleCreate { ettle_id }, _)) = result {
         let record = handle_ettle_get(&conn, &ettle_id).unwrap();
         assert_eq!(record.why.len(), 10_000);
         assert_eq!(record.what.len(), 10_000);

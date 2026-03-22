@@ -1,8 +1,8 @@
 //! Handlers for `profile.*` tool group.
 
 use ettlex_core::policy_provider::PolicyProvider;
-use ettlex_engine::commands::engine_query::{apply_engine_query, EngineQuery};
-use ettlex_engine::commands::read_tools::ListOptions;
+use ettlex_memory::commands::engine_query::{apply_engine_query, EngineQuery};
+use ettlex_memory::commands::read_tools::ListOptions;
 use ettlex_store::cas::FsStore;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -36,7 +36,7 @@ pub fn handle_profile_get(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ProfileGet(r) = result {
                 McpResult::Ok(json!({
                     "profile_ref": r.profile_ref,
@@ -72,7 +72,7 @@ pub fn handle_profile_list(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ProfileList(page) = result {
                 let items: Vec<Value> = page
                     .items
@@ -114,7 +114,7 @@ pub fn handle_profile_get_default(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ProfileGet(r) = result {
                 McpResult::Ok(json!({
                     "profile_ref": r.profile_ref,
@@ -150,7 +150,7 @@ pub fn handle_profile_resolve(
         Some(policy_provider),
     ) {
         Ok(result) => {
-            use ettlex_engine::commands::engine_query::EngineQueryResult;
+            use ettlex_memory::commands::engine_query::EngineQueryResult;
             if let EngineQueryResult::ProfileResolve(r) = result {
                 McpResult::Ok(json!({
                     "profile_ref": r.profile_ref,
