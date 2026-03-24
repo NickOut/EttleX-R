@@ -1,10 +1,9 @@
-//! EttleX Store - Persistence layer with SQLite, CAS, and seed import
+//! EttleX Store - Persistence layer with SQLite and CAS
 //!
 //! Provides:
 //! - SQLite schema with migrations framework
-//! - Content-addressable storage (CAS) for EP content
-//! - Seed Format v0 parser and importer
-//! - Repository layer bridging Phase 0.5 domain models to persistence
+//! - Content-addressable storage (CAS) for blob storage
+//! - Repository layer for domain models (Ettle, Relation, Group, Decision, Snapshot, Profile)
 
 pub mod cas;
 pub mod db;
@@ -14,7 +13,6 @@ pub mod migrations;
 pub mod model;
 pub mod profile;
 pub mod repo;
-pub mod seed;
 pub mod snapshot;
 
 // Re-export key types

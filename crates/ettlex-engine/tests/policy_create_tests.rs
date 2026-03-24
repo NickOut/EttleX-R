@@ -47,16 +47,6 @@ fn setup() -> (TempDir, Connection, FsStore, std::path::PathBuf) {
     (dir, conn, FsStore::new(cas_path), policies_dir)
 }
 
-fn seed_leaf(conn: &Connection) {
-    conn.execute_batch(
-        "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-         VALUES ('ettle:pc', 'PC Ettle', NULL, 0, 0, 0, '{}');
-         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
-         VALUES ('ep:pc:0', 'ettle:pc', 0, 1, NULL, '{\"why\":\"w\",\"what\":\"w\",\"how\":\"h\"}', 0, 0, 0);",
-    )
-    .unwrap();
-}
-
 fn sv(conn: &Connection) -> u64 {
     conn.query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
         .unwrap()
@@ -307,46 +297,6 @@ fn test_policy_create_appears_in_list() {
     assert!(
         list.iter().any(|e| e.policy_ref == "list_check@0"),
         "Created policy must appear in policy_list"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// S-PC-12: After PolicyCreate, SnapshotCommit can reference new policy_ref
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_policy_create_usable_in_snapshot_commit() {
-    let (_dir, mut conn, cas, policies_dir) = setup();
-    let provider = FilePolicyProvider::new(&policies_dir);
-    seed_leaf(&conn);
-
-    // Create policy
-    let cmd = Command::PolicyCreate {
-        policy_ref: "usable_policy@0".to_string(),
-        text: "# Usable\n<!-- HANDOFF: START -->\nobligation\n<!-- HANDOFF: END -->".to_string(),
-    };
-    apply_command(cmd, None, &mut conn, &cas, &provider, &NoopApprovalRouter).unwrap();
-
-    // SnapshotCommit with the new policy_ref
-    let commit_cmd = Command::SnapshotCommit {
-        leaf_ep_id: "ep:pc:0".to_string(),
-        policy_ref: Some("usable_policy@0".to_string()),
-        profile_ref: None,
-        dry_run: false,
-        expected_head: None,
-    };
-    let result = apply_command(
-        commit_cmd,
-        None,
-        &mut conn,
-        &cas,
-        &provider,
-        &NoopApprovalRouter,
-    );
-    assert!(
-        result.is_ok(),
-        "SnapshotCommit with created policy must succeed: {:?}",
-        result.err()
     );
 }
 

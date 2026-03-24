@@ -97,11 +97,6 @@ fn command_result_to_json(r: &CommandResult) -> Value {
             "tag": "EttleCreate",
             "ettle_id": ettle_id,
         }),
-        CommandResult::EpCreate { ep_id } => json!({
-            "tag": "EpCreate",
-            "ep_id": ep_id,
-        }),
-        CommandResult::EpUpdate { ep_id } => json!({ "tag": "EpUpdate", "ep_id": ep_id }),
         CommandResult::ProfileCreate => json!({ "tag": "ProfileCreate" }),
         CommandResult::ProfileSetDefault => json!({ "tag": "ProfileSetDefault" }),
         CommandResult::PolicyCreate { policy_ref } => {

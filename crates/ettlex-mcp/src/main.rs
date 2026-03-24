@@ -179,14 +179,14 @@ fn handle_tools_list() -> Value {
     let tools = vec![
         tool_def(
             "ettlex_apply",
-            "Apply a write command (EttleCreate, EttleUpdate, EttleTombstone, EpCreate, EpUpdate, SnapshotCommit, RelationCreate, RelationUpdate, RelationTombstone, GroupCreate, GroupTombstone, GroupMemberAdd, GroupMemberRemove, ProfileCreate, ProfileSetDefault, PolicyCreate).",
+            "Apply a write command (EttleCreate, EttleUpdate, EttleTombstone, SnapshotCommit, RelationCreate, RelationUpdate, RelationTombstone, GroupCreate, GroupTombstone, GroupMemberAdd, GroupMemberRemove, ProfileCreate, ProfileSetDefault, PolicyCreate).",
             json!({
                 "type": "object",
                 "required": ["command"],
                 "properties": {
                     "command": {
                         "type": "object",
-                        "description": "Tagged command object. Required field: tag. Tags: EttleCreate {title, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleUpdate {ettle_id, title?, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleTombstone {ettle_id}, EpCreate {ettle_id, ordinal, normative?, why?, what?, how?}, EpUpdate {ep_id, why?, what?, how?, title?}, SnapshotCommit {leaf_ep_id, policy_ref?}, RelationCreate {relation_type, source_ettle_id, target_ettle_id, properties_json?}, RelationUpdate {relation_id, properties_json}, RelationTombstone {relation_id}, GroupCreate {name}, GroupTombstone {group_id}, GroupMemberAdd {group_id, ettle_id}, GroupMemberRemove {group_id, ettle_id}, ProfileCreate {profile_ref, payload_json}, ProfileSetDefault {profile_ref}, PolicyCreate {policy_ref, text}."
+                        "description": "Tagged command object. Required field: tag. Tags: EttleCreate {title, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleUpdate {ettle_id, title?, why?, what?, how?, reasoning_link_id?, reasoning_link_type?}, EttleTombstone {ettle_id}, SnapshotCommit {leaf_ep_id, policy_ref?}, RelationCreate {relation_type, source_ettle_id, target_ettle_id, properties_json?}, RelationUpdate {relation_id, properties_json}, RelationTombstone {relation_id}, GroupCreate {name}, GroupTombstone {group_id}, GroupMemberAdd {group_id, ettle_id}, GroupMemberRemove {group_id, ettle_id}, ProfileCreate {profile_ref, payload_json}, ProfileSetDefault {profile_ref}, PolicyCreate {policy_ref, text}."
                     },
                     "expected_state_version": {
                         "type": "integer",
@@ -215,28 +215,6 @@ fn handle_tools_list() -> Value {
                     "limit": { "type": "integer", "description": "Max results 1–500 (default 100)" },
                     "cursor": { "type": "string", "description": "Opaque pagination cursor" },
                     "include_tombstoned": { "type": "boolean", "description": "If true, include tombstoned ettles (default false)" }
-                }
-            }),
-        ),
-        tool_def(
-            "ettle_list_eps",
-            "List EPs belonging to an ettle.",
-            json!({
-                "type": "object",
-                "required": ["ettle_id"],
-                "properties": {
-                    "ettle_id": { "type": "string", "description": "Ettle ID" }
-                }
-            }),
-        ),
-        tool_def(
-            "ep_get",
-            "Get a single EP by ID.",
-            json!({
-                "type": "object",
-                "required": ["ep_id"],
-                "properties": {
-                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" }
                 }
             }),
         ),
@@ -384,62 +362,15 @@ fn handle_tools_list() -> Value {
                 }
             }),
         ),
-        // ── EP children / parents / constraints / decisions ──────────────
-        tool_def(
-            "ep_list_children",
-            "List the child EPs of an EP (EPs whose ettle is the child_ettle of this EP).",
-            json!({
-                "type": "object",
-                "required": ["ep_id"],
-                "properties": {
-                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" }
-                }
-            }),
-        ),
-        tool_def(
-            "ep_list_parents",
-            "List the parent EPs of an EP (EPs whose child_ettle_id equals this EP's ettle_id).",
-            json!({
-                "type": "object",
-                "required": ["ep_id"],
-                "properties": {
-                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" }
-                }
-            }),
-        ),
-        tool_def(
-            "ep_list_constraints",
-            "List constraints attached to an EP.",
-            json!({
-                "type": "object",
-                "required": ["ep_id"],
-                "properties": {
-                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" }
-                }
-            }),
-        ),
-        tool_def(
-            "ep_list_decisions",
-            "List decisions linked to an EP, optionally including ancestor EPs.",
-            json!({
-                "type": "object",
-                "required": ["ep_id"],
-                "properties": {
-                    "ep_id": { "type": "string", "description": "EP ID (ep:...)" },
-                    "include_ancestors": { "type": "boolean", "description": "Include decisions from ancestor EPs (default false)" }
-                }
-            }),
-        ),
         // ── Ettle decisions ──────────────────────────────────────────────
         tool_def(
             "ettle_list_decisions",
-            "List decisions linked to an ettle, optionally including EP-level decisions and ancestors.",
+            "List decisions linked to an ettle, optionally including ancestor decisions.",
             json!({
                 "type": "object",
                 "required": ["ettle_id"],
                 "properties": {
                     "ettle_id": { "type": "string", "description": "Ettle ID (ettle:...)" },
-                    "include_eps": { "type": "boolean", "description": "Include decisions on EPs of this ettle (default false)" },
                     "include_ancestors": { "type": "boolean", "description": "Include decisions from ancestor ettles (default false)" }
                 }
             }),
@@ -477,29 +408,6 @@ fn handle_tools_list() -> Value {
                     "target_kind": { "type": "string", "description": "Target kind: 'ep' or 'ettle'" },
                     "target_id": { "type": "string", "description": "Target ID" },
                     "include_tombstoned": { "type": "boolean", "description": "Include tombstoned decisions (default false)" }
-                }
-            }),
-        ),
-        // ── EPT ──────────────────────────────────────────────────────────
-        tool_def(
-            "ept_compute",
-            "Compute the EP tree (EPT) rooted at a leaf EP, returning ordered EP IDs and a stability digest.",
-            json!({
-                "type": "object",
-                "required": ["leaf_ep_id"],
-                "properties": {
-                    "leaf_ep_id": { "type": "string", "description": "Leaf EP ID (ep:...)" }
-                }
-            }),
-        ),
-        tool_def(
-            "ept_compute_decision_context",
-            "Compute the decision context for a leaf EP across the full EPT.",
-            json!({
-                "type": "object",
-                "required": ["leaf_ep_id"],
-                "properties": {
-                    "leaf_ep_id": { "type": "string", "description": "Leaf EP ID (ep:...)" }
                 }
             }),
         ),

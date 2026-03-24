@@ -1,9 +1,10 @@
 //! MCP tool-layer test for `mcp_ep_update` Ettle.
 //!
-//! Tests involving `handle_apply` live here (requires ettlex-mcp).
+//! EP construct retired in Slice 03. The EpUpdate command variant no longer exists.
+//! These tests are retired; Slice 04 will remove the seed module entirely.
 //!
 //! Scenario → test mapping:
-//!   S-MU-4  test_mcp_ep_update_tool_has_no_validation_logic
+//!   S-MU-4  test_mcp_ep_update_tool_retired (verifies EpUpdate returns InvalidCommand)
 
 #![allow(clippy::unwrap_used)]
 
@@ -25,45 +26,19 @@ fn setup() -> (TempDir, Connection, FsStore) {
     (dir, conn, FsStore::new(cas_path))
 }
 
-fn seed_ep(conn: &Connection, ep_id: &str) {
-    let ettle_id = format!("ettle:{}", ep_id);
-    conn.execute_batch(&format!(
-        "INSERT OR IGNORE INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-         VALUES ('{ettle_id}', 'Test', NULL, 0, 0, 0, '{{}}');
-         INSERT OR IGNORE INTO eps (id, ettle_id, ordinal, normative, child_ettle_id,
-                                    content_inline, deleted, created_at, updated_at)
-         VALUES ('{ep_id}', '{ettle_id}', 0, 1, NULL,
-                 '{{\"why\":\"why\",\"what\":\"what\",\"how\":\"how\"}}',
-                 0, 0, 0);"
-    ))
-    .unwrap();
-}
-
 // ---------------------------------------------------------------------------
-// S-MU-4: The MCP tool handler (handle_apply) has no field-presence validation
-//
-// Structural proof: `tools/apply.rs::handle_apply` deserialises the JSON command
-// and delegates immediately to `apply_mcp_command` (and through it, to ep_ops).
-// It performs no EP field presence checks of its own.
-// All domain validation lives in the action layer (ep_ops::update_ep).
-//
-// Evidence: sending an empty-field EpUpdate through `handle_apply` produces an
-// error with the EmptyUpdate code — which originates from ep_ops, not from any
-// MCP-tool-level guard.
+// S-MU-4: EpUpdate is retired in Slice 03 — handle_apply must return InvalidCommand
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_mcp_ep_update_tool_has_no_validation_logic() {
+fn test_mcp_ep_update_tool_retired() {
     let (_dir, mut conn, cas) = setup();
-    let ep_id = "ep:mu4:0";
-    seed_ep(&conn, ep_id);
 
-    // Send via handle_apply — the MCP transport layer
+    // Send EpUpdate via handle_apply — the command no longer exists
     let params = json!({
         "command": {
             "tag": "EpUpdate",
-            "ep_id": ep_id
-            // why / what / how / title all absent (serde defaults to None)
+            "ep_id": "ep:some:0"
         }
     });
 
@@ -75,18 +50,17 @@ fn test_mcp_ep_update_tool_has_no_validation_logic() {
         &NoopApprovalRouter,
     );
 
-    // handle_apply must return an error because the action layer rejects empty updates.
-    // The error code must include "EmptyUpdate" — proving the origin is ep_ops, not the tool.
+    // handle_apply must return an error because EpUpdate is an unknown command variant
     match result {
         McpResult::Err(mcp_err) => {
             assert!(
-                mcp_err.error_code.contains("EmptyUpdate"),
-                "Error code must indicate EmptyUpdate (action-layer origin); got: {}",
+                mcp_err.error_code.contains("InvalidCommand"),
+                "Error code must indicate InvalidCommand for retired EpUpdate; got: {}",
                 mcp_err.error_code
             );
         }
         McpResult::Ok(_) => {
-            panic!("Empty EpUpdate via handle_apply must return an error, not Ok")
+            panic!("EpUpdate (retired) via handle_apply must return an error, not Ok")
         }
     }
 }

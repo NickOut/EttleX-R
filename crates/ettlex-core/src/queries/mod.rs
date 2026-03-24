@@ -13,7 +13,6 @@
 pub mod decision_queries;
 
 pub use decision_queries::{
-    decision_get, decision_list, ep_list_decisions, ep_list_decisions_with_ancestors,
-    ept_compute_decision_context, DecisionContext, DecisionDetail, DecisionFilters,
-    PaginatedDecisions, PaginationParams,
+    decision_get, decision_list, ept_compute_decision_context, DecisionContext, DecisionDetail,
+    DecisionFilters, PaginatedDecisions, PaginationParams,
 };

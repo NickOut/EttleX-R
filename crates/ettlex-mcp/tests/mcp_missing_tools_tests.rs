@@ -6,32 +6,34 @@
 //!
 //! Scenario → test mapping:
 //!   S-MT-HP-1   test_state_get_version_returns_version
+//!   S-MT-HP-7   test_decision_get_happy_path
+//!   S-MT-HP-8   test_decision_list_returns_empty_not_error
+//!   S-MT-HP-15  test_profile_resolve_happy_path
+//!   S-MT-HP-16  test_approval_list_returns_empty_not_error
+//!   S-MT-HP-17  test_policy_export_happy_path
+//!   S-MT-ERR-3  test_decision_get_missing_returns_not_found
+//!   S-MT-ERR-4  test_manifest_get_by_digest_bad_digest_returns_missing_blob
+//!   S-MT-ERR-6  test_profile_resolve_missing_ref_returns_not_found
+//!   S-MT-ERR-7  test_policy_export_nonexistent_returns_policy_not_found
+//!   S-MT-ERR-8  test_policy_export_unknown_kind_returns_policy_export_failed
+//!   S-MT-INV-2  test_state_version_increments_after_apply
+//!
+//! Deleted (EP-era, retired by Slice 03 / migration 015):
 //!   S-MT-HP-2   test_ep_list_children_happy_path
 //!   S-MT-HP-3   test_ep_list_parents_happy_path
 //!   S-MT-HP-4   test_ep_list_constraints_happy_path
 //!   S-MT-HP-5   test_constraint_get_happy_path
 //!   S-MT-HP-6   test_constraint_list_by_family_happy_path
-//!   S-MT-HP-7   test_decision_get_happy_path
-//!   S-MT-HP-8   test_decision_list_returns_empty_not_error
 //!   S-MT-HP-9   test_decision_list_by_target_happy_path
 //!   S-MT-HP-10  test_ep_list_decisions_happy_path
 //!   S-MT-HP-11  test_ettle_list_decisions_happy_path
 //!   S-MT-HP-12  test_ept_compute_decision_context_happy_path
 //!   S-MT-HP-13  test_manifest_get_by_digest_happy_path
 //!   S-MT-HP-14  test_ept_compute_happy_path
-//!   S-MT-HP-15  test_profile_resolve_happy_path
-//!   S-MT-HP-16  test_approval_list_returns_empty_not_error
-//!   S-MT-HP-17  test_policy_export_happy_path
-//!   S-MT-ERR-1  test_ep_list_children_missing_ep_returns_ok_empty
+//!   S-MT-ERR-1  test_ep_list_children_missing_param_returns_invalid_input
 //!   S-MT-ERR-2  test_constraint_get_missing_returns_not_found
-//!   S-MT-ERR-3  test_decision_get_missing_returns_not_found
-//!   S-MT-ERR-4  test_manifest_get_by_digest_bad_digest_returns_missing_blob
 //!   S-MT-ERR-5  test_ept_compute_missing_ep_returns_not_found
-//!   S-MT-ERR-6  test_profile_resolve_missing_ref_returns_not_found
-//!   S-MT-ERR-7  test_policy_export_nonexistent_returns_policy_not_found
-//!   S-MT-ERR-8  test_policy_export_unknown_kind_returns_policy_export_failed
 //!   S-MT-INV-1  test_query_tools_do_not_mutate_state_version
-//!   S-MT-INV-2  test_state_version_increments_after_apply
 
 #![allow(clippy::unwrap_used)]
 
@@ -107,32 +109,6 @@ impl Harness {
             .unwrap()
     }
 
-    fn seed_leaf(&mut self) {
-        self.conn
-            .execute_batch(
-                "INSERT OR IGNORE INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-                 VALUES ('ettle:leaf', 'Leaf', NULL, 0, 0, 0, '{}');
-                 INSERT OR IGNORE INTO eps (id, ettle_id, ordinal, normative, child_ettle_id,
-                                            content_inline, deleted, created_at, updated_at)
-                 VALUES ('ep:leaf:0', 'ettle:leaf', 0, 1, NULL, 'content', 0, 0, 0);",
-            )
-            .unwrap();
-    }
-
-    fn seed_constraint(&mut self) {
-        self.seed_leaf();
-        self.conn
-            .execute_batch(
-                "INSERT OR IGNORE INTO constraints
-                 (constraint_id, family, kind, scope, payload_json, payload_digest, created_at, updated_at)
-                 VALUES ('c:test:1', 'ABB', 'OwnershipRule', 'EP', '{\"owner\":\"team-a\"}',
-                         'abc123', 0, 0);
-                 INSERT OR IGNORE INTO ep_constraint_refs (ep_id, constraint_id, ordinal, created_at)
-                 VALUES ('ep:leaf:0', 'c:test:1', 0, 0);",
-            )
-            .unwrap();
-    }
-
     fn seed_decision(&mut self) {
         self.conn
             .execute_batch(
@@ -181,86 +157,6 @@ fn test_state_get_version_returns_version() {
 }
 
 // ---------------------------------------------------------------------------
-// S-MT-HP-2: ep_list_children — leaf EP has no children → empty list, not error
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ep_list_children_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    let resp = h.call("ep_list_children", json!({ "ep_id": "ep:leaf:0" }));
-    assert!(is_ok(&resp), "ep_list_children must succeed");
-    let v = result_value(&resp);
-    assert!(v.get("items").is_some(), "response must contain items");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-3: ep_list_parents — leaf EP has no parents → empty list, not error
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ep_list_parents_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    let resp = h.call("ep_list_parents", json!({ "ep_id": "ep:leaf:0" }));
-    assert!(is_ok(&resp), "ep_list_parents must succeed");
-    let v = result_value(&resp);
-    assert!(v.get("items").is_some(), "response must contain items");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-4: ep_list_constraints — EP with attached constraint
-// ---------------------------------------------------------------------------
-
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-#[test]
-fn test_ep_list_constraints_happy_path() {
-    let mut h = Harness::new();
-    h.seed_constraint();
-    let resp = h.call("ep_list_constraints", json!({ "ep_id": "ep:leaf:0" }));
-    assert!(is_ok(&resp), "ep_list_constraints must succeed");
-    let v = result_value(&resp);
-    let items = v["items"].as_array().unwrap();
-    assert_eq!(items.len(), 1, "must return 1 constraint");
-    assert_eq!(items[0]["constraint_id"], "c:test:1");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-5: constraint_get — returns constraint JSON
-// ---------------------------------------------------------------------------
-
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-#[test]
-fn test_constraint_get_happy_path() {
-    let mut h = Harness::new();
-    h.seed_constraint();
-    let resp = h.call("constraint_get", json!({ "constraint_id": "c:test:1" }));
-    assert!(is_ok(&resp), "constraint_get must succeed");
-    let v = result_value(&resp);
-    assert_eq!(v["constraint_id"], "c:test:1");
-    assert_eq!(v["family"], "ABB");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-6: constraint_list_by_family — returns items list
-// ---------------------------------------------------------------------------
-
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-#[test]
-fn test_constraint_list_by_family_happy_path() {
-    let mut h = Harness::new();
-    h.seed_constraint();
-    let resp = h.call(
-        "constraint_list_by_family",
-        json!({ "family": "ABB", "include_tombstoned": false }),
-    );
-    assert!(is_ok(&resp), "constraint_list_by_family must succeed");
-    let v = result_value(&resp);
-    let items = v["items"].as_array().unwrap();
-    assert_eq!(items.len(), 1, "must return 1 constraint in ABB family");
-}
-
-// ---------------------------------------------------------------------------
 // S-MT-HP-7: decision_get — returns decision JSON
 // ---------------------------------------------------------------------------
 
@@ -287,140 +183,6 @@ fn test_decision_list_returns_empty_not_error() {
     let v = result_value(&resp);
     let items = v["items"].as_array().unwrap();
     assert!(items.is_empty(), "no decisions yet → empty list");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-9: decision_list_by_target — no links → empty list
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_decision_list_by_target_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    let resp = h.call(
-        "decision_list_by_target",
-        json!({ "target_kind": "ep", "target_id": "ep:leaf:0" }),
-    );
-    assert!(is_ok(&resp), "decision_list_by_target must succeed");
-    let v = result_value(&resp);
-    assert!(v.get("items").is_some(), "response must contain items");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-10: ep_list_decisions — EP with no decision links → empty
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ep_list_decisions_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    let resp = h.call(
-        "ep_list_decisions",
-        json!({ "ep_id": "ep:leaf:0", "include_ancestors": false }),
-    );
-    assert!(is_ok(&resp), "ep_list_decisions must succeed");
-    let v = result_value(&resp);
-    assert!(v.get("items").is_some(), "response must contain items");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-11: ettle_list_decisions — ettle with no decision links → empty
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ettle_list_decisions_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    let resp = h.call(
-        "ettle_list_decisions",
-        json!({ "ettle_id": "ettle:leaf", "include_eps": false, "include_ancestors": false }),
-    );
-    assert!(is_ok(&resp), "ettle_list_decisions must succeed");
-    let v = result_value(&resp);
-    assert!(v.get("items").is_some(), "response must contain items");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-12: ept_compute_decision_context — leaf EP
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ept_compute_decision_context_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    let resp = h.call(
-        "ept_compute_decision_context",
-        json!({ "leaf_ep_id": "ep:leaf:0" }),
-    );
-    assert!(is_ok(&resp), "ept_compute_decision_context must succeed");
-    let v = result_value(&resp);
-    assert!(v.get("by_ep").is_some(), "response must contain by_ep");
-    assert!(
-        v.get("all_for_leaf").is_some(),
-        "response must contain all_for_leaf"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-13: manifest_get_by_digest — create snapshot then retrieve by digest
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_manifest_get_by_digest_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-
-    // Commit a snapshot via MCP apply to get a real manifest_digest
-    let apply_resp = h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:leaf:0",
-            }
-        }),
-    );
-    assert!(
-        is_ok(&apply_resp),
-        "SnapshotCommit must succeed: {:?}",
-        apply_resp.result
-    );
-    let manifest_digest = result_value(&apply_resp)["result"]["manifest_digest"]
-        .as_str()
-        .unwrap()
-        .to_string();
-
-    let resp = h.call(
-        "manifest_get_by_digest",
-        json!({ "manifest_digest": manifest_digest }),
-    );
-    assert!(is_ok(&resp), "manifest_get_by_digest must succeed");
-    let v = result_value(&resp);
-    assert_eq!(v["manifest_digest"], manifest_digest);
-    assert!(
-        v.get("manifest").is_some(),
-        "response must contain manifest"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-HP-14: ept_compute — leaf EP returns single-item EPT
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ept_compute_happy_path() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    let resp = h.call("ept_compute", json!({ "leaf_ep_id": "ep:leaf:0" }));
-    assert!(is_ok(&resp), "ept_compute must succeed");
-    let v = result_value(&resp);
-    assert_eq!(v["leaf_ep_id"], "ep:leaf:0");
-    let ids = v["ept_ep_ids"].as_array().unwrap();
-    assert!(!ids.is_empty(), "EPT must contain at least the leaf EP");
-    assert!(
-        v.get("ept_digest").is_some(),
-        "response must have ept_digest"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -514,29 +276,6 @@ fn test_policy_export_happy_path() {
 }
 
 // ---------------------------------------------------------------------------
-// S-MT-ERR-1: ep_list_children — missing ep_id param
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ep_list_children_missing_param_returns_invalid_input() {
-    let mut h = Harness::new();
-    let resp = h.call("ep_list_children", json!({}));
-    assert_eq!(error_code(&resp), "InvalidInput");
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-ERR-2: constraint_get — missing constraint → NotFound
-// ---------------------------------------------------------------------------
-
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-#[test]
-fn test_constraint_get_missing_returns_not_found() {
-    let mut h = Harness::new();
-    let resp = h.call("constraint_get", json!({ "constraint_id": "c:missing" }));
-    assert_eq!(error_code(&resp), "NotFound");
-}
-
-// ---------------------------------------------------------------------------
 // S-MT-ERR-3: decision_get — missing decision → NotFound
 // ---------------------------------------------------------------------------
 
@@ -565,17 +304,6 @@ fn test_manifest_get_by_digest_bad_digest_returns_missing_blob() {
         "Expected MissingBlob or NotFound, got: {}",
         code
     );
-}
-
-// ---------------------------------------------------------------------------
-// S-MT-ERR-5: ept_compute — missing ep → NotFound
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_ept_compute_missing_ep_returns_not_found() {
-    let mut h = Harness::new();
-    let resp = h.call("ept_compute", json!({ "leaf_ep_id": "ep:missing:0" }));
-    assert_eq!(error_code(&resp), "NotFound");
 }
 
 // ---------------------------------------------------------------------------
@@ -651,55 +379,6 @@ fn test_policy_export_unknown_kind_returns_policy_export_failed() {
 }
 
 // ---------------------------------------------------------------------------
-// S-MT-INV-1: query tools do not mutate state_version
-// ---------------------------------------------------------------------------
-
-#[test]
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-fn test_query_tools_do_not_mutate_state_version() {
-    let mut h = Harness::new();
-    h.seed_leaf();
-    h.seed_constraint();
-    h.seed_decision();
-
-    let sv_before = h.state_version();
-
-    // Call all query tools that operate on existing data
-    h.call("state_get_version", json!({}));
-    h.call("ep_list_children", json!({ "ep_id": "ep:leaf:0" }));
-    h.call("ep_list_parents", json!({ "ep_id": "ep:leaf:0" }));
-    h.call("ep_list_constraints", json!({ "ep_id": "ep:leaf:0" }));
-    h.call("constraint_get", json!({ "constraint_id": "c:test:1" }));
-    h.call("constraint_list_by_family", json!({ "family": "ABB" }));
-    h.call("decision_get", json!({ "decision_id": "d:test:1" }));
-    h.call("decision_list", json!({}));
-    h.call(
-        "decision_list_by_target",
-        json!({ "target_kind": "ep", "target_id": "ep:leaf:0" }),
-    );
-    h.call(
-        "ep_list_decisions",
-        json!({ "ep_id": "ep:leaf:0", "include_ancestors": false }),
-    );
-    h.call(
-        "ettle_list_decisions",
-        json!({ "ettle_id": "ettle:leaf", "include_eps": false, "include_ancestors": false }),
-    );
-    h.call(
-        "ept_compute_decision_context",
-        json!({ "leaf_ep_id": "ep:leaf:0" }),
-    );
-    h.call("ept_compute", json!({ "leaf_ep_id": "ep:leaf:0" }));
-    h.call("approval_list", json!({}));
-
-    let sv_after = h.state_version();
-    assert_eq!(
-        sv_before, sv_after,
-        "query tools must not mutate state_version"
-    );
-}
-
-// ---------------------------------------------------------------------------
 // S-MT-INV-2: state_get_version returns V+1 after any Apply command
 // ---------------------------------------------------------------------------
 
@@ -728,9 +407,3 @@ fn test_state_version_increments_after_apply() {
     // MCP state_version also reflects command_log count.
     assert_eq!(v1, v0 + 1, "state_version increments by 1 after apply");
 }
-
-// DEFERRED: S-MT ep_list_parents RefinementIntegrityViolation
-// Requires corrupted DB state; aligned with existing #[ignore] guard in suite.
-
-// DEFERRED: S-MT ept_compute EptAmbiguous
-// Currently #[ignore] in existing suite due to BTreeMap determinism in Phase 1.

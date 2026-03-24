@@ -9,12 +9,10 @@
 
 use ettlex_core::approval_router::ApprovalRouter;
 use ettlex_core::errors::{ExError, ExErrorKind};
-use ettlex_core::model::Ep;
 use ettlex_core::policy_provider::PolicyProvider;
 use ettlex_store::cas::FsStore;
 use ettlex_store::errors::Result;
 use ettlex_store::model::{GroupMemberRecord, GroupRecord, RelationRecord};
-use ettlex_store::repo::SqliteRepo;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -30,7 +28,7 @@ use crate::commands::relation::{
 };
 
 use crate::commands::engine_command::{apply_engine_command, EngineCommand, EngineCommandResult};
-use crate::commands::snapshot::SnapshotOptions;
+use crate::snapshot::SnapshotOptions;
 
 // ---------------------------------------------------------------------------
 // Command — serialisable command vocabulary
@@ -104,44 +102,6 @@ pub enum Command {
     ///
     /// The Ettle must have no active dependants.
     EttleTombstone { ettle_id: String },
-
-    // ── EP ───────────────────────────────────────────────────────────────────
-    /// Create a new EP.
-    ///
-    /// `ep_id` MUST be `None` (or absent from JSON). If a caller supplies an
-    /// `ep_id`, the command is rejected with `InvalidInput`.
-    EpCreate {
-        ettle_id: String,
-        ordinal: u32,
-        #[serde(default = "default_true")]
-        normative: bool,
-        #[serde(default)]
-        why: String,
-        #[serde(default)]
-        what: String,
-        #[serde(default)]
-        how: String,
-        /// Must not be supplied — ID is auto-generated.
-        #[serde(default)]
-        ep_id: Option<String>,
-    },
-
-    /// Update an existing EP's content fields.
-    ///
-    /// At least one field must be supplied; omitted fields are preserved.
-    /// Increments `state_version` and sets `updated_at`.
-    EpUpdate {
-        /// EP to update
-        ep_id: String,
-        /// New WHY text (preserved if absent)
-        why: Option<String>,
-        /// New WHAT text (preserved if absent)
-        what: Option<String>,
-        /// New HOW text (preserved if absent)
-        how: Option<String>,
-        /// New display title (preserved if absent)
-        title: Option<String>,
-    },
 
     // ── Profile ───────────────────────────────────────────────────────────────
     /// Create a profile.
@@ -235,10 +195,6 @@ pub enum Command {
     },
 }
 
-fn default_true() -> bool {
-    true
-}
-
 /// Deserializer for `Option<Option<T>>` that distinguishes absent from null.
 ///
 /// - Field absent → `None` (do not update)
@@ -275,12 +231,6 @@ pub enum CommandResult {
     },
     EttleUpdate,
     EttleTombstone,
-    EpCreate {
-        ep_id: String,
-    },
-    EpUpdate {
-        ep_id: String,
-    },
     ProfileCreate,
     ProfileSetDefault,
     PolicyCreate {
@@ -522,87 +472,6 @@ fn dispatch_command(
         Command::EttleTombstone { ettle_id } => {
             handle_ettle_tombstone(conn, &ettle_id)?;
             Ok(CommandResult::EttleTombstone)
-        }
-
-        Command::EpCreate {
-            ettle_id,
-            ordinal,
-            normative,
-            why,
-            what,
-            how,
-            ep_id,
-        } => {
-            // Identity contract: caller must not supply an ep_id
-            if ep_id.is_some() {
-                return Err(ExError::new(ExErrorKind::InvalidInput)
-                    .with_op("ep_create")
-                    .with_message("ep_id must not be supplied; it is auto-generated"));
-            }
-            // Validate that the referenced ettle exists
-            if SqliteRepo::get_ettle_record(conn, &ettle_id)?.is_none() {
-                return Err(ExError::new(ExErrorKind::NotFound)
-                    .with_op("ep_create")
-                    .with_entity_id(&ettle_id)
-                    .with_message(format!("Ettle not found: {}", ettle_id)));
-            }
-            let generated_ep_id = format!("ep:{}:{}", uuid::Uuid::now_v7(), ordinal);
-            let ep = Ep::new(
-                generated_ep_id.clone(),
-                ettle_id,
-                ordinal,
-                normative,
-                why,
-                what,
-                how,
-            );
-            SqliteRepo::persist_ep(conn, &ep)?;
-            Ok(CommandResult::EpCreate {
-                ep_id: generated_ep_id,
-            })
-        }
-
-        Command::EpUpdate {
-            ep_id,
-            why,
-            what,
-            how,
-            title,
-        } => {
-            if why.is_none() && what.is_none() && how.is_none() && title.is_none() {
-                return Err(ExError::new(ExErrorKind::EmptyUpdate)
-                    .with_ep_id(&ep_id)
-                    .with_op("ep_update")
-                    .with_message("EpUpdate requires at least one field"));
-            }
-
-            let mut ep = SqliteRepo::get_ep(conn, &ep_id)?.ok_or_else(|| {
-                ExError::new(ExErrorKind::NotFound)
-                    .with_ep_id(&ep_id)
-                    .with_op("ep_update")
-                    .with_message(format!("EP not found: {}", ep_id))
-            })?;
-
-            if let Some(new_why) = why {
-                ep.why = new_why;
-            }
-            if let Some(new_what) = what {
-                ep.what = new_what;
-            }
-            if let Some(new_how) = how {
-                ep.how = new_how;
-            }
-            if let Some(new_title) = title {
-                ep.title = Some(new_title);
-            }
-
-            ep.recompute_content_digest();
-            ep.updated_at = chrono::Utc::now();
-
-            SqliteRepo::persist_ep(conn, &ep)?;
-            Ok(CommandResult::EpUpdate {
-                ep_id: ep_id.clone(),
-            })
         }
 
         Command::ProfileCreate {

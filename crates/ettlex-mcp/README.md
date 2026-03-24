@@ -27,8 +27,6 @@ surface unchanged via `MemoryManager`.
 | ------------------------------- | --------------------------------------------------------- |
 | `ettle_get`                     | Get an ettle by ID                                        |
 | `ettle_list`                    | List ettles (paginated)                                   |
-| `ettle_list_eps`                | List EPs for an ettle                                     |
-| `ep_get`                        | Get an EP by ID                                           |
 | `snapshot_get`                  | Get a snapshot ledger row                                 |
 | `snapshot_list`                 | List snapshots (paginated)                                |
 | `snapshot_get_head`             | Get manifest digest of the most recent committed snapshot |
@@ -60,13 +58,6 @@ All write operations go through `ettlex_apply` with a typed `command` payload:
 | `EttleCreate`    | `title`, `why?`, `what?`, `how?`, `reasoning_link_id?`, `reasoning_link_type?` | Create an Ettle |
 | `EttleUpdate`    | `ettle_id`, `title?`, `why?`, `what?`, `how?`, `reasoning_link_id?`, `reasoning_link_type?` | Update an Ettle |
 | `EttleTombstone` | `ettle_id`                                                   | Tombstone an Ettle             |
-
-### EP commands
-
-| Tag        | Fields                                                               | Description   |
-| ---------- | -------------------------------------------------------------------- | ------------- |
-| `EpCreate` | `ettle_id`, `ordinal`, `normative?`, `why?`, `what?`, `how?`        | Create an EP  |
-| `EpUpdate` | `ep_id`, `why?`, `what?`, `how?`, `title?`                          | Update an EP  |
 
 ### Relation commands
 

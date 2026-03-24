@@ -6,8 +6,6 @@
 
 #![allow(clippy::result_large_err)]
 
-use std::collections::BTreeMap;
-
 use ettlex_core::candidate_resolver::{
     compute_dry_run_resolution, AmbiguityPolicy, CandidateEntry, DryRunConstraintStatus,
 };
@@ -15,7 +13,6 @@ use ettlex_core::diff;
 use ettlex_core::diff::human_summary::render_human_summary;
 use ettlex_core::diff::model::SnapshotDiff;
 use ettlex_core::errors::{ExError, ExErrorKind};
-use ettlex_core::traversal::ept::compute_ept;
 use ettlex_core::{log_op_end, log_op_error, log_op_start};
 use ettlex_store::cas::FsStore;
 use ettlex_store::errors::Result;
@@ -23,7 +20,6 @@ use ettlex_store::profile::{
     fetch_approval_row, list_approval_rows_paginated, list_profiles_paginated,
     load_default_profile, load_profile_full, ApprovalRow,
 };
-use ettlex_store::repo::hydration::load_tree;
 use ettlex_store::repo::SqliteRepo;
 use ettlex_store::snapshot::query::{
     fetch_manifest_bytes_by_digest, fetch_snapshot_manifest_digest, fetch_snapshot_row,
@@ -32,11 +28,10 @@ use ettlex_store::snapshot::query::{
 use rusqlite::Connection;
 
 use crate::commands::read_tools::{
-    ApprovalGetResult, ApprovalListItem, ApprovalPage, DecisionContextResult, DecisionPage,
-    EptComputeResult, EttleGetResult, EttlePage, ListOptions, ManifestGetResult, Page,
-    PolicyExportResult, PolicyProjectForHandoffResult, PolicyReadResult, PredicatePreviewResult,
-    PreviewStatus, ProfileGetResult, ProfilePage, ProfileResolveResult, SnapshotGetResult,
-    StateVersionResult,
+    ApprovalGetResult, ApprovalListItem, ApprovalPage, DecisionPage, EttleGetResult, EttlePage,
+    ListOptions, ManifestGetResult, Page, PolicyExportResult, PolicyProjectForHandoffResult,
+    PolicyReadResult, PredicatePreviewResult, PreviewStatus, ProfileGetResult, ProfilePage,
+    ProfileResolveResult, SnapshotGetResult, StateVersionResult,
 };
 
 // ---------------------------------------------------------------------------
@@ -82,27 +77,10 @@ pub enum EngineQuery {
     StateGetVersion,
 
     // ── Ettle ─────────────────────────────────────────────────────────────────
-    /// Get an ettle by ID including its EP IDs.
+    /// Get an ettle by ID.
     EttleGet { ettle_id: String },
     /// List ettles with pagination.
     EttleList(ListOptions),
-    /// List EPs belonging to an ettle.
-    EttleListEps { ettle_id: String },
-
-    // ── EP ────────────────────────────────────────────────────────────────────
-    /// Get an EP by ID.
-    EpGet { ep_id: String },
-    /// List child EPs of an EP (via refinement pointer).
-    EpListChildren { ep_id: String },
-    /// List parent EPs of an EP (via refinement pointer).
-    EpListParents { ep_id: String },
-    /// List constraints attached to an EP, ordered by attachment ordinal.
-    EpListConstraints { ep_id: String },
-    /// List decisions linked to an EP and optionally its ancestors.
-    EpListDecisions {
-        ep_id: String,
-        include_ancestors: bool,
-    },
 
     // ── Constraint ────────────────────────────────────────────────────────────
     /// Get a constraint by ID (including tombstoned).
@@ -124,14 +102,12 @@ pub enum EngineQuery {
         target_id: String,
         include_tombstoned: bool,
     },
-    /// List decisions for an ettle, optionally including its EPs and ancestors.
+    /// List decisions for an ettle, optionally including ancestors.
     EttleListDecisions {
         ettle_id: String,
         include_eps: bool,
         include_ancestors: bool,
     },
-    /// Compute the full decision context for a leaf EP (across its EPT).
-    EptComputeDecisionContext { leaf_ep_id: String },
 
     // ── Snapshot / Manifest ───────────────────────────────────────────────────
     /// Get a snapshot ledger row by snapshot ID.
@@ -142,10 +118,6 @@ pub enum EngineQuery {
     ManifestGetBySnapshot { snapshot_id: String },
     /// Get manifest bytes for a snapshot by manifest digest.
     ManifestGetByDigest { manifest_digest: String },
-
-    // ── EPT ──────────────────────────────────────────────────────────────────
-    /// Compute the EPT for a leaf EP.
-    EptCompute { leaf_ep_id: String },
 
     // ── Profile ──────────────────────────────────────────────────────────────
     /// Get a profile by reference.
@@ -213,14 +185,6 @@ pub enum EngineQueryResult {
     // ── Ettle ─────────────────────────────────────────────────────────────────
     EttleGet(EttleGetResult),
     EttleList(EttlePage),
-    EttleListEps(Vec<ettlex_core::model::Ep>),
-
-    // ── EP ────────────────────────────────────────────────────────────────────
-    EpGet(ettlex_core::model::Ep),
-    EpListChildren(Vec<ettlex_core::model::Ep>),
-    EpListParents(Vec<ettlex_core::model::Ep>),
-    EpListConstraints(Vec<ettlex_core::model::Constraint>),
-    EpListDecisions(Vec<ettlex_core::model::Decision>),
 
     // ── Constraint ────────────────────────────────────────────────────────────
     ConstraintGet(ettlex_core::model::Constraint),
@@ -231,15 +195,11 @@ pub enum EngineQueryResult {
     DecisionList(DecisionPage),
     DecisionListByTarget(Vec<ettlex_core::model::Decision>),
     EttleListDecisions(Vec<ettlex_core::model::Decision>),
-    EptComputeDecisionContext(DecisionContextResult),
 
     // ── Snapshot / Manifest ───────────────────────────────────────────────────
     SnapshotGet(SnapshotGetResult),
     SnapshotList(Vec<SnapshotGetResult>),
     ManifestGet(ManifestGetResult),
-
-    // ── EPT ──────────────────────────────────────────────────────────────────
-    EptCompute(EptComputeResult),
 
     // ── Profile ──────────────────────────────────────────────────────────────
     ProfileGet(ProfileGetResult),
@@ -311,6 +271,7 @@ fn approval_row_to_list_item(row: ApprovalRow) -> ApprovalListItem {
 }
 
 /// Compute SHA-256 hex digest of bytes.
+#[allow(dead_code)]
 fn sha256_hex(data: &[u8]) -> String {
     use sha2::Digest;
     let mut h = sha2::Sha256::new();
@@ -430,12 +391,7 @@ pub fn apply_engine_query(
                         .with_entity_id(&ettle_id)
                         .with_message("ettle not found")
                 })?;
-                let eps = SqliteRepo::list_eps_for_ettle(conn, &ettle_id)?;
-                let ep_ids = eps.iter().map(|ep| ep.id.clone()).collect();
-                Ok(EngineQueryResult::EttleGet(EttleGetResult {
-                    ettle,
-                    ep_ids,
-                }))
+                Ok(EngineQueryResult::EttleGet(EttleGetResult { ettle }))
             })();
 
             let elapsed = start.elapsed().as_millis() as u64;
@@ -475,181 +431,6 @@ pub fn apply_engine_query(
                 Err(e) => {
                     let e_clone = e.clone();
                     log_op_error!("ettle_list", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EttleListEps ──────────────────────────────────────────────────────
-        EngineQuery::EttleListEps { ettle_id } => {
-            log_op_start!("ettle_list_eps");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                let eps = SqliteRepo::list_eps_for_ettle(conn, &ettle_id)?;
-                Ok(EngineQueryResult::EttleListEps(eps))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ettle_list_eps", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!("ettle_list_eps", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EpGet ─────────────────────────────────────────────────────────────
-        EngineQuery::EpGet { ep_id } => {
-            log_op_start!("ep_get");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                let ep = SqliteRepo::get_ep(conn, &ep_id)?.ok_or_else(|| {
-                    ExError::new(ExErrorKind::NotFound)
-                        .with_op("ep_get")
-                        .with_entity_id(&ep_id)
-                        .with_message("ep not found")
-                })?;
-                Ok(EngineQueryResult::EpGet(ep))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ep_get", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!("ep_get", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EpListChildren ────────────────────────────────────────────────────
-        EngineQuery::EpListChildren { ep_id } => {
-            log_op_start!("ep_list_children");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                let children = SqliteRepo::list_child_eps_of_ep(conn, &ep_id)?;
-                Ok(EngineQueryResult::EpListChildren(children))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ep_list_children", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!("ep_list_children", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EpListParents ─────────────────────────────────────────────────────
-        EngineQuery::EpListParents { ep_id } => {
-            log_op_start!("ep_list_parents");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                let parents = SqliteRepo::list_parent_eps_of_ep(conn, &ep_id)?;
-                Ok(EngineQueryResult::EpListParents(parents))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ep_list_parents", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!("ep_list_parents", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EpListConstraints ─────────────────────────────────────────────────
-        EngineQuery::EpListConstraints { ep_id } => {
-            log_op_start!("ep_list_constraints");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                let constraints = SqliteRepo::list_constraints_for_ep_ordered(conn, &ep_id)?;
-                Ok(EngineQueryResult::EpListConstraints(constraints))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ep_list_constraints", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!("ep_list_constraints", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EpListDecisions ───────────────────────────────────────────────────
-        EngineQuery::EpListDecisions {
-            ep_id,
-            include_ancestors,
-        } => {
-            log_op_start!("ep_list_decisions");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                let mut all: Vec<ettlex_core::model::Decision> = Vec::new();
-                let mut seen_ids = std::collections::BTreeSet::new();
-
-                let add_decisions =
-                    |decisions: Vec<ettlex_core::model::Decision>,
-                     seen: &mut std::collections::BTreeSet<String>,
-                     out: &mut Vec<ettlex_core::model::Decision>| {
-                        for d in decisions {
-                            if seen.insert(d.decision_id.clone()) {
-                                out.push(d);
-                            }
-                        }
-                    };
-
-                // Always include direct decisions for this EP
-                let direct = SqliteRepo::list_decisions_by_target(conn, "ep", &ep_id, false)?;
-                add_decisions(direct, &mut seen_ids, &mut all);
-
-                if include_ancestors {
-                    // Walk up the EP chain via ettle parent hierarchy
-                    // Get the ettle for this ep, then walk parent ettles
-                    if let Some(ep) = SqliteRepo::get_ep(conn, &ep_id)? {
-                        let mut current_ettle_id = ep.ettle_id.clone();
-                        loop {
-                            let ettle = SqliteRepo::get_ettle(conn, &current_ettle_id)?;
-                            match ettle {
-                                None => break,
-                                Some(e) => {
-                                    // List decisions for the ettle
-                                    let ettle_decisions = SqliteRepo::list_decisions_by_target(
-                                        conn,
-                                        "ettle",
-                                        &current_ettle_id,
-                                        false,
-                                    )?;
-                                    add_decisions(ettle_decisions, &mut seen_ids, &mut all);
-
-                                    match e.parent_id {
-                                        None => break,
-                                        Some(parent_id) => {
-                                            current_ettle_id = parent_id;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                all.sort_by(|a, b| {
-                    a.created_at
-                        .cmp(&b.created_at)
-                        .then(a.decision_id.cmp(&b.decision_id))
-                });
-                Ok(EngineQueryResult::EpListDecisions(all))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ep_list_decisions", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!("ep_list_decisions", e_clone, duration_ms = elapsed);
                 }
             }
             result
@@ -795,8 +576,8 @@ pub fn apply_engine_query(
         // ── EttleListDecisions ────────────────────────────────────────────────
         EngineQuery::EttleListDecisions {
             ettle_id,
-            include_eps,
-            include_ancestors,
+            include_eps: _,
+            include_ancestors: _,
         } => {
             log_op_start!("ettle_list_decisions");
             let start = std::time::Instant::now();
@@ -812,32 +593,12 @@ pub fn apply_engine_query(
                     }
                 };
 
-                // Decisions for the ettle itself
+                // Decisions for the ettle itself.
+                // include_eps and include_ancestors are no-ops in Slice 03 (EP retired,
+                // parent_id removed from Ettle). Only direct ettle decisions are returned.
                 add(SqliteRepo::list_decisions_by_target(
                     conn, "ettle", &ettle_id, false,
                 )?);
-
-                if include_eps {
-                    let eps = SqliteRepo::list_eps_for_ettle(conn, &ettle_id)?;
-                    for ep in &eps {
-                        add(SqliteRepo::list_decisions_by_target(
-                            conn, "ep", &ep.id, false,
-                        )?);
-                    }
-                }
-
-                if include_ancestors {
-                    // Walk parent ettles
-                    let ettle = SqliteRepo::get_ettle(conn, &ettle_id)?;
-                    let mut parent_id = ettle.and_then(|e| e.parent_id);
-                    while let Some(pid) = parent_id {
-                        add(SqliteRepo::list_decisions_by_target(
-                            conn, "ettle", &pid, false,
-                        )?);
-                        let parent = SqliteRepo::get_ettle(conn, &pid)?;
-                        parent_id = parent.and_then(|e| e.parent_id);
-                    }
-                }
 
                 all.sort_by(|a, b| {
                     a.created_at
@@ -852,66 +613,6 @@ pub fn apply_engine_query(
                 Err(e) => {
                     let e_clone = e.clone();
                     log_op_error!("ettle_list_decisions", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EptComputeDecisionContext ─────────────────────────────────────────
-        EngineQuery::EptComputeDecisionContext { leaf_ep_id } => {
-            log_op_start!("ept_compute_decision_context");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                // Compute EPT
-                let ep = SqliteRepo::get_ep(conn, &leaf_ep_id)?.ok_or_else(|| {
-                    ExError::new(ExErrorKind::NotFound)
-                        .with_op("ept_compute_decision_context")
-                        .with_entity_id(&leaf_ep_id)
-                        .with_message("leaf ep not found")
-                })?;
-
-                let store = load_tree(conn)?;
-                let ept_ids = compute_ept(&store, &ep.ettle_id, None)
-                    .map_err(|e| e.with_op("ept_compute_decision_context"))?;
-
-                let mut by_ep: BTreeMap<String, Vec<ettlex_core::model::Decision>> =
-                    BTreeMap::new();
-                let mut all_seen = std::collections::BTreeSet::new();
-                let mut all_for_leaf: Vec<ettlex_core::model::Decision> = Vec::new();
-
-                for ep_id in &ept_ids {
-                    let ds = SqliteRepo::list_decisions_by_target(conn, "ep", ep_id, false)?;
-                    for d in &ds {
-                        if all_seen.insert(d.decision_id.clone()) {
-                            all_for_leaf.push(d.clone());
-                        }
-                    }
-                    by_ep.insert(ep_id.clone(), ds);
-                }
-
-                all_for_leaf.sort_by(|a, b| {
-                    a.created_at
-                        .cmp(&b.created_at)
-                        .then(a.decision_id.cmp(&b.decision_id))
-                });
-
-                Ok(EngineQueryResult::EptComputeDecisionContext(
-                    DecisionContextResult {
-                        by_ep,
-                        all_for_leaf,
-                    },
-                ))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ept_compute_decision_context", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!(
-                        "ept_compute_decision_context",
-                        e_clone,
-                        duration_ms = elapsed
-                    );
                 }
             }
             result
@@ -1029,43 +730,6 @@ pub fn apply_engine_query(
                 Err(e) => {
                     let e_clone = e.clone();
                     log_op_error!("manifest_get_by_digest", e_clone, duration_ms = elapsed);
-                }
-            }
-            result
-        }
-
-        // ── EptCompute ────────────────────────────────────────────────────────
-        EngineQuery::EptCompute { leaf_ep_id } => {
-            log_op_start!("ept_compute");
-            let start = std::time::Instant::now();
-            let result = (|| -> Result<EngineQueryResult> {
-                let ep = SqliteRepo::get_ep(conn, &leaf_ep_id)?.ok_or_else(|| {
-                    ExError::new(ExErrorKind::NotFound)
-                        .with_op("ept_compute")
-                        .with_entity_id(&leaf_ep_id)
-                        .with_message("leaf ep not found")
-                })?;
-
-                let store = load_tree(conn)?;
-                let ept_ids = compute_ept(&store, &ep.ettle_id, None)
-                    .map_err(|e| e.with_op("ept_compute"))?;
-
-                // ept_digest = SHA256 of EP IDs joined with \n
-                let joined = ept_ids.join("\n");
-                let ept_digest = sha256_hex(joined.as_bytes());
-
-                Ok(EngineQueryResult::EptCompute(EptComputeResult {
-                    leaf_ep_id,
-                    ept_ep_ids: ept_ids,
-                    ept_digest,
-                }))
-            })();
-            let elapsed = start.elapsed().as_millis() as u64;
-            match &result {
-                Ok(_) => log_op_end!("ept_compute", duration_ms = elapsed),
-                Err(e) => {
-                    let e_clone = e.clone();
-                    log_op_error!("ept_compute", e_clone, duration_ms = elapsed);
                 }
             }
             result

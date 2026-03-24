@@ -2,7 +2,7 @@
 
 #![allow(clippy::result_large_err)]
 
-use crate::commands::snapshot::{
+use crate::snapshot::{
     RoutedForApprovalResult, SnapshotCommitOutcome, SnapshotCommitResult, SnapshotOptions,
 };
 use ettlex_core::approval_router::ApprovalRouter;
@@ -64,7 +64,7 @@ pub fn apply_engine_command(
             profile_ref,
             options,
         } => {
-            let outcome = crate::commands::snapshot::snapshot_commit_by_leaf(
+            let outcome = crate::snapshot::snapshot_commit_by_leaf(
                 &leaf_ep_id,
                 policy_ref.as_deref(),
                 profile_ref.as_deref(),

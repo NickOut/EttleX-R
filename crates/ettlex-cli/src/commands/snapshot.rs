@@ -6,9 +6,7 @@ use ettlex_core::policy_provider::NoopPolicyProvider;
 use ettlex_engine::commands::engine_command::{
     apply_engine_command, EngineCommand, EngineCommandResult,
 };
-use ettlex_engine::commands::snapshot::{
-    resolve_root_to_leaf_ep, SnapshotCommitOutcome, SnapshotOptions,
-};
+use ettlex_engine::snapshot::{SnapshotCommitOutcome, SnapshotOptions};
 use ettlex_store::cas::FsStore;
 
 #[derive(Debug, Args)]
@@ -24,16 +22,13 @@ pub enum SnapshotCommand {
 
 #[derive(Debug, Args)]
 pub struct CommitArgs {
-    #[arg(long, conflicts_with = "root")]
-    pub leaf: Option<String>,
+    #[arg(long)]
+    pub leaf: String,
 
-    #[arg(long, conflicts_with = "leaf")]
-    pub root: Option<String>,
+    #[arg(long)]
+    pub policy: Option<String>,
 
-    #[arg(long, default_value = "policy/default@0")]
-    pub policy: String,
-
-    /// Profile reference (optional; defaults to profile/default@0 if not specified)
+    /// Profile reference (optional)
     #[arg(long)]
     pub profile: Option<String>,
 
@@ -54,10 +49,6 @@ pub fn execute(args: SnapshotArgs) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
-    if args.leaf.is_none() && args.root.is_none() {
-        return Err("Must specify either --leaf or --root".into());
-    }
-
     std::fs::create_dir_all(
         std::path::Path::new(&args.cas)
             .parent()
@@ -73,73 +64,34 @@ fn execute_commit(args: CommitArgs) -> Result<(), Box<dyn std::error::Error>> {
         allow_dedup: false,
     };
 
-    let outcome = if let Some(leaf_ep_id) = args.leaf {
-        let cmd = EngineCommand::SnapshotCommit {
-            leaf_ep_id,
-            policy_ref: Some(args.policy),
-            profile_ref: args.profile,
-            options,
-        };
+    let cmd = EngineCommand::SnapshotCommit {
+        leaf_ep_id: args.leaf,
+        policy_ref: args.policy,
+        profile_ref: args.profile,
+        options,
+    };
 
-        match apply_engine_command(
-            cmd,
-            &mut conn,
-            &cas,
-            &NoopPolicyProvider,
-            &NoopApprovalRouter,
-        )? {
-            EngineCommandResult::SnapshotCommit(r) => SnapshotCommitOutcome::Committed(r),
-            EngineCommandResult::SnapshotCommitRouted(r) => {
-                SnapshotCommitOutcome::RoutedForApproval(r)
-            }
-            _ => unreachable!("unexpected EngineCommandResult variant in snapshot commit"),
-        }
-    } else if let Some(root_ettle_id) = args.root {
-        // Resolve root → leaf, then delegate to apply_engine_command (canonical path)
-        let leaf_ep_id = resolve_root_to_leaf_ep(&mut conn, &root_ettle_id)?;
-        let cmd = EngineCommand::SnapshotCommit {
-            leaf_ep_id,
-            policy_ref: Some(args.policy),
-            profile_ref: args.profile,
-            options,
-        };
-        match apply_engine_command(
-            cmd,
-            &mut conn,
-            &cas,
-            &NoopPolicyProvider,
-            &NoopApprovalRouter,
-        )? {
-            EngineCommandResult::SnapshotCommit(r) => SnapshotCommitOutcome::Committed(r),
-            EngineCommandResult::SnapshotCommitRouted(r) => {
-                SnapshotCommitOutcome::RoutedForApproval(r)
-            }
-            _ => unreachable!("unexpected EngineCommandResult variant in snapshot commit"),
-        }
-    } else {
-        unreachable!()
+    let outcome = match apply_engine_command(
+        cmd,
+        &mut conn,
+        &cas,
+        &NoopPolicyProvider,
+        &NoopApprovalRouter,
+    )? {
+        EngineCommandResult::SnapshotCommit(r) => SnapshotCommitOutcome::Committed(r),
+        EngineCommandResult::SnapshotCommitRouted(r) => SnapshotCommitOutcome::RoutedForApproval(r),
+        _ => unreachable!("unexpected EngineCommandResult variant in snapshot commit"),
     };
 
     match outcome {
         SnapshotCommitOutcome::Committed(r) => {
-            if args.dry_run {
-                println!("Dry run (no commit):");
-                println!("  semantic_manifest_digest: {}", r.semantic_manifest_digest);
-            } else {
-                println!("Snapshot committed:");
-                println!("  snapshot_id: {}", r.snapshot_id);
-                println!("  manifest_digest: {}", r.manifest_digest);
-                println!("  head_after: {}", r.head_after);
-                println!("  semantic_manifest_digest: {}", r.semantic_manifest_digest);
-                if r.was_duplicate {
-                    println!("  (duplicate - idempotent return)");
-                }
-            }
+            println!("Snapshot committed:");
+            println!("  snapshot_id: {}", r.snapshot_id);
+            println!("  manifest_digest: {}", r.manifest_digest);
         }
         SnapshotCommitOutcome::RoutedForApproval(r) => {
             println!("Routed for approval:");
             println!("  approval_token: {}", r.approval_token);
-            println!("  reason_code: {}", r.reason_code);
         }
     }
 

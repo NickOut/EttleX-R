@@ -1,11 +1,10 @@
 //! Constraint operation handlers
 //!
-//! This module implements CRUD operations for constraints and their attachments to EPs.
-//! All operations follow the TES (Temporal Event Sourcing) pattern and maintain
-//! deterministic ordering for manifest generation.
+//! This module implements CRUD operations for constraints.
+//! EP-attachment operations have been retired in Slice 03.
 
 use crate::errors::{ExError, ExErrorKind, Result};
-use crate::model::{Constraint, EpConstraintRef};
+use crate::model::Constraint;
 use crate::ops::store::Store;
 use serde_json::Value as JsonValue;
 
@@ -26,7 +25,7 @@ use serde_json::Value as JsonValue;
 /// # Errors
 ///
 /// Returns `InvalidConstraintFamily` if family is empty.
-/// Returns `ConstraintAlreadyExists` if a constraint with the same ID already exists.
+/// Returns `AlreadyExists` if a constraint with the same ID already exists.
 pub fn create_constraint(
     store: &mut Store,
     constraint_id: String,
@@ -59,8 +58,8 @@ pub fn create_constraint(
 ///
 /// # Errors
 ///
-/// Returns `ConstraintNotFound` if the constraint doesn't exist,
-/// or `ConstraintDeleted` if it was tombstoned.
+/// Returns `NotFound` if the constraint doesn't exist,
+/// or `Deleted` if it was tombstoned.
 pub fn update_constraint(
     store: &mut Store,
     constraint_id: &str,
@@ -78,77 +77,11 @@ pub fn update_constraint(
 ///
 /// # Errors
 ///
-/// Returns `ConstraintNotFound` if the constraint doesn't exist,
-/// or `ConstraintDeleted` if it was already tombstoned.
+/// Returns `NotFound` if the constraint doesn't exist,
+/// or `Deleted` if it was already tombstoned.
 pub fn tombstone_constraint(store: &mut Store, constraint_id: &str) -> Result<()> {
     let constraint = store.get_constraint_mut(constraint_id)?;
     constraint.tombstone();
-    Ok(())
-}
-
-/// Attach a constraint to an EP
-///
-/// Creates an attachment record linking a constraint to an EP with a specific ordinal.
-/// The ordinal determines the position in deterministically ordered manifests.
-///
-/// # Errors
-///
-/// Returns `ConstraintNotFound` if the constraint doesn't exist,
-/// `ConstraintDeleted` if the constraint was tombstoned,
-/// `EpNotFound` if the EP doesn't exist,
-/// or `ConstraintAlreadyAttached` if the constraint is already attached to the EP.
-pub fn attach_constraint_to_ep(
-    store: &mut Store,
-    ep_id: String,
-    constraint_id: String,
-    ordinal: i32,
-) -> Result<()> {
-    // Verify constraint exists and is not tombstoned
-    let constraint = store.get_constraint_including_deleted(&constraint_id)?;
-    if constraint.is_deleted() {
-        return Err(ExError::new(ExErrorKind::ConstraintTombstoned)
-            .with_entity_id(constraint_id.clone())
-            .with_message("Constraint is tombstoned and cannot be attached"));
-    }
-
-    // Verify EP exists and is not deleted
-    store.get_ep(&ep_id)?;
-
-    // Check if already attached
-    if store.is_constraint_attached_to_ep(&ep_id, &constraint_id) {
-        return Err(ExError::new(ExErrorKind::DuplicateAttachment)
-            .with_entity_id(constraint_id.clone())
-            .with_ep_id(ep_id.clone())
-            .with_message("Constraint is already attached to EP"));
-    }
-
-    // Create attachment record
-    let ref_record = EpConstraintRef::new(ep_id, constraint_id, ordinal);
-    store.insert_ep_constraint_ref(ref_record);
-
-    Ok(())
-}
-
-/// Detach a constraint from an EP
-///
-/// Removes the attachment record linking a constraint to an EP.
-///
-/// # Errors
-///
-/// Returns `ConstraintNotAttached` if the constraint is not attached to the EP.
-pub fn detach_constraint_from_ep(
-    store: &mut Store,
-    ep_id: &str,
-    constraint_id: &str,
-) -> Result<()> {
-    if !store.is_constraint_attached_to_ep(ep_id, constraint_id) {
-        return Err(ExError::new(ExErrorKind::NotFound)
-            .with_entity_id(constraint_id.to_string())
-            .with_ep_id(ep_id.to_string())
-            .with_message("Constraint is not attached to EP"));
-    }
-
-    store.remove_ep_constraint_ref(ep_id, constraint_id);
     Ok(())
 }
 
@@ -158,73 +91,16 @@ pub fn detach_constraint_from_ep(
 ///
 /// # Errors
 ///
-/// Returns `ConstraintNotFound` if the constraint doesn't exist,
-/// or `ConstraintDeleted` if it was tombstoned.
+/// Returns `NotFound` if the constraint doesn't exist,
+/// or `Deleted` if it was tombstoned.
 pub fn get_constraint<'a>(store: &'a Store, constraint_id: &str) -> Result<&'a Constraint> {
     store.get_constraint(constraint_id)
-}
-
-/// List all constraints attached to an EP
-///
-/// Returns constraints ordered by their attachment ordinal for deterministic manifest generation.
-///
-/// # Errors
-///
-/// Returns `EpNotFound` if the EP doesn't exist.
-pub fn list_constraints_for_ep<'a>(store: &'a Store, ep_id: &str) -> Result<Vec<&'a Constraint>> {
-    // Verify EP exists
-    store.get_ep(ep_id)?;
-
-    // Get attachment records and sort by ordinal
-    let mut refs: Vec<_> = store.list_ep_constraint_refs(ep_id).into_iter().collect();
-    refs.sort_by_key(|r| r.ordinal);
-
-    // Look up constraints
-    let mut constraints = Vec::new();
-    for ref_record in refs {
-        if let Ok(constraint) = store.get_constraint(&ref_record.constraint_id) {
-            constraints.push(constraint);
-        }
-    }
-
-    Ok(constraints)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ops::ep_ops::create_ep;
-    use crate::ops::ettle_ops::create_ettle;
     use serde_json::json;
-
-    fn setup_store_with_ep() -> (Store, String, String) {
-        let mut store = Store::new();
-
-        // Create ettle with the new signature: title, metadata, why, what, how
-        let ettle_id = create_ettle(
-            &mut store,
-            "Test Ettle".to_string(),
-            None,                     // metadata
-            None,                     // why
-            Some("what".to_string()), // what
-            Some("how".to_string()),  // how
-        )
-        .unwrap();
-
-        // Create EP with the new signature: ettle_id, ordinal, normative, why, what, how
-        let ep_id = create_ep(
-            &mut store,
-            &ettle_id,
-            1,
-            false, // normative
-            "EP 1 Why".to_string(),
-            "EP 1 What".to_string(),
-            "EP 1 How".to_string(),
-        )
-        .unwrap();
-
-        (store, ettle_id, ep_id)
-    }
 
     #[test]
     fn test_create_constraint() {
@@ -308,153 +184,5 @@ mod tests {
         let result = store.get_constraint("c1");
         assert!(result.is_err());
         assert!(result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::Deleted);
-    }
-
-    #[test]
-    fn test_attach_constraint_to_ep() {
-        let (mut store, _ettle_id, ep_id) = setup_store_with_ep();
-        let payload = json!({"rule": "test"});
-
-        create_constraint(
-            &mut store,
-            "c1".to_string(),
-            "ABB".to_string(),
-            "Rule".to_string(),
-            "EP".to_string(),
-            payload,
-        )
-        .unwrap();
-
-        let result = attach_constraint_to_ep(&mut store, ep_id.clone(), "c1".to_string(), 0);
-        assert!(result.is_ok());
-
-        // Verify attachment exists
-        assert!(store.is_constraint_attached_to_ep(&ep_id, "c1"));
-    }
-
-    #[test]
-    fn test_attach_constraint_already_attached() {
-        let (mut store, _ettle_id, ep_id) = setup_store_with_ep();
-        let payload = json!({"rule": "test"});
-
-        create_constraint(
-            &mut store,
-            "c1".to_string(),
-            "ABB".to_string(),
-            "Rule".to_string(),
-            "EP".to_string(),
-            payload,
-        )
-        .unwrap();
-
-        attach_constraint_to_ep(&mut store, ep_id.clone(), "c1".to_string(), 0).unwrap();
-
-        // Try to attach again
-        let result = attach_constraint_to_ep(&mut store, ep_id, "c1".to_string(), 1);
-        assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(e) if e.kind() == ExErrorKind::DuplicateAttachment
-        ));
-    }
-
-    #[test]
-    fn test_attach_deleted_constraint() {
-        let (mut store, _ettle_id, ep_id) = setup_store_with_ep();
-        let payload = json!({"rule": "test"});
-
-        create_constraint(
-            &mut store,
-            "c1".to_string(),
-            "ABB".to_string(),
-            "Rule".to_string(),
-            "EP".to_string(),
-            payload,
-        )
-        .unwrap();
-
-        tombstone_constraint(&mut store, "c1").unwrap();
-
-        let result = attach_constraint_to_ep(&mut store, ep_id, "c1".to_string(), 0);
-        assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(e) if e.kind() == ExErrorKind::ConstraintTombstoned
-        ));
-    }
-
-    #[test]
-    fn test_detach_constraint_from_ep() {
-        let (mut store, _ettle_id, ep_id) = setup_store_with_ep();
-        let payload = json!({"rule": "test"});
-
-        create_constraint(
-            &mut store,
-            "c1".to_string(),
-            "ABB".to_string(),
-            "Rule".to_string(),
-            "EP".to_string(),
-            payload,
-        )
-        .unwrap();
-
-        attach_constraint_to_ep(&mut store, ep_id.clone(), "c1".to_string(), 0).unwrap();
-
-        let result = detach_constraint_from_ep(&mut store, &ep_id, "c1");
-        assert!(result.is_ok());
-
-        // Verify attachment no longer exists
-        assert!(!store.is_constraint_attached_to_ep(&ep_id, "c1"));
-    }
-
-    #[test]
-    fn test_detach_constraint_not_attached() {
-        let (mut store, _ettle_id, ep_id) = setup_store_with_ep();
-
-        let result = detach_constraint_from_ep(&mut store, &ep_id, "c1");
-        assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(e) if e.kind() == ExErrorKind::NotFound
-        ));
-    }
-
-    #[test]
-    fn test_list_constraints_for_ep() {
-        let (mut store, _ettle_id, ep_id) = setup_store_with_ep();
-
-        // Create multiple constraints
-        for i in 0..3 {
-            let payload = json!({"rule": format!("rule_{}", i)});
-            create_constraint(
-                &mut store,
-                format!("c{}", i),
-                "ABB".to_string(),
-                "Rule".to_string(),
-                "EP".to_string(),
-                payload,
-            )
-            .unwrap();
-
-            // Attach with reverse ordinals to test sorting
-            attach_constraint_to_ep(&mut store, ep_id.clone(), format!("c{}", i), 2 - i).unwrap();
-        }
-
-        let constraints = list_constraints_for_ep(&store, &ep_id).unwrap();
-        assert_eq!(constraints.len(), 3);
-
-        // Verify ordering by ordinal
-        assert_eq!(constraints[0].constraint_id, "c2"); // ordinal 0
-        assert_eq!(constraints[1].constraint_id, "c1"); // ordinal 1
-        assert_eq!(constraints[2].constraint_id, "c0"); // ordinal 2
-    }
-
-    #[test]
-    fn test_list_constraints_for_nonexistent_ep() {
-        let store = Store::new();
-
-        let result = list_constraints_for_ep(&store, "nonexistent");
-        assert!(result.is_err());
-        assert!(result.is_err() && result.as_ref().unwrap_err().kind() == ExErrorKind::NotFound);
     }
 }

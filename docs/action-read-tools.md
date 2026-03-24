@@ -92,73 +92,6 @@ EngineQuery::EttleList(ListOptions { limit: Some(50), .. })
 
 Supports `prefix_filter` (matches Ettle ID prefix) and `title_contains` (case-insensitive substring).
 
-#### `EttleListEps`
-
-All EPs belonging to an Ettle, ordered by `ordinal`.
-
-```rust
-EngineQuery::EttleListEps { ettle_id: String }
-// → EngineQueryResult::EttleListEps(Vec<Ep>)
-// Errors: NotFound (Ettle missing)
-```
-
----
-
-### EP Queries
-
-#### `EpGet`
-
-```rust
-EngineQuery::EpGet { ep_id: String }
-// → EngineQueryResult::EpGet(Ep)
-// Errors: NotFound
-```
-
-#### `EpListChildren`
-
-EPs that live inside the child Ettles of this EP (fan-out refinement).
-Children are identified via `ettle.parent_ep_id == ep_id` (the authoritative join
-field). The legacy `ep.child_ettle_id` is kept for backward compatibility but is
-no longer the source of truth.
-
-```rust
-EngineQuery::EpListChildren { ep_id: String }
-// → EngineQueryResult::EpListChildren(Vec<Ep>)
-// Returns empty vec if no Ettle has parent_ep_id pointing to this EP.
-```
-
-#### `EpListParents`
-
-EPs whose Ettle is the structural parent of this EP's Ettle.
-Traverses up one level via `ettle.parent_id`.
-
-```rust
-EngineQuery::EpListParents { ep_id: String }
-// → EngineQueryResult::EpListParents(Vec<Ep>)
-// Errors: RefinementIntegrityViolation (more than one structural parent)
-```
-
-#### `EpListConstraints`
-
-Constraints attached to an EP, ordered by `ep_constraint_refs.ordinal`.
-
-```rust
-EngineQuery::EpListConstraints { ep_id: String }
-// → EngineQueryResult::EpListConstraints(Vec<Constraint>)
-```
-
-#### `EpListDecisions`
-
-Decisions for an EP, optionally including decisions attached to ancestor Ettles.
-
-```rust
-EngineQuery::EpListDecisions { ep_id: String, include_ancestors: bool }
-// → EngineQueryResult::EpListDecisions(Vec<Decision>)
-```
-
-When `include_ancestors = true`, walks up `ettle.parent_id` and accumulates
-decisions linked to each ancestor Ettle (`target_kind = "ettle"`).
-
 ---
 
 ### Constraint Queries
@@ -216,28 +149,14 @@ EngineQuery::DecisionListByTarget {
 
 #### `EttleListDecisions`
 
-Decisions for an Ettle, optionally expanding into its EPs and ancestor Ettles.
+Decisions for an Ettle, optionally walking ancestor Ettles.
 
 ```rust
 EngineQuery::EttleListDecisions {
     ettle_id: String,
-    include_eps: bool,
     include_ancestors: bool,
 }
 // → EngineQueryResult::EttleListDecisions(DecisionContextResult)
-```
-
-`DecisionContextResult.by_ep` maps each EP ID to its decisions.
-`DecisionContextResult.all_for_leaf` aggregates all decisions for the leaf EP.
-
-#### `EptComputeDecisionContext`
-
-Full decision context for every EP in the EPT chain of a leaf EP.
-
-```rust
-EngineQuery::EptComputeDecisionContext { leaf_ep_id: String }
-// → EngineQueryResult::EptComputeDecisionContext(DecisionContextResult)
-// Errors: NotFound (leaf EP missing), EptAmbiguous (ambiguous EPT)
 ```
 
 ---
@@ -302,23 +221,6 @@ Fetch manifest bytes directly from CAS by digest (no snapshot row lookup).
 EngineQuery::ManifestGetByDigest { manifest_digest: String }
 // → EngineQueryResult::ManifestGet(ManifestGetResult)
 // Errors: MissingBlob
-```
-
----
-
-### EPT Queries
-
-#### `EptCompute`
-
-Compute the EPT (Ettle Projection Tree) for a leaf EP. Returns the ordered list of
-EP IDs in the chain and a deterministic `ept_digest`.
-
-```rust
-EngineQuery::EptCompute { leaf_ep_id: String }
-// → EngineQueryResult::EptCompute(EptComputeResult {
-//       leaf_ep_id, ept_ep_ids: Vec<String>, ept_digest: String
-//   })
-// Errors: NotFound, EptAmbiguous (guarded, unreachable in Phase 1)
 ```
 
 #### `SnapshotDiff`

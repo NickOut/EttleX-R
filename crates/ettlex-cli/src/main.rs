@@ -16,10 +16,6 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// EP operations (update)
-    Ep(commands::ep::EpArgs),
-    /// Seed import operations
-    Seed(commands::seed::SeedArgs),
     /// Render operations (ettle or bundle to Markdown)
     Render(commands::render::RenderArgs),
     /// Snapshot operations
@@ -30,8 +26,6 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Ep(args) => commands::ep::execute(args),
-        Commands::Seed(args) => commands::seed::execute(args),
         Commands::Render(args) => commands::render::execute(args),
         Commands::Snapshot(args) => commands::snapshot::execute(args),
     };

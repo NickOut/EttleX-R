@@ -1,6 +1,6 @@
 //! Integration tests for ep:mcp_thin_slice:0
 //!
-//! 47 scenario tests exercising the MCP server in-process.
+//! Scenario tests exercising the MCP server in-process.
 //! TDD RED→GREEN: tests written from spec only, before production code.
 //!
 //! Scenario → test mapping:
@@ -13,21 +13,34 @@
 //!   S-APPLY-3  test_s_apply_3_oversized_payload
 //!   S-OCC-1    test_s_occ_1_head_mismatch
 //!   S-OCC-2    test_s_occ_2_new_state_version
-//!   S-INV-1    test_s_inv_1_delegation_only
 //!   S-INV-2    test_s_inv_2_write_via_apply_only
-//!   S-QUERY-1  test_s_query_1_no_mutation
 //!   S-PAGE-1   test_s_page_1_ettle_list_default_limit
 //!   S-PAGE-2   test_s_page_2_ettle_list_cursor_deterministic
-//!   S-PAGE-3   test_s_page_3_snapshot_list_default_limit
-//!   S-PAGE-4   test_s_page_4_snapshot_get_head_deterministic
 //!   S-POL-1    test_s_pol_1_policy_get_deterministic
 //!   S-POL-2    test_s_pol_2_project_for_handoff_deterministic
 //!   S-POL-3    test_s_pol_3_policy_not_found
 //!   S-POL-4    test_s_pol_4_profile_not_found
 //!   S-POL-5    test_s_pol_5_policy_list_default_limit
 //!   S-POL-6    test_s_pol_6_policy_list_cursor
-//!   S-DET-1    test_s_det_1_canonical_json_stable
 //!   S-DET-2    test_s_det_2_determinism_violation_detected
+//!   S-CON-2    test_s_con_2_missing_family (ignored — constraints table dropped in Slice 02)
+//!   S-PROF-1   test_s_prof_1_profile_get_bytes
+//!   S-PROF-2   test_s_prof_2_profile_list_limit
+//!   S-APPR-1   test_s_appr_1_approval_not_found
+//!   S-PRED-1   test_s_pred_1_preview_thin_transport
+//!   S-PRED-2   test_s_pred_2_preview_no_mutation
+//!   S-PRED-3   test_s_pred_3_preview_deterministic
+//!   S-PA-1     test_s_pa_1_profile_create_readable
+//!   S-PA-2     test_s_pa_2_profile_conflict
+//!   S-PA-3     test_s_pa_3_profile_set_default_not_found
+//!   S-PA-4     test_s_pa_4_profile_set_default_readable
+//!
+//! Deleted (EP-era, retired by Slice 03 / migration 015):
+//!   S-INV-1    test_s_inv_1_delegation_only
+//!   S-QUERY-1  test_s_query_1_no_mutation
+//!   S-PAGE-3   test_s_page_3_snapshot_list_default_limit
+//!   S-PAGE-4   test_s_page_4_snapshot_get_head_deterministic
+//!   S-DET-1    test_s_det_1_canonical_json_stable
 //!   S-SNAP-1   test_s_snap_1_snapshot_commit
 //!   S-SNAP-2   test_s_snap_2_not_a_leaf
 //!   S-SNAP-3   test_s_snap_3_policy_denied
@@ -35,25 +48,14 @@
 //!   S-DIFF-2   test_s_diff_2_missing_ref
 //!   S-DIFF-3   test_s_diff_3_missing_blob
 //!   S-CON-1    test_s_con_1_create_attach_snapshot
-//!   S-CON-2    test_s_con_2_missing_family
 //!   S-CON-3    test_s_con_3_duplicate_attachment
 //!   S-BOUND-1  test_s_bound_1_large_list_eps
-//!   S-PROF-1   test_s_prof_1_profile_get_bytes
-//!   S-PROF-2   test_s_prof_2_profile_list_limit
-//!   S-APPR-1   test_s_appr_1_approval_not_found
-//!   S-PRED-1   test_s_pred_1_preview_thin_transport
-//!   S-PRED-2   test_s_pred_2_preview_no_mutation
-//!   S-PRED-3   test_s_pred_3_preview_deterministic
 //!   S-RAP-1    test_s_rap_1_routed_for_approval
 //!   S-RAP-2    test_s_rap_2_no_auto_profile_ref
 //!   S-RAP-3    test_s_rap_3_policy_denied_no_approval
-//!   S-PA-1     test_s_pa_1_profile_create_readable
-//!   S-PA-2     test_s_pa_2_profile_conflict
-//!   S-PA-3     test_s_pa_3_profile_set_default_not_found
-//!   S-PA-4     test_s_pa_4_profile_set_default_readable
 
 use ettlex_core::approval_router::NoopApprovalRouter;
-use ettlex_core::policy_provider::{DenyAllPolicyProvider, NoopPolicyProvider};
+use ettlex_core::policy_provider::NoopPolicyProvider;
 use ettlex_mcp::auth::AuthConfig;
 use ettlex_mcp::context::RequestContext;
 use ettlex_mcp::server::{McpResponse, McpResult, McpServer, McpToolCall};
@@ -88,11 +90,6 @@ impl TestHarness {
             cas,
             server,
         }
-    }
-
-    #[allow(dead_code)]
-    fn with_deny_policy() -> (Self, DenyAllPolicyProvider) {
-        (Self::new(), DenyAllPolicyProvider)
     }
 
     fn call(&mut self, tool: &str, params: serde_json::Value) -> McpResponse {
@@ -174,32 +171,9 @@ impl TestHarness {
         )
     }
 
-    fn call_with_deny_policy(&mut self, tool: &str, params: serde_json::Value) -> McpResponse {
-        let size = params.to_string().len();
-        self.server.dispatch(
-            McpToolCall {
-                tool_name: tool.to_string(),
-                params,
-                context: RequestContext::default(),
-                auth_token: Some("t:dev".to_string()),
-                payload_size: size,
-            },
-            &mut self.conn,
-            &self.cas,
-            &DenyAllPolicyProvider,
-            &NoopApprovalRouter,
-        )
-    }
-
     fn state_version(&self) -> u64 {
         self.conn
             .query_row("SELECT COUNT(*) FROM command_log", [], |r| r.get(0))
-            .unwrap()
-    }
-
-    fn snapshot_count(&self) -> i64 {
-        self.conn
-            .query_row("SELECT COUNT(*) FROM snapshots", [], |r| r.get(0))
             .unwrap()
     }
 
@@ -207,29 +181,6 @@ impl TestHarness {
         self.conn
             .query_row("SELECT COUNT(*) FROM approval_requests", [], |r| r.get(0))
             .unwrap()
-    }
-
-    /// Insert a minimal leaf ettle+EP via raw SQL.
-    fn seed_leaf(&mut self) {
-        self.conn.execute_batch(
-            "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-             VALUES ('ettle:root', 'Root', NULL, 0, 0, 0, '{}');
-             INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
-             VALUES ('ep:root:0', 'ettle:root', 0, 1, NULL, 'leaf content', 0, 0, 0);",
-        )
-        .unwrap();
-    }
-
-    /// Bulk-insert N ettles via raw SQL.
-    fn seed_ettles(&mut self, n: usize) {
-        let mut sql = String::new();
-        for i in 0..n {
-            sql.push_str(&format!(
-                "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata) \
-                 VALUES ('ettle:bulk:{i:05}', 'Bulk {i}', NULL, 0, {i}, {i}, '{{}}');\n"
-            ));
-        }
-        self.conn.execute_batch(&sql).unwrap();
     }
 
     /// Insert a profile via raw SQL.
@@ -242,25 +193,17 @@ impl TestHarness {
             .unwrap();
     }
 
-    /// Commit a snapshot for the seeded leaf EP using the noop policy.
-    fn commit_snapshot(&mut self) -> String {
-        let resp = self.call(
-            "ettlex_apply",
-            json!({
-                "command": {
-                    "tag": "SnapshotCommit",
-                    "leaf_ep_id": "ep:root:0",
-                    "policy_ref": "policy/noop@0",
-                    "profile_ref": null,
-                    "dry_run": false
-                }
-            }),
-        );
-        let v = assert_ok(resp);
-        v["result"]["snapshot_id"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string()
+    /// Bulk-insert N ettles via raw SQL (uses current schema).
+    fn seed_ettles(&mut self, n: usize) {
+        let mut sql = String::new();
+        for i in 0..n {
+            let ts = format!("2024-01-01T00:00:{i:02}.000Z");
+            sql.push_str(&format!(
+                "INSERT INTO ettles (id, title, why, what, how, created_at, updated_at) \
+                 VALUES ('ettle:bulk:{i:05}', 'Bulk {i}', '', '', '', '{ts}', '{ts}');\n"
+            ));
+        }
+        self.conn.execute_batch(&sql).unwrap();
     }
 }
 
@@ -353,10 +296,10 @@ fn test_s_apply_1_unknown_command_tag() {
 #[test]
 fn test_s_apply_2_missing_required_field() {
     let mut h = TestHarness::new();
-    // EpCreate requires ep_id/ettle_id; omit them
+    // EttleCreate requires title; omit it → InvalidInput
     let resp = h.call(
         "ettlex_apply",
-        json!({ "command": { "tag": "EpCreate" } }), // missing required fields
+        json!({ "command": { "tag": "EttleCreate" } }), // missing required title field
     );
     assert_error(&resp, "InvalidInput");
 }
@@ -419,28 +362,6 @@ fn test_s_occ_2_new_state_version() {
 }
 
 // ---------------------------------------------------------------------------
-// S-INV-1 — MCP does not implement business logic
-// ---------------------------------------------------------------------------
-
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-#[test]
-fn test_s_inv_1_delegation_only() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-
-    // Call ettle.get twice; bytes should be identical
-    let r1 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
-    let r2 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
-    // Same canonical bytes
-    assert_eq!(
-        serde_json::to_string(&r1).unwrap(),
-        serde_json::to_string(&r2).unwrap()
-    );
-    // ettle_id is present in result
-    assert_eq!(r1["ettle_id"].as_str(), Some("ettle:root"));
-}
-
-// ---------------------------------------------------------------------------
 // S-INV-2 — Write operations call Apply only
 // ---------------------------------------------------------------------------
 
@@ -456,30 +377,6 @@ fn test_s_inv_2_write_via_apply_only() {
     // new_state_version increased (apply was called)
     let new_sv = v["new_state_version"].as_u64().unwrap();
     assert_eq!(new_sv, before_sv + 1);
-}
-
-// ---------------------------------------------------------------------------
-// S-QUERY-1 — Query tools do not mutate canonical state
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_query_1_no_mutation() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-
-    let sv_before = h.state_version();
-    let snap_before = h.snapshot_count();
-
-    // Run a representative set of query tools
-    let _ = h.call("ettle_list", json!({}));
-    let _ = h.call("ettle_get", json!({ "ettle_id": "ettle:root" }));
-    let _ = h.call("ep_get", json!({ "ep_id": "ep:root:0" }));
-    let _ = h.call("snapshot_list", json!({}));
-    let _ = h.call("profile_list", json!({}));
-
-    // Nothing changed
-    assert_eq!(h.state_version(), sv_before);
-    assert_eq!(h.snapshot_count(), snap_before);
 }
 
 // ---------------------------------------------------------------------------
@@ -541,46 +438,6 @@ fn test_s_page_2_ettle_list_cursor_deterministic() {
         .map(|i| i["id"].as_str().unwrap_or_default().to_string())
         .collect();
     assert_eq!(ids1, ids1b);
-}
-
-// ---------------------------------------------------------------------------
-// S-PAGE-3 — snapshot.list enforces default limit
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_page_3_snapshot_list_default_limit() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    // Commit multiple snapshots by seeding more leaf EPs with dedup disabled
-    // We'll just assert that list returns <= default limit; single snapshot is enough to test structure
-    let _ = h.commit_snapshot();
-
-    let v = assert_ok(h.call("snapshot_list", json!({})));
-    let items = v["items"].as_array().expect("items array");
-    assert!(!items.is_empty(), "expected at least one snapshot");
-    // Limit enforced (<=100 by default)
-    assert!(items.len() <= 100);
-}
-
-// ---------------------------------------------------------------------------
-// S-PAGE-4 — snapshot.get_head via MCP is deterministic
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_page_4_snapshot_get_head_deterministic() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    let _ = h.commit_snapshot();
-
-    let r1 = assert_ok(h.call("snapshot_get_head", json!({ "ettle_id": "ettle:root" })));
-    let r2 = assert_ok(h.call("snapshot_get_head", json!({ "ettle_id": "ettle:root" })));
-
-    let d1 = r1["manifest_digest"].as_str().expect("manifest_digest");
-    let d2 = r2["manifest_digest"].as_str().expect("manifest_digest");
-    assert_eq!(
-        d1, d2,
-        "head_manifest_digest must be identical in both calls"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -696,27 +553,6 @@ fn test_s_pol_6_policy_list_cursor() {
 }
 
 // ---------------------------------------------------------------------------
-// S-DET-1 — MCP emits canonical JSON with stable key ordering
-// ---------------------------------------------------------------------------
-
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-#[test]
-fn test_s_det_1_canonical_json_stable() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-
-    let r1 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
-    let r2 = assert_ok(h.call("ettle_get", json!({ "ettle_id": "ettle:root" })));
-
-    let s1 = serde_json::to_string(&r1).unwrap();
-    let s2 = serde_json::to_string(&r2).unwrap();
-    assert_eq!(
-        s1, s2,
-        "canonical JSON must be byte-identical on repeated calls"
-    );
-}
-
-// ---------------------------------------------------------------------------
 // S-DET-2 — Determinism test detects unstable key ordering
 // ---------------------------------------------------------------------------
 
@@ -740,270 +576,7 @@ fn test_s_det_2_determinism_violation_detected() {
 }
 
 // ---------------------------------------------------------------------------
-// S-SNAP-1 — Agent commits snapshot via MCP
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_snap_1_snapshot_commit() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    let before = h.snapshot_count();
-
-    let resp = h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:root:0",
-                "policy_ref": "policy/noop@0",
-                "profile_ref": null,
-                "dry_run": false
-            }
-        }),
-    );
-    let v = assert_ok(resp);
-    let snapshot_id = v["result"]["snapshot_id"].as_str().expect("snapshot_id");
-    assert!(!snapshot_id.is_empty(), "snapshot_id must be non-empty");
-
-    let manifest_digest = v["result"]["manifest_digest"]
-        .as_str()
-        .expect("manifest_digest");
-    assert!(
-        !manifest_digest.is_empty(),
-        "manifest_digest must be non-empty"
-    );
-
-    // Ledger appended
-    assert_eq!(h.snapshot_count(), before + 1);
-}
-
-// ---------------------------------------------------------------------------
-// S-SNAP-2 — MCP surfaces NotALeaf
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_snap_2_not_a_leaf() {
-    let mut h = TestHarness::new();
-    // Create a parent ettle with a child (so parent EP is not a leaf)
-    h.conn.execute_batch(
-        "INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
-         VALUES ('ettle:parent', 'Parent', NULL, NULL, 0, 0, 0, '{}');
-         INSERT INTO ettles (id, title, parent_id, parent_ep_id, deleted, created_at, updated_at, metadata)
-         VALUES ('ettle:child', 'Child', 'ettle:parent', 'ep:parent:0', 0, 0, 0, '{}');
-         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
-         VALUES ('ep:parent:0', 'ettle:parent', 0, 1, 'ettle:child', 'content', 0, 0, 0);
-         INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
-         VALUES ('ep:child:0', 'ettle:child', 0, 1, NULL, 'leaf content', 0, 0, 0);",
-    ).unwrap();
-
-    let resp = h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:parent:0",
-                "policy_ref": "policy/noop@0",
-                "profile_ref": null,
-                "dry_run": false
-            }
-        }),
-    );
-    assert_error(&resp, "NotALeaf");
-    // No ledger row appended
-    assert_eq!(h.snapshot_count(), 0);
-}
-
-// ---------------------------------------------------------------------------
-// S-SNAP-3 — MCP surfaces PolicyDenied without mutation
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_snap_3_policy_denied() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    let before = h.snapshot_count();
-
-    let resp = h.call_with_deny_policy(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:root:0",
-                "policy_ref": "policy/deny@0",
-                "profile_ref": null,
-                "dry_run": false
-            }
-        }),
-    );
-    assert_error(&resp, "PolicyDenied");
-    assert_eq!(h.snapshot_count(), before, "no ledger row on policy denial");
-}
-
-// ---------------------------------------------------------------------------
-// S-DIFF-1 — snapshot.diff resolves snapshot_ids to manifest bytes
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_diff_1_snapshot_diff() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    let snap_id_1 = h.commit_snapshot();
-
-    // Modify the EP to create a second snapshot
-    h.conn
-        .execute_batch("UPDATE eps SET content_inline = 'updated content' WHERE id = 'ep:root:0';")
-        .unwrap();
-    let snap_id_2 = h.commit_snapshot();
-
-    let resp = h.call(
-        "snapshot_diff",
-        json!({ "a_snapshot_id": snap_id_1, "b_snapshot_id": snap_id_2 }),
-    );
-    let v = assert_ok(resp);
-    assert!(
-        v["identity"].is_object(),
-        "diff must include identity object"
-    );
-    let a_digest = v["identity"]["a_manifest_digest"]
-        .as_str()
-        .expect("a_manifest_digest");
-    let b_digest = v["identity"]["b_manifest_digest"]
-        .as_str()
-        .expect("b_manifest_digest");
-    assert!(!a_digest.is_empty());
-    assert!(!b_digest.is_empty());
-}
-
-// ---------------------------------------------------------------------------
-// S-DIFF-2 — snapshot.diff fails for missing snapshot reference
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_diff_2_missing_ref() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    let snap_id = h.commit_snapshot();
-
-    let resp = h.call(
-        "snapshot_diff",
-        json!({ "a_snapshot_id": "snapshot:missing", "b_snapshot_id": snap_id }),
-    );
-    assert_error(&resp, "NotFound");
-}
-
-// ---------------------------------------------------------------------------
-// S-DIFF-3 — snapshot.diff fails for missing CAS blob
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_diff_3_missing_blob() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    let snap_id = h.commit_snapshot();
-
-    // Corrupt the CAS by directly inserting a snapshot row with a fake digest
-    h.conn.execute_batch(
-        "INSERT INTO snapshots (snapshot_id, root_ettle_id, manifest_digest, semantic_manifest_digest, created_at, parent_snapshot_id, policy_ref, profile_ref, status)
-         VALUES ('snapshot:corrupt', 'ettle:root', 'deadbeef', 'deadbeef', 1, NULL, 'p', 'prof', 'committed');"
-    ).unwrap();
-
-    let resp = h.call(
-        "snapshot_diff",
-        json!({ "a_snapshot_id": "snapshot:corrupt", "b_snapshot_id": snap_id }),
-    );
-    // Should return MissingBlob or StorageError
-    match &resp.result {
-        McpResult::Err(e) => {
-            assert!(
-                e.error_code == "MissingBlob" || e.error_code == "StorageError",
-                "expected MissingBlob or StorageError, got '{}'",
-                e.error_code
-            );
-        }
-        McpResult::Ok(v) => panic!("expected error, got success: {}", v),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// S-CON-1 — Create constraint and attach via MCP; snapshot shows declared_refs
-// ---------------------------------------------------------------------------
-
-#[test]
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-fn test_s_con_1_create_attach_snapshot() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-
-    // Create a constraint
-    let r1 = assert_ok(h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "ConstraintCreate",
-                "constraint_id": "c:1",
-                "family": "vendor_ext",
-                "kind": "TestKind",
-                "scope": "EP",
-                "payload_json": { "rule": "x" }
-            }
-        }),
-    ));
-    assert!(r1["new_state_version"].is_number());
-
-    // Attach to EP
-    let r2 = assert_ok(h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "ConstraintAttachToEp",
-                "ep_id": "ep:root:0",
-                "constraint_id": "c:1",
-                "ordinal": 0
-            }
-        }),
-    ));
-    assert!(r2["new_state_version"].is_number());
-
-    // Commit snapshot
-    let r3 = assert_ok(h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:root:0",
-                "policy_ref": "policy/noop@0",
-                "profile_ref": null,
-                "dry_run": false
-            }
-        }),
-    ));
-
-    let snap_id = r3["result"]["snapshot_id"].as_str().expect("snapshot_id");
-
-    // Get the manifest via MCP
-    let manifest_resp =
-        assert_ok(h.call("snapshot_get_manifest", json!({ "snapshot_id": snap_id })));
-
-    // The manifest bytes are returned; parse and check declared_refs
-    let manifest_bytes = manifest_resp["manifest_bytes"].as_str().unwrap_or_default();
-    let manifest: serde_json::Value = serde_json::from_str(manifest_bytes).unwrap_or(json!({}));
-    let empty_vec = vec![];
-    let declared_refs = manifest["constraints"]["declared_refs"]
-        .as_array()
-        .unwrap_or(&empty_vec)
-        .iter()
-        .map(|v| v.as_str().unwrap_or_default())
-        .collect::<Vec<_>>();
-
-    assert!(
-        declared_refs.contains(&"c:1"),
-        "declared_refs should include 'c:1', got: {:?}",
-        declared_refs
-    );
-}
-
-// ---------------------------------------------------------------------------
-// S-CON-2 — Reject constraint create missing family
+// S-CON-2 — Reject constraint create missing family (ignored — table dropped in Slice 02)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1024,96 +597,6 @@ fn test_s_con_2_missing_family() {
         }),
     );
     assert_error(&resp, "InvalidConstraintFamily");
-}
-
-// ---------------------------------------------------------------------------
-// S-CON-3 — Reject duplicate attachment
-// ---------------------------------------------------------------------------
-
-#[ignore = "EP constraint model deprecated in Slice 02; constraints/ep_constraint_refs tables dropped — revisit in policy/snapshot slice"]
-#[test]
-fn test_s_con_3_duplicate_attachment() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-
-    // Create and attach once
-    let _ = assert_ok(h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "ConstraintCreate",
-                "constraint_id": "c:dup",
-                "family": "fam",
-                "kind": "K",
-                "scope": "EP",
-                "payload_json": {}
-            }
-        }),
-    ));
-    let _ = assert_ok(h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "ConstraintAttachToEp",
-                "ep_id": "ep:root:0",
-                "constraint_id": "c:dup",
-                "ordinal": 0
-            }
-        }),
-    ));
-
-    // Attach again → DuplicateAttachment
-    let resp = h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "ConstraintAttachToEp",
-                "ep_id": "ep:root:0",
-                "constraint_id": "c:dup",
-                "ordinal": 1
-            }
-        }),
-    );
-    assert_error(&resp, "DuplicateAttachment");
-}
-
-// ---------------------------------------------------------------------------
-// S-BOUND-1 — Large ettle.list_eps truncates or returns ResponseTooLarge
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_bound_1_large_list_eps() {
-    let mut h = TestHarness::new();
-    // Seed an ettle with a moderate number of EPs via raw SQL
-    h.conn
-        .execute_batch(
-            "INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-         VALUES ('ettle:big', 'Big', NULL, 0, 0, 0, '{}');",
-        )
-        .unwrap();
-    for i in 0..10 {
-        h.conn.execute(
-            &format!(
-                "INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
-                 VALUES ('ep:big:{i}', 'ettle:big', {i}, 1, NULL, 'content {i}', 0, 0, 0)"
-            ),
-            [],
-        ).unwrap();
-    }
-
-    let resp = h.call("ettle_list_eps", json!({ "ettle_id": "ettle:big" }));
-    // Should either succeed (paginated) or return ResponseTooLarge
-    match &resp.result {
-        McpResult::Ok(v) => {
-            assert!(
-                v["items"].is_array() || v["eps"].is_array(),
-                "paginated result expected"
-            );
-        }
-        McpResult::Err(e) => {
-            assert_eq!(e.error_code, "ResponseTooLarge");
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1257,112 +740,6 @@ fn test_s_pred_3_preview_deterministic() {
         serde_json::to_string(&r1).unwrap(),
         serde_json::to_string(&r2).unwrap(),
         "preview must be byte-identical for identical inputs"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// S-RAP-1 — SnapshotCommit returns RoutedForApproval as success
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_rap_1_routed_for_approval() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    // Seed a profile with route_for_approval ambiguity policy
-    h.seed_profile(
-        "profile/route@0",
-        r#"{"ambiguity_policy":"route_for_approval","predicate_evaluation_enabled":false}"#,
-        false,
-    );
-
-    // SnapshotCommit with route profile; uses NoopApprovalRouter (no real ambiguity to route)
-    let resp = h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:root:0",
-                "policy_ref": "policy/noop@0",
-                "profile_ref": "profile/route@0",
-                "dry_run": false
-            }
-        }),
-    );
-
-    let v = assert_ok(resp);
-    let tag = v["result"]["tag"].as_str().unwrap_or_default();
-    // Either Committed (when no ambiguity) or RoutedForApproval (when router fires)
-    assert!(
-        tag == "SnapshotCommit" || tag == "RoutedForApproval",
-        "unexpected tag: {}",
-        tag
-    );
-}
-
-// ---------------------------------------------------------------------------
-// S-RAP-2 — MCP does not auto-route profile_ref
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_rap_2_no_auto_profile_ref() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-
-    // Apply SnapshotCommit without profile_ref — MCP must forward null
-    let resp = h.call(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:root:0",
-                "policy_ref": "policy/noop@0"
-                // profile_ref deliberately absent
-            }
-        }),
-    );
-    // Should succeed (action layer handles None profile_ref with deterministic default)
-    // OR fail for a reason unrelated to profile_ref injection
-    // The key invariant: MCP must NOT set a default profile_ref
-    // We verify by checking the committed snapshot's profile_ref is NOT auto-injected
-    let v = assert_ok(resp);
-    let profile_ref_in_result = v["result"].get("profile_ref");
-    // If there's a profile_ref in the result, it must come from the action layer's defaulting,
-    // not from MCP injection. We can't distinguish here, so just verify no panic.
-    let _ = profile_ref_in_result;
-}
-
-// ---------------------------------------------------------------------------
-// S-RAP-3 — PolicyDenied without approval creation
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_s_rap_3_policy_denied_no_approval() {
-    let mut h = TestHarness::new();
-    h.seed_leaf();
-    h.seed_profile(
-        "profile/route@0",
-        r#"{"ambiguity_policy":"route_for_approval","predicate_evaluation_enabled":false}"#,
-        false,
-    );
-    let appr_before = h.approval_count();
-
-    let resp = h.call_with_deny_policy(
-        "ettlex_apply",
-        json!({
-            "command": {
-                "tag": "SnapshotCommit",
-                "leaf_ep_id": "ep:root:0",
-                "policy_ref": "policy/deny@0",
-                "profile_ref": "profile/route@0",
-                "dry_run": false
-            }
-        }),
-    );
-    assert_error(&resp, "PolicyDenied");
-    assert_eq!(
-        h.approval_count(),
-        appr_before,
-        "no approval request on PolicyDenied"
     );
 }
 

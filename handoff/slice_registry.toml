@@ -1123,3 +1123,321 @@ reason = "Seed importer uses old schema paths; marked #[ignore]; will be removed
 [[slice.pre_authorised_failures]]
 test = "make coverage-check"
 reason = "79% (threshold 80%); 1% shortfall caused by 42 ignored deprecated tests. Pre-authorised: Slice 03 removes EP/constraint code, Slice 04 removes seed importer."
+
+[[slice]]
+id = "slice-03-ep-retirement"
+ettle_id = "ettle:019d170e-828b-79e1-9a7b-b85b214e6ec4"
+description = "EP Retirement and Schema Cleanup — migration 015 (drop eps/facet_snapshots/cas_blobs, rebuild ettles), remove ep.rs/ept.rs MCP handlers, remove EpCreate/EpUpdate Command variants, remove Ep type and EpConstraintRef from ettlex-core, remove EP fields from Ettle struct, stub snapshot pipeline (NotImplemented), remove ep_ops.rs, update CLAUDE.md per W7"
+layers = ["store", "engine", "mcp", "cli", "core"]
+status = "complete"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_migration_015_applies_cleanly"
+scenario = "SC-S03-01"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_ettles_columns_exact_after_migration"
+scenario = "SC-S03-02"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_eps_table_absent_after_migration"
+scenario = "SC-S03-03"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_facet_snapshots_table_absent_after_migration"
+scenario = "SC-S03-04"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_cas_blobs_table_absent_after_migration"
+scenario = "SC-S03-05"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_ettle_rows_survive_migration_intact"
+scenario = "SC-S03-06"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_migration_015_idempotent"
+scenario = "SC-S03-07"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_migration_applies_with_empty_eps_table"
+scenario = "SC-S03-08"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_migration_applies_with_eps_rows"
+scenario = "SC-S03-09"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_parent_id_column_absent_after_migration"
+scenario = "SC-S03-10"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_migration_tests.rs"
+test = "test_deleted_column_absent_after_migration"
+scenario = "SC-S03-11"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ep_module_not_in_tools_mod_rs"
+scenario = "SC-S03-12"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ept_module_not_in_tools_mod_rs"
+scenario = "SC-S03-13"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ep_rs_file_does_not_exist"
+scenario = "SC-S03-14"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ept_rs_file_does_not_exist"
+scenario = "SC-S03-15"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_sqlite_repo_no_parent_id_reference"
+scenario = "SC-S03-16"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_sqlite_repo_no_deleted_column_reference"
+scenario = "SC-S03-17"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_sqlite_repo_no_parent_ep_id_reference"
+scenario = "SC-S03-18"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_claude_md_ep_construct_prohibited"
+scenario = "SC-S03-19"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_claude_md_ettlex_memory_present"
+scenario = "SC-S03-20"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_claude_md_apply_command_not_mcp"
+scenario = "SC-S03-21"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ep_ops_file_does_not_exist"
+scenario = "SC-S03-22"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ops_mod_no_ep_ops_declaration"
+scenario = "SC-S03-23"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_snapshot_only_mod_rs_in_directory"
+scenario = "SC-S03-24"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_snapshot_mod_rs_no_ep_reference"
+scenario = "SC-S03-25"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_snapshot_mod_rs_no_epconstraintref"
+scenario = "SC-S03-26"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_snapshot_mod_rs_no_in_memory_store"
+scenario = "SC-S03-27"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_snapshot_commit_returns_not_implemented"
+scenario = "SC-S03-28"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_engine_command_retains_snapshot_commit"
+scenario = "SC-S03-29"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ep_rs_not_in_core_model"
+scenario = "SC-S03-30"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_core_model_no_ep_export"
+scenario = "SC-S03-31"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_core_model_no_epconstraintref_export"
+scenario = "SC-S03-32"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_no_workspace_ep_type_references"
+scenario = "SC-S03-33"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ettle_no_parent_id_field"
+scenario = "SC-S03-34"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ettle_no_parent_ep_id_field"
+scenario = "SC-S03-35"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ettle_no_ep_ids_field"
+scenario = "SC-S03-36"
+
+[[slice.tests]]
+crate = "ettlex-engine"
+file = "tests/slice_03_conformance_tests.rs"
+test = "test_s03_ettle_no_deleted_field"
+scenario = "SC-S03-37"
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_by_leaf_tests.rs (all active)"
+reason = "snapshot_commit_by_leaf now returns NotImplemented; EP model retired. Tests marked #[ignore]. Logic not modified."
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_tests.rs (all active)"
+reason = "snapshot_commit_by_leaf now returns NotImplemented. Tests marked #[ignore]. Logic not modified."
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_policy_tests.rs (remaining active)"
+reason = "snapshot_commit_by_leaf now returns NotImplemented. Tests marked #[ignore]. Logic not modified."
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_determinism_tests.rs (all)"
+reason = "snapshot_commit_by_leaf now returns NotImplemented. Tests marked #[ignore]. Logic not modified."
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_idempotency_tests.rs (all)"
+reason = "snapshot_commit_by_leaf now returns NotImplemented. Tests marked #[ignore]. Logic not modified."
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_commit_legacy_resolution_tests.rs (all)"
+reason = "snapshot_commit_by_leaf now returns NotImplemented. Tests marked #[ignore]. Logic not modified."
+
+[[slice.pre_authorised_failures]]
+test = "ettlex-engine/tests/snapshot_diff_integration_tests.rs (all)"
+reason = "Depends on snapshot commits that now return NotImplemented. Tests marked #[ignore]. Logic not modified."
+
+[[slice.pre_authorised_failures]]
+test = "make coverage-check"
+reason = "Coverage 69% (threshold 80%). Pre-authorised: snapshot pipeline stub returning NotImplemented is untestable at depth; removed EP code was previously exercised by tests now #[ignore]d. Will be restored when snapshot pipeline is re-specified (future slice)."
+
+[[slice.pre_authorised_failures]]
+test = "Various EP-era tests deleted per user instruction"
+reason = "Tests referencing eps table (seed_leaf/seed_ettles with old schema), commit_snapshot, SnapshotCommit, ep_get tool, ep_list_* tools, ept_compute tools, migration_011_eps_title_column, cli_snapshot_integration_tests — all deleted as EP era is retired."
+
+[[slice]]
+id = "slice-04-seed-retirement"
+ettle_id = "ettle:slice-04"
+description = "Seed System Retirement — delete ettlex-store seed module (6 files), delete CLI seed command, delete seed test files and fixtures, update store lib.rs and README"
+layers = ["store", "cli"]
+status = "complete"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_04_conformance_tests.rs"
+test = "test_s04_seed_module_absent_from_store_lib"
+scenario = "SC-S04-01"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_04_conformance_tests.rs"
+test = "test_s04_seed_source_files_absent"
+scenario = "SC-S04-02"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_04_conformance_tests.rs"
+test = "test_s04_seed_cli_command_file_absent"
+scenario = "SC-S04-03"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_04_conformance_tests.rs"
+test = "test_s04_seed_not_in_cli_commands_mod"
+scenario = "SC-S04-04"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_04_conformance_tests.rs"
+test = "test_s04_seed_not_in_cli_main"
+scenario = "SC-S04-05"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_04_conformance_tests.rs"
+test = "test_s04_seed_parse_test_file_absent"
+scenario = "SC-S04-06"
+
+[[slice.tests]]
+crate = "ettlex-store"
+file = "tests/slice_04_conformance_tests.rs"
+test = "test_s04_seed_fixtures_absent"
+scenario = "SC-S04-07"
+
+[[slice.pre_authorised_failures]]
+test = "make coverage-check"
+reason = "Coverage pre-authorized at 69% (threshold 80%) from Slice 03. Snapshot pipeline stub (NotImplemented) is untestable at depth. Seed removal effect on coverage is roughly neutral."

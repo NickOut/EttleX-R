@@ -145,8 +145,6 @@ let (result, new_state_version) =
 | `EttleCreate`       | Create a new Ettle with WHY/WHAT/HOW                  |
 | `EttleUpdate`       | Update an Ettle's fields                              |
 | `EttleTombstone`    | Tombstone an Ettle (blocked by active constraint relations) |
-| `EpCreate`          | Create an EP within an Ettle                          |
-| `EpUpdate`          | Update EP fields                                      |
 | `SnapshotCommit`    | Commit a snapshot for a leaf EP                       |
 | `RelationCreate`    | Create a typed relation between two Ettles            |
 | `RelationUpdate`    | Update relation properties                            |
@@ -347,27 +345,19 @@ all read-only queries. It never acquires `&mut Connection` and never writes to t
 | Variant                                                               | Description                                                             |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `StateGetVersion`                                                     | Returns current state version and semantic head digest                  |
-| `EttleGet { ettle_id }`                                               | Metadata + EP IDs for an Ettle                                          |
+| `EttleGet { ettle_id }`                                               | Metadata for an Ettle                                                   |
 | `EttleList(opts)`                                                     | Paginated list of all Ettles                                            |
-| `EttleListEps { ettle_id }`                                           | All EPs for an Ettle (ordered by ordinal)                               |
-| `EpGet { ep_id }`                                                     | Single EP by ID                                                         |
-| `EpListChildren { ep_id }`                                            | EPs in child Ettles of an EP (children whose `parent_ep_id` = this EP)  |
-| `EpListParents { ep_id }`                                             | EPs whose Ettle is the parent of this EP's child Ettle                  |
-| `EpListConstraints { ep_id }`                                         | Constraints attached to an EP (ordered by `ep_constraint_refs.ordinal`) |
-| `EpListDecisions { ep_id, include_ancestors }`                        | Decisions for an EP; optionally walk parent Ettles                      |
 | `ConstraintGet { constraint_id }`                                     | Single constraint by ID                                                 |
 | `ConstraintListByFamily { family, include_tombstoned }`               | All constraints in a family                                             |
 | `DecisionGet { decision_id }`                                         | Single decision by ID                                                   |
 | `DecisionList(opts)`                                                  | Paginated list of all decisions                                         |
-| `DecisionListByTarget { target_kind, target_id, include_tombstoned }` | Decisions for a target                                                  |
-| `EttleListDecisions { ettle_id, include_eps, include_ancestors }`     | Decisions for an Ettle and its EPs                                      |
-| `EptComputeDecisionContext { leaf_ep_id }`                            | Full decision context for an EPT chain                                  |
+| `DecisionListByTarget { target_kind, target_id, include_tombstoned }` | Decisions for a target (`target_kind = "ettle"`)                        |
+| `EttleListDecisions { ettle_id, include_ancestors }`                  | Decisions for an Ettle, optionally walking ancestor Ettles              |
 | `SnapshotGet { snapshot_id }`                                         | Single snapshot row                                                     |
 | `SnapshotList { ettle_id }`                                           | All snapshots, optionally filtered by root Ettle                        |
 | `SnapshotGetHead { realised_ettle_id }`                               | Manifest digest of the most recent committed snapshot (or null)         |
 | `ManifestGetBySnapshot { snapshot_id }`                               | Manifest bytes + digests for a snapshot                                 |
 | `ManifestGetByDigest { manifest_digest }`                             | Manifest bytes from CAS directly                                        |
-| `EptCompute { leaf_ep_id }`                                           | Compute the EPT for a leaf EP                                           |
 | `ProfileGet { profile_ref }`                                          | Profile payload + digest                                                |
 | `ProfileResolve { profile_ref }`                                      | Resolve profile (defaults if `None`)                                    |
 | `ProfileGetDefault`                                                   | Explicit default-profile lookup                                         |

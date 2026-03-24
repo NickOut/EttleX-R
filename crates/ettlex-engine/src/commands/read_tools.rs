@@ -4,7 +4,7 @@
 //! entity read, list, and compute queries. All types are plain data containers with
 //! no I/O or mutation.
 
-use ettlex_core::model::{Decision, Ep, Ettle};
+use ettlex_core::model::{Decision, Ettle};
 use std::collections::BTreeMap;
 
 /// Default maximum items per paginated list query.
@@ -95,8 +95,6 @@ pub struct StateVersionResult {
 pub struct EttleGetResult {
     /// The ettle entity.
     pub ettle: Ettle,
-    /// IDs of EPs belonging to this ettle, ordered by ordinal.
-    pub ep_ids: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -253,9 +251,6 @@ pub struct PolicyProjectForHandoffResult {
 // ---------------------------------------------------------------------------
 // EP list helper types
 // ---------------------------------------------------------------------------
-
-/// A page of `Ep` items.
-pub type EpPage = Page<Ep>;
 
 /// A page of `Ettle` items.
 pub type EttlePage = Page<Ettle>;

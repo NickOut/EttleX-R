@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 
 use crate::errors::{ExError, ExErrorKind, Result};
-use crate::model::{
-    Constraint, Decision, DecisionEvidenceItem, DecisionLink, Ep, EpConstraintRef, Ettle,
-};
+use crate::model::{Constraint, Decision, DecisionEvidenceItem, DecisionLink, Ettle};
 
-/// In-memory store for Ettles, EPs, and Constraints
+/// In-memory store for Ettles and Constraints
 ///
 /// This is a simple HashMap-based storage implementation for Phase 1.
 /// Not thread-safe (no Arc/RwLock) - designed for single-threaded use.
@@ -14,12 +12,8 @@ use crate::model::{
 pub struct Store {
     /// Map of Ettle ID to Ettle
     pub(crate) ettles: HashMap<String, Ettle>,
-    /// Map of EP ID to EP
-    pub(crate) eps: HashMap<String, Ep>,
     /// Map of Constraint ID to Constraint
     pub(crate) constraints: HashMap<String, Constraint>,
-    /// Map of (EP ID, Constraint ID) to EP-Constraint attachment record
-    pub(crate) ep_constraint_refs: HashMap<(String, String), EpConstraintRef>,
     /// Map of Decision ID to Decision
     pub(crate) decisions: HashMap<String, Decision>,
     /// Map of Evidence Capture ID to DecisionEvidenceItem
@@ -33,9 +27,7 @@ impl Store {
     pub fn new() -> Self {
         Self {
             ettles: HashMap::new(),
-            eps: HashMap::new(),
             constraints: HashMap::new(),
-            ep_constraint_refs: HashMap::new(),
             decisions: HashMap::new(),
             decision_evidence_items: HashMap::new(),
             decision_links: HashMap::new(),
@@ -44,106 +36,37 @@ impl Store {
 
     /// Get an Ettle by ID
     ///
-    /// Returns the Ettle if found and not deleted, otherwise returns an error.
+    /// Returns the Ettle if found, otherwise returns an error.
     ///
     /// # Errors
     ///
-    /// Returns `EttleNotFound` if the ettle doesn't exist, or `EttleDeleted` if it was tombstoned.
+    /// Returns `NotFound` if the ettle doesn't exist.
     pub fn get_ettle(&self, id: &str) -> Result<&Ettle> {
-        let ettle = self.ettles.get(id).ok_or_else(|| {
+        self.ettles.get(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
                 .with_entity_id(id.to_string())
                 .with_message("Ettle not found")
-        })?;
-
-        if ettle.deleted {
-            return Err(ExError::new(ExErrorKind::Deleted)
-                .with_entity_id(id.to_string())
-                .with_message("Ettle was deleted"));
-        }
-
-        Ok(ettle)
+        })
     }
 
     /// Get a mutable reference to an Ettle by ID
     ///
-    /// Returns the Ettle if found and not deleted, otherwise returns an error.
-    /// This is a public method to enable test helpers.
+    /// Returns the Ettle if found, otherwise returns an error.
     ///
     /// # Errors
     ///
-    /// Returns `EttleNotFound` if the ettle doesn't exist, or `EttleDeleted` if it was tombstoned.
+    /// Returns `NotFound` if the ettle doesn't exist.
     pub fn get_ettle_mut(&mut self, id: &str) -> Result<&mut Ettle> {
-        let ettle = self.ettles.get_mut(id).ok_or_else(|| {
+        self.ettles.get_mut(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
                 .with_entity_id(id.to_string())
                 .with_message("Ettle not found")
-        })?;
-
-        if ettle.deleted {
-            return Err(ExError::new(ExErrorKind::Deleted)
-                .with_entity_id(id.to_string())
-                .with_message("Ettle was deleted"));
-        }
-
-        Ok(ettle)
+        })
     }
 
-    /// Get an EP by ID
-    ///
-    /// Returns the EP if found and not deleted, otherwise returns an error.
-    ///
-    /// # Errors
-    ///
-    /// Returns `EpNotFound` if the EP doesn't exist, or `EpDeleted` if it was tombstoned.
-    pub fn get_ep(&self, id: &str) -> Result<&Ep> {
-        let ep = self.eps.get(id).ok_or_else(|| {
-            ExError::new(ExErrorKind::NotFound)
-                .with_ep_id(id.to_string())
-                .with_message("EP not found")
-        })?;
-
-        if ep.deleted {
-            return Err(ExError::new(ExErrorKind::Deleted)
-                .with_ep_id(id.to_string())
-                .with_message("EP was deleted"));
-        }
-
-        Ok(ep)
-    }
-
-    /// Get a mutable reference to an EP by ID
-    ///
-    /// Returns the EP if found and not deleted, otherwise returns an error.
-    /// This is a public method to enable test helpers.
-    ///
-    /// # Errors
-    ///
-    /// Returns `EpNotFound` if the EP doesn't exist, or `EpDeleted` if it was tombstoned.
-    pub fn get_ep_mut(&mut self, id: &str) -> Result<&mut Ep> {
-        let ep = self.eps.get_mut(id).ok_or_else(|| {
-            ExError::new(ExErrorKind::NotFound)
-                .with_ep_id(id.to_string())
-                .with_message("EP not found")
-        })?;
-
-        if ep.deleted {
-            return Err(ExError::new(ExErrorKind::Deleted)
-                .with_ep_id(id.to_string())
-                .with_message("EP was deleted"));
-        }
-
-        Ok(ep)
-    }
-
-    /// List all non-deleted Ettles
+    /// List all Ettles
     pub fn list_ettles(&self) -> Vec<&Ettle> {
-        self.ettles.values().filter(|e| !e.deleted).collect()
-    }
-
-    /// List all non-deleted EPs
-    pub fn list_eps(&self) -> Vec<&Ep> {
-        self.eps.values().filter(|ep| !ep.deleted).collect()
+        self.ettles.values().collect()
     }
 
     /// Insert an Ettle into the store
@@ -153,38 +76,10 @@ impl Store {
         self.ettles.insert(ettle.id.clone(), ettle);
     }
 
-    /// Insert an EP into the store
-    ///
-    /// This is an internal method used by CRUD operations and test helpers.
-    pub fn insert_ep(&mut self, ep: Ep) {
-        self.eps.insert(ep.id.clone(), ep);
-    }
-
-    /// Check if an Ettle exists (ignoring deleted flag)
+    /// Check if an Ettle exists
     #[allow(dead_code)]
     pub(crate) fn ettle_exists(&self, id: &str) -> bool {
         self.ettles.contains_key(id)
-    }
-
-    /// Check if an EP exists (ignoring deleted flag)
-    #[allow(dead_code)]
-    pub(crate) fn ep_exists(&self, id: &str) -> bool {
-        self.eps.contains_key(id)
-    }
-
-    /// Check if an EP exists in storage (including deleted EPs)
-    ///
-    /// This is useful for testing hard delete vs tombstone behavior.
-    pub fn ep_exists_in_storage(&self, id: &str) -> bool {
-        self.eps.contains_key(id)
-    }
-
-    /// Get an EP from storage, bypassing deleted check
-    ///
-    /// This is useful for testing tombstone behavior.
-    /// Returns None if EP doesn't exist, Some(EP) if it exists (even if deleted).
-    pub fn get_ep_raw(&self, id: &str) -> Option<&Ep> {
-        self.eps.get(id)
     }
 
     /// Get a Constraint by ID
@@ -193,8 +88,8 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// Returns `ConstraintNotFound` if the constraint doesn't exist,
-    /// or `ConstraintDeleted` if it was tombstoned.
+    /// Returns `NotFound` if the constraint doesn't exist,
+    /// or `Deleted` if it was tombstoned.
     pub fn get_constraint(&self, id: &str) -> Result<&Constraint> {
         let constraint = self.constraints.get(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
@@ -217,8 +112,8 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// Returns `ConstraintNotFound` if the constraint doesn't exist,
-    /// or `ConstraintDeleted` if it was tombstoned.
+    /// Returns `NotFound` if the constraint doesn't exist,
+    /// or `Deleted` if it was tombstoned.
     pub fn get_constraint_mut(&mut self, id: &str) -> Result<&mut Constraint> {
         let constraint = self.constraints.get_mut(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
@@ -243,36 +138,6 @@ impl Store {
             .insert(constraint.constraint_id.clone(), constraint);
     }
 
-    /// Insert an EP-Constraint attachment record
-    ///
-    /// This is an internal method used by constraint attachment operations.
-    pub fn insert_ep_constraint_ref(&mut self, ref_record: EpConstraintRef) {
-        let key = (ref_record.ep_id.clone(), ref_record.constraint_id.clone());
-        self.ep_constraint_refs.insert(key, ref_record);
-    }
-
-    /// Remove an EP-Constraint attachment record
-    ///
-    /// This is an internal method used by constraint detachment operations.
-    pub fn remove_ep_constraint_ref(&mut self, ep_id: &str, constraint_id: &str) {
-        let key = (ep_id.to_string(), constraint_id.to_string());
-        self.ep_constraint_refs.remove(&key);
-    }
-
-    /// Check if a constraint is attached to an EP
-    pub fn is_constraint_attached_to_ep(&self, ep_id: &str, constraint_id: &str) -> bool {
-        let key = (ep_id.to_string(), constraint_id.to_string());
-        self.ep_constraint_refs.contains_key(&key)
-    }
-
-    /// List all EP-Constraint attachment records for a given EP
-    pub fn list_ep_constraint_refs(&self, ep_id: &str) -> Vec<&EpConstraintRef> {
-        self.ep_constraint_refs
-            .values()
-            .filter(|r| r.ep_id == ep_id)
-            .collect()
-    }
-
     /// List all non-deleted Constraints
     pub fn list_constraints(&self) -> Vec<&Constraint> {
         self.constraints
@@ -288,7 +153,7 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// Returns `ConstraintNotFound` if the constraint doesn't exist.
+    /// Returns `NotFound` if the constraint doesn't exist.
     pub fn get_constraint_including_deleted(&self, id: &str) -> Result<&Constraint> {
         self.constraints.get(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
@@ -305,8 +170,8 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// Returns `DecisionNotFound` if the decision doesn't exist,
-    /// or `DecisionDeleted` if it was tombstoned.
+    /// Returns `NotFound` if the decision doesn't exist,
+    /// or `Deleted` if it was tombstoned.
     pub fn get_decision(&self, id: &str) -> Result<&Decision> {
         let decision = self.decisions.get(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
@@ -329,8 +194,8 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// Returns `DecisionNotFound` if the decision doesn't exist,
-    /// or `DecisionDeleted` if it was tombstoned.
+    /// Returns `NotFound` if the decision doesn't exist,
+    /// or `Deleted` if it was tombstoned.
     pub fn get_decision_mut(&mut self, id: &str) -> Result<&mut Decision> {
         let decision = self.decisions.get_mut(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
@@ -354,7 +219,7 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// Returns `DecisionNotFound` if the decision doesn't exist at all.
+    /// Returns `NotFound` if the decision doesn't exist at all.
     pub fn get_decision_including_deleted(&self, id: &str) -> Result<&Decision> {
         self.decisions.get(id).ok_or_else(|| {
             ExError::new(ExErrorKind::NotFound)
@@ -486,7 +351,6 @@ mod tests {
     fn test_new_store() {
         let store = Store::new();
         assert_eq!(store.list_ettles().len(), 0);
-        assert_eq!(store.list_eps().len(), 0);
     }
 
     #[test]
@@ -506,21 +370,6 @@ mod tests {
         let store = Store::new();
         let result = store.get_ettle("nonexistent");
         assert!(result.is_err());
-        assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), ExErrorKind::NotFound);
-    }
-
-    #[test]
-    fn test_get_deleted_ettle() {
-        let mut store = Store::new();
-        let mut ettle = Ettle::new("ettle-1".to_string(), "Test".to_string());
-        ettle.deleted = true;
-
-        store.insert_ettle(ettle);
-
-        let result = store.get_ettle("ettle-1");
-        assert!(result.is_err());
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ExErrorKind::Deleted);
     }
 }

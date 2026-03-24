@@ -2,13 +2,14 @@
 //!
 //! This module provides read-only query operations for decisions with
 //! deterministic ordering, pagination, and filtering.
+//!
+//! EP-related query operations have been retired in Slice 03.
 
 use crate::errors::{ExError, ExErrorKind, Result};
 use crate::model::{Decision, DecisionLink};
 use crate::ops::Store;
-use crate::traversal::ept::compute_ept;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 /// Decision detail with evidence summary and outgoing links
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,8 +74,8 @@ pub struct PaginatedDecisions {
 ///
 /// # Errors
 ///
-/// Returns `DecisionNotFound` if the decision doesn't exist,
-/// or `DecisionDeleted` if it was tombstoned.
+/// Returns `NotFound` if the decision doesn't exist,
+/// or `Deleted` if it was tombstoned.
 pub fn decision_get(store: &Store, decision_id: &str) -> Result<DecisionDetail> {
     let decision = store.get_decision(decision_id)?;
 
@@ -196,66 +197,7 @@ pub fn decision_list(
     })
 }
 
-/// List decisions linked to a specific EP
-///
-/// Returns decisions linked to the EP, ordered by (ordinal ASC, relation_kind ASC, decision_id ASC).
-/// Supports filtering by status and relation kind.
-///
-/// # Errors
-///
-/// Returns `EpNotFound` if the EP doesn't exist.
-pub fn ep_list_decisions(
-    store: &Store,
-    ep_id: &str,
-    filters: &DecisionFilters,
-) -> Result<Vec<Decision>> {
-    // Verify EP exists
-    store.get_ep(ep_id)?;
-
-    // Get links for this EP
-    let mut links: Vec<&DecisionLink> = store
-        .decision_links
-        .values()
-        .filter(|link| link.target_kind == "ep" && link.target_id == ep_id && !link.is_tombstoned())
-        .collect();
-
-    // Sort by (ordinal ASC, relation_kind ASC, decision_id ASC)
-    links.sort_by(|a, b| {
-        a.ordinal
-            .cmp(&b.ordinal)
-            .then_with(|| a.relation_kind.cmp(&b.relation_kind))
-            .then_with(|| a.decision_id.cmp(&b.decision_id))
-    });
-
-    // Filter by relation_kind if specified
-    if let Some(ref relation) = filters.relation_filter {
-        links.retain(|link| &link.relation_kind == relation);
-    }
-
-    // Get decisions
-    let mut decisions = Vec::new();
-    for link in links {
-        if let Some(decision) = store.decisions.get(&link.decision_id) {
-            // Filter tombstoned
-            if !filters.include_tombstoned && decision.is_tombstoned() {
-                continue;
-            }
-
-            // Filter by status
-            if let Some(ref status) = filters.status_filter {
-                if &decision.status != status {
-                    continue;
-                }
-            }
-
-            decisions.push(decision.clone());
-        }
-    }
-
-    Ok(decisions)
-}
-
-/// Decision context for EPT projection
+/// Decision context — EP-era construct, retired in Slice 03.
 ///
 /// Contains decisions organized by EP with ancestor inheritance information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -267,112 +209,21 @@ pub struct DecisionContext {
     pub inherited_for_leaf: Vec<Decision>,
 }
 
-/// List decisions for EP with optional ancestor inclusion
+/// Compute decision context for an EPT projection — RETIRED in Slice 03.
 ///
-/// When include_ancestors is true, traverses the refinement graph upward
-/// to collect decisions from all ancestor EPs in the chain.
-///
-/// # Errors
-///
-/// Returns `EpNotFound` if the EP doesn't exist.
-/// Returns `EptDuplicateMapping` if the refinement graph is ambiguous (multiple parents).
-pub fn ep_list_decisions_with_ancestors(
-    store: &Store,
-    ep_id: &str,
-    include_ancestors: bool,
-    filters: &DecisionFilters,
-) -> Result<Vec<Decision>> {
-    if !include_ancestors {
-        // Simple case: just return decisions for this EP
-        return ep_list_decisions(store, ep_id, filters);
-    }
-
-    // Get the EP and its ettle
-    let ep = store.get_ep(ep_id)?;
-    let ettle_id = &ep.ettle_id;
-
-    // Compute EPT to get all EPs in the refinement chain
-    let ept = compute_ept(store, ettle_id, Some(ep.ordinal))?;
-
-    // Collect decisions from all EPs in the EPT
-    let mut all_decisions = Vec::new();
-    let mut seen_ids = HashSet::new();
-
-    for ep_id_in_ept in &ept {
-        let ep_decisions = ep_list_decisions(store, ep_id_in_ept, filters)?;
-        for decision in ep_decisions {
-            if seen_ids.insert(decision.decision_id.clone()) {
-                all_decisions.push(decision);
-            }
-        }
-    }
-
-    // Sort by created_at for deterministic ordering
-    all_decisions.sort_by(|a, b| {
-        a.created_at
-            .cmp(&b.created_at)
-            .then_with(|| a.decision_id.cmp(&b.decision_id))
-    });
-
-    Ok(all_decisions)
-}
-
-/// Compute decision context for an EPT projection
-///
-/// Returns decisions organized by EP, with all decisions in the EPT included.
-/// The direct_by_ep map uses BTreeMap for deterministic ordering.
+/// Returns `NotImplemented` as EPT has been retired along with the EP construct.
 ///
 /// # Errors
-///
-/// Returns errors if EPT computation fails (ambiguous graph, missing mappings, etc.).
+/// Always returns `NotImplemented` — EPT is retired in Slice 03.
+#[allow(unused_variables)]
 pub fn ept_compute_decision_context(
     store: &Store,
     leaf_ettle_id: &str,
     leaf_ep_ordinal: Option<u32>,
     filters: &DecisionFilters,
 ) -> Result<DecisionContext> {
-    // Compute EPT
-    let ept = compute_ept(store, leaf_ettle_id, leaf_ep_ordinal)?;
-
-    // Collect decisions for each EP in the EPT
-    let mut direct_by_ep: BTreeMap<String, Vec<Decision>> = BTreeMap::new();
-    let mut all_decisions_set = HashSet::new();
-
-    for ep_id in &ept {
-        let ep_decisions = ep_list_decisions(store, ep_id, filters)?;
-
-        if !ep_decisions.is_empty() {
-            // Track for deduplication
-            for decision in &ep_decisions {
-                all_decisions_set.insert(decision.decision_id.clone());
-            }
-
-            direct_by_ep.insert(ep_id.clone(), ep_decisions);
-        }
-    }
-
-    // Collect all unique decisions for inherited_for_leaf
-    let mut inherited_for_leaf = Vec::new();
-    for decisions in direct_by_ep.values() {
-        for decision in decisions {
-            inherited_for_leaf.push(decision.clone());
-        }
-    }
-
-    // Sort inherited decisions deterministically
-    inherited_for_leaf.sort_by(|a, b| {
-        a.created_at
-            .cmp(&b.created_at)
-            .then_with(|| a.decision_id.cmp(&b.decision_id))
-    });
-
-    // Deduplicate
-    inherited_for_leaf.dedup_by(|a, b| a.decision_id == b.decision_id);
-
-    Ok(DecisionContext {
-        direct_by_ep,
-        inherited_for_leaf,
-    })
+    Err(ExError::new(ExErrorKind::NotImplemented)
+        .with_message("EPT decision context retired in Slice 03 — EP construct removed"))
 }
 
 /// Encode cursor for pagination

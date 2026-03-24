@@ -1,6 +1,6 @@
 # ettlex-store
 
-**EttleX Store - Persistence Layer with SQLite, CAS, and Seed Import**
+**EttleX Store - Persistence Layer with SQLite and CAS**
 
 Persistence and storage layer providing durable semantic state management for EttleX.
 
@@ -9,8 +9,7 @@ Persistence and storage layer providing durable semantic state management for Et
 EttleX Store implements the storage spine that bridges between the pure domain models in `ettlex-core` and persistent storage. It provides:
 
 - **SQLite Repository**: ACID-compliant persistence with migration framework
-- **Content-Addressable Storage (CAS)**: Immutable blob storage for EP content and snapshots
-- **Seed Import**: Parse and import seed YAML files with cross-seed reference support
+- **Content-Addressable Storage (CAS)**: Immutable blob storage for snapshots
 - **Snapshot Commit**: Atomic manifest persistence with ledger anchoring
 - **Event Ledger**: Append-only provenance tracking for all operations
 
@@ -21,11 +20,8 @@ The store layer is organized into focused modules:
 ```
 ettlex-store/
 ├── cas/           # Content-addressable storage (filesystem-based)
-├── ledger/        # Event sourcing and append-only ledger (stub)
 ├── migrations/    # SQLite schema migrations
-├── repo/          # Repository pattern for Ettle/EP persistence
-├── schema/        # Database schema management (stub)
-├── seed/          # Seed format parser and importer
+├── repo/          # Repository pattern for Ettle/Relation/Group persistence
 └── snapshot/      # Snapshot commit and manifest persistence
 ```
 
@@ -60,29 +56,6 @@ ettlex-store/
 - `write()` - Write blob and return digest
 - `read()` - Read blob by digest
 - `exists()` - Check if blob exists
-
-### ✅ Seed Import
-
-- **YAML parsing**: Seed Format v0 with schema validation
-- **Cross-seed references**: Reference Ettles/EPs from previously imported seeds
-- **Invariant enforcement**: Uses core `refinement_ops` for EP uniqueness
-- **Transaction safety**: Atomic import with automatic rollback on failure
-- **Provenance tracking**: Events recorded for started/applied/completed
-
-**Seed format**: See `handoff/seed_*.yaml` for examples
-
-**Key functions**:
-
-- `parse_seed_file()` - Parse and validate seed YAML
-- `parse_seed_file_with_db()` - Parse with database-aware validation
-- `import_seed()` - Atomic import with provenance tracking
-- `compute_seed_digest()` - Deterministic seed content digest
-
-**Supported operations**:
-
-- Define Ettles with EPs (WHY/WHAT/HOW content)
-- Create refinement links (parent EP → child Ettle)
-- Cross-seed references (validated against database)
 
 ### ✅ Snapshot Commit
 
@@ -128,7 +101,7 @@ Filesystem-based CAS with SHA-256 addressing. Provides immutable blob storage wi
 
 SQL migration framework with automatic version tracking and application.
 
-**Migrations** (14 total as of Slice 02):
+**Migrations** (15 total as of Slice 03):
 
 - `001_initial_schema.sql` - Ettles, EPs, provenance_events
 - `002_snapshot_ledger.sql` - Snapshots ledger for committed manifests
@@ -144,6 +117,7 @@ SQL migration framework with automatic version tracking and application.
 - `012_ettle_v2_schema.sql` - Add `why`, `what`, `how`, `reasoning_link_id`, `reasoning_link_type`, `tombstoned_at` to `ettles`
 - `013_ettle_timestamps_iso8601.sql` - Migrate `ettles.created_at`/`updated_at` from INTEGER to TEXT ISO-8601
 - `014_slice02_schema.sql` - Rename `mcp_command_log`→`command_log`; rename `provenance_events.timestamp`→`occurred_at` (ISO-8601); drop `constraints`/`ep_constraint_refs` and related tables; add `relation_type_registry`, `relations`, `groups`, `group_members`; seed 4 built-in relation types
+- `015_ep_retirement.sql` - Drop `eps`, `cas_blobs`, `facet_snapshots` tables; rebuild `ettles` without legacy columns (`parent_id`, `deleted`, `parent_ep_id`, `metadata`)
 
 **Public API**:
 
@@ -190,30 +164,6 @@ Bridges between domain models (`ettlex_core::model`) and SQLite persistence.
 - `list_group_members(conn, group_id, include_tombstoned)` — Members of a group
 - `count_active_group_members(conn, group_id)` — Used by `GroupTombstone` guard
 
-### `seed` - Seed Import
-
-Parses Seed Format v0 YAML and imports into canonical state with provenance tracking.
-
-**Modules**:
-
-- `parser.rs` - YAML parsing and validation
-- `digest.rs` - Deterministic seed content hashing
-- `importer.rs` - Transaction-based import orchestration
-- `provenance.rs` - Event emission for import lifecycle
-
-**Cross-seed support**:
-
-- References to non-existent Ettles/EPs checked against database
-- Parent Ettle loaded with all EPs for link operations
-- Uses `refinement_ops::link_child()` to enforce EP uniqueness
-
-**Validation**:
-
-- Unique ordinals within Ettle
-- Valid parent/child references
-- EP0 exists and is normative
-- No duplicate child mappings (enforced by core)
-
 ### `snapshot` - Snapshot Commit
 
 Atomic snapshot commit pipeline: EPT → manifest → CAS + ledger.
@@ -246,42 +196,22 @@ Atomic snapshot commit pipeline: EPT → manifest → CAS + ledger.
 
 ## Database Schema
 
-Current as of migration 014 (Slice 02). Total: 17 tables.
+Current as of migration 015 (Slice 03). Total: 15 tables.
 
 ### `ettles` Table
 
 ```sql
 CREATE TABLE ettles (
-    id           TEXT PRIMARY KEY,
-    title        TEXT NOT NULL,
-    why          TEXT NOT NULL DEFAULT '',
-    what         TEXT NOT NULL DEFAULT '',
-    how          TEXT NOT NULL DEFAULT '',
+    id                  TEXT PRIMARY KEY,
+    title               TEXT NOT NULL,
+    why                 TEXT NOT NULL DEFAULT '',
+    what                TEXT NOT NULL DEFAULT '',
+    how                 TEXT NOT NULL DEFAULT '',
     reasoning_link_id   TEXT REFERENCES ettles(id),
     reasoning_link_type TEXT,
-    tombstoned_at TEXT,          -- ISO-8601 or NULL
-    created_at   TEXT NOT NULL,  -- ISO-8601
-    updated_at   TEXT NOT NULL   -- ISO-8601
-    -- legacy columns (parent_id, deleted, metadata) retained for migration compatibility
-);
-```
-
-### `eps` Table
-
-```sql
-CREATE TABLE eps (
-    id           TEXT PRIMARY KEY,
-    ettle_id     TEXT NOT NULL REFERENCES ettles(id),
-    ordinal      INTEGER NOT NULL,
-    normative    INTEGER NOT NULL DEFAULT 1,
-    title        TEXT,            -- nullable, added in migration 011
-    why          TEXT,
-    what         TEXT,
-    how          TEXT,
-    created_at   TEXT NOT NULL,
-    updated_at   TEXT NOT NULL,
-    deleted_at   TEXT,
-    child_ettle_id TEXT REFERENCES ettles(id)
+    tombstoned_at       TEXT,          -- ISO-8601 or NULL
+    created_at          TEXT NOT NULL, -- ISO-8601
+    updated_at          TEXT NOT NULL  -- ISO-8601
 );
 ```
 
@@ -388,20 +318,6 @@ CREATE TABLE snapshots (
 
 ## Usage Examples
 
-### Import a Seed File
-
-```rust
-use ettlex_store::seed::importer::import_seed;
-use rusqlite::Connection;
-use std::path::Path;
-
-let mut conn = Connection::open(".ettlex/store.db")?;
-let seed_path = Path::new("handoff/seed_example.yaml");
-
-let seed_digest = import_seed(&seed_path, &mut conn)?;
-println!("Imported seed: {}", seed_digest);
-```
-
 ### Write Content to CAS
 
 ```rust
@@ -444,9 +360,6 @@ Key test files:
 
 - `tests/cas_test.rs` - CAS operations
 - `tests/migrations_test.rs` - Schema migrations
-- `tests/round_trip_test.rs` - Persist/hydrate integrity
-- `tests/seed_parse_test.rs` - Seed parsing
-- `src/seed/importer.rs` - Import scenarios (unit tests)
 - `tests/snapshot_persist_tests.rs` - Snapshot commit
 
 ## Error Handling
@@ -469,7 +382,6 @@ Key dependencies:
 
 - `rusqlite` (0.29) - SQLite driver with bundled library
 - `ettlex-core` - Domain models and operations
-- `serde_yaml` (0.9) - YAML parsing for seeds
 - `sha2`, `hex` - Digest computation
 - `uuid` (v7) - Time-ordered IDs
 - `chrono` - Timestamp handling
@@ -559,8 +471,8 @@ See [`docs/policy-system.md`](../../docs/policy-system.md) for the full HANDOFF 
 
 ## Future Work
 
-- [x] Migrations 001–014 complete
-- [ ] Slice 03: Remove EP concept entirely (drop legacy EP and parent_ep_id columns)
-- [ ] Slice 04: Remove seed import capability
+- [x] Migrations 001–015 complete
+- [x] Slice 03: EP concept retired (eps/cas_blobs/facet_snapshots dropped, ettles cleaned up)
+- [x] Slice 04: Seed system retired (seed module removed, CLI seed command removed)
 - [ ] Read-optimized views (materialized EPT)
 - [ ] Multi-repository support

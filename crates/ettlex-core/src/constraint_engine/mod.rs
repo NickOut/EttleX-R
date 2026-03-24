@@ -20,15 +20,19 @@
 use crate::errors::ExError;
 use crate::ops::Store;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 /// Context passed to `evaluate()`.
 ///
-/// Identifies the leaf EP, the full ordered EPT, and policy/profile references.
+/// EP-era fields (`leaf_ep_id`, `ept_ep_ids`) are retired in Slice 03.
+/// The struct is retained for API compatibility; `evaluate()` now returns an
+/// empty evaluation unconditionally.
 pub struct ConstraintEvalCtx {
-    /// The leaf EP driving this snapshot
+    /// Retired — EP construct removed in Slice 03.
+    #[allow(dead_code)]
     pub leaf_ep_id: String,
-    /// Ordered list of EP IDs in the EPT (root → leaf)
+    /// Retired — EP construct removed in Slice 03.
+    #[allow(dead_code)]
     pub ept_ep_ids: Vec<String>,
     /// Policy reference string (e.g. "policy/default@0")
     pub policy_ref: String,
@@ -95,46 +99,13 @@ pub struct ConstraintEvaluation {
 ///
 /// Returns `ExError` if JSON serialization fails during digest computation.
 #[allow(clippy::result_large_err)]
-pub fn evaluate(ctx: &ConstraintEvalCtx, store: &Store) -> Result<ConstraintEvaluation, ExError> {
+pub fn evaluate(_ctx: &ConstraintEvalCtx, store: &Store) -> Result<ConstraintEvaluation, ExError> {
     use sha2::{Digest as _, Sha256};
 
-    // Phase 1: collect constraint refs from each EP in the EPT
-    // We track seen constraint_ids to deduplicate; first occurrence wins.
-    let mut seen_ids: BTreeSet<String> = BTreeSet::new();
-    // (sort_key: (ordinal_or_max, constraint_id), DeclaredConstraintRef)
-    let mut ordered: Vec<(i32, String, DeclaredConstraintRef)> = Vec::new();
-
-    for ep_id in &ctx.ept_ep_ids {
-        let mut refs = store.list_ep_constraint_refs(ep_id);
-        // Sort refs within this EP by ordinal so first-EP attachment ordering is stable
-        refs.sort_by_key(|r| r.ordinal);
-
-        for r in refs {
-            if seen_ids.contains(&r.constraint_id) {
-                continue;
-            }
-
-            // Look up the constraint (skip tombstoned)
-            if let Ok(constraint) = store.get_constraint(&r.constraint_id) {
-                seen_ids.insert(r.constraint_id.clone());
-                ordered.push((
-                    r.ordinal,
-                    r.constraint_id.clone(),
-                    DeclaredConstraintRef {
-                        constraint_id: constraint.constraint_id.clone(),
-                        family: constraint.family.clone(),
-                        payload_digest: constraint.payload_digest.clone(),
-                    },
-                ));
-            }
-        }
-    }
-
-    // Sort by (ordinal, constraint_id) for determinism
-    ordered.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-
-    let declared_refs: Vec<DeclaredConstraintRef> =
-        ordered.into_iter().map(|(_, _, r)| r).collect();
+    // Slice 03: EP construct retired. EP constraint refs no longer exist.
+    // Return empty evaluation unconditionally.
+    let _ = store; // suppress unused warning
+    let declared_refs: Vec<DeclaredConstraintRef> = Vec::new();
 
     // Group by family for per-family evaluation
     let mut family_groups: BTreeMap<String, Vec<&DeclaredConstraintRef>> = BTreeMap::new();

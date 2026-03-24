@@ -11,4 +11,3 @@ pub mod ettle;
 pub mod group;
 pub mod read_tools;
 pub mod relation;
-pub mod snapshot;

@@ -2,8 +2,7 @@
 // Covers create, update, tombstone, link, unlink, and supersede operations.
 
 use ettlex_engine::commands::decision::{
-    decision_create, decision_link, decision_supersede, decision_tombstone, decision_unlink,
-    decision_update,
+    decision_create, decision_supersede, decision_tombstone, decision_update,
 };
 use rusqlite::Connection;
 use tempfile::TempDir;
@@ -14,15 +13,6 @@ fn setup_db() -> (TempDir, Connection) {
     let mut conn = Connection::open(&db_path).unwrap();
     ettlex_store::migrations::apply_migrations(&mut conn).unwrap();
     (temp_dir, conn)
-}
-
-fn seed_ep(conn: &Connection) {
-    conn.execute_batch(r#"
-        INSERT INTO ettles (id, title, parent_id, deleted, created_at, updated_at, metadata)
-        VALUES ('ettle:root', 'Root', NULL, 0, 0, 0, '{}');
-        INSERT INTO eps (id, ettle_id, ordinal, normative, child_ettle_id, content_inline, deleted, created_at, updated_at)
-        VALUES ('ep:root:0', 'ettle:root', 0, 1, NULL, 'leaf content', 0, 0, 0);
-    "#).unwrap();
 }
 
 // ---------------------------------------------------------------------------
@@ -203,92 +193,6 @@ fn test_decision_tombstone_nonexistent_fails() {
 }
 
 // ---------------------------------------------------------------------------
-// decision_link / decision_unlink
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_decision_link_to_ep() {
-    let (_tmp, conn) = setup_db();
-    seed_ep(&conn);
-
-    let decision_id = decision_create(
-        Some("decision:lnk".to_string()),
-        "Link decision".to_string(),
-        None,
-        "Body.".to_string(),
-        "Rationale.".to_string(),
-        None,
-        None,
-        "none".to_string(),
-        None,
-        None,
-        None,
-        &conn,
-    )
-    .unwrap();
-
-    decision_link(
-        decision_id.clone(),
-        "ep".to_string(),
-        "ep:root:0".to_string(),
-        "grounds".to_string(),
-        0,
-        &conn,
-    )
-    .unwrap();
-
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM decision_links WHERE decision_id = ?1",
-            [&decision_id],
-            |r| r.get(0),
-        )
-        .unwrap();
-    assert_eq!(count, 1);
-}
-
-#[test]
-fn test_decision_unlink_from_ep() {
-    let (_tmp, conn) = setup_db();
-    seed_ep(&conn);
-
-    let decision_id = decision_create(
-        Some("decision:unlnk".to_string()),
-        "Unlink decision".to_string(),
-        None,
-        "Body.".to_string(),
-        "Rationale.".to_string(),
-        None,
-        None,
-        "none".to_string(),
-        None,
-        None,
-        None,
-        &conn,
-    )
-    .unwrap();
-
-    decision_link(
-        decision_id.clone(),
-        "ep".to_string(),
-        "ep:root:0".to_string(),
-        "grounds".to_string(),
-        0,
-        &conn,
-    )
-    .unwrap();
-
-    decision_unlink(
-        decision_id.clone(),
-        "ep".to_string(),
-        "ep:root:0".to_string(),
-        "grounds".to_string(),
-        &conn,
-    )
-    .unwrap();
-}
-
-// ---------------------------------------------------------------------------
 // decision_supersede
 // ---------------------------------------------------------------------------
 
@@ -351,22 +255,6 @@ fn test_decision_update_nonexistent_fails() {
         None,
         None,
         None,
-        &conn,
-    );
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_decision_link_nonexistent_decision_fails() {
-    let (_tmp, conn) = setup_db();
-    seed_ep(&conn);
-
-    let result = decision_link(
-        "decision:nonexistent".to_string(),
-        "ep".to_string(),
-        "ep:root:0".to_string(),
-        "grounds".to_string(),
-        0,
         &conn,
     );
     assert!(result.is_err());

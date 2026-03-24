@@ -70,13 +70,43 @@ For any existing function, module, or dispatch logic being replaced (not extende
 ### 5. Layer Coverage Declaration
 Explicit statement of which layers this slice covers (Store / Engine / Action / MCP / CLI) and confirmation that all declared layers will be represented in the test suite.
 
+### 6. Deletion Impact Analysis (MANDATORY for destructive slices — Classification C or D involving deletions)
+
+A destructive slice is any slice that deletes tables, columns, commands, MCP tools, engine query variants, or source files.
+
+For EVERY deleted entity, run the following before writing the PAFR:
+```
+cargo nextest list --workspace 2>/dev/null | grep -E "<entity_pattern>"
+grep -rn "<entity_name>" crates/*/tests/ crates/*/src/
+```
+
+Produce an exhaustive table:
+
+| Deleted Entity | Affected Test File | Affected Test Function(s) | Disposition (DELETE / REWRITE / KEEP) | Reason |
+|---|---|---|---|---|
+
+This table IS the PAFR input — do not write the PAFR without completing this scan first.
+
+For MCP tool removal specifically: enumerate every tool being removed BY NAME from the plan. Gate 7 must verify each name is absent, not grep for a pattern.
+
+### 7. Scenario Sequence for Destructive Slices
+
+For destructive slices, scenarios MUST follow this order:
+1. **SC-01: Retire affected tests** — RED = tests compile but reference dead entities; GREEN = tests deleted or rewritten. This scenario runs BEFORE any schema or surface changes.
+2. **SC-02..N-1: Remove MCP tools, engine queries, commands** — compile-time failures only.
+3. **SC-N: Apply schema migration** — runs last, after all code referencing dropped entities is already gone.
+
+This ordering ensures each layer fails cleanly at compile time. Schema migrations that run before test cleanup produce runtime panics that are harder to diagnose.
+
 ### 6. Pre-Authorised Failure Registry (PAFR)
 List of existing tests that will fail as a direct consequence of this slice. For each:
 - Full test path (crate + file + test function name).
 - Reason for failure.
 - Confirmation that the test logic will NOT be modified.
 
-### 7. Scenario Inventory
+For destructive slices: this list MUST be derived from the Deletion Impact Analysis scan above, not from intuition. An incomplete PAFR on a destructive slice is a protocol failure.
+
+### 8. Scenario Inventory
 For each scenario:
 - Scenario ID (SC-NN) and title.
 - Layer(s) the scenario exercises.
@@ -84,17 +114,17 @@ For each scenario:
 - Predicted RED failure reason.
 - Minimal production module expected to satisfy it.
 
-### 8. Makefile Update Plan
+### 9. Makefile Update Plan
 - New test names to be added to SLICE_TEST_FILTER.
 - Confirmation that existing `test` and `test-full` targets are unchanged.
 
-### 9. Slice Registry Update Plan
+### 10. Slice Registry Update Plan
 The exact TOML entry that will be appended to `handoff/slice_registry.toml` on completion, including the correct `id` (kebab-case slice identifier) and `ettle_id` (from the Ettle spec).
 
-### 10. Acceptance Strategy
+### 11. Acceptance Strategy
 Make targets and coverage scope.
 
-### 11. Plan Integrity Declaration
+### 12. Plan Integrity Declaration
 Output verbatim:
 > No production code will be written before RED evidence exists.
 > No code outside the declared slice boundary will be modified except the Makefile and handoff/slice_registry.toml (and any declared infrastructure exceptions).

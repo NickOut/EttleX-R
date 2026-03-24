@@ -4,3 +4,4 @@
 //! core domain logic and persistence layer.
 
 pub mod commands;
+pub mod snapshot;

@@ -90,51 +90,6 @@ pub fn handle_ettle_list(
     }
 }
 
-/// Handle `ettle.list_eps`.
-///
-/// Params: `{ ettle_id: String }`
-pub fn handle_ettle_list_eps(
-    params: &Value,
-    conn: &Connection,
-    cas: &FsStore,
-    policy_provider: &dyn PolicyProvider,
-) -> McpResult {
-    let ettle_id = match params.get("ettle_id").and_then(Value::as_str) {
-        Some(s) => s.to_string(),
-        None => {
-            return McpResult::Err(McpError::new(MCP_INVALID_INPUT, "missing 'ettle_id' param"))
-        }
-    };
-
-    match apply_engine_query(
-        EngineQuery::EttleListEps { ettle_id },
-        conn,
-        cas,
-        Some(policy_provider),
-    ) {
-        Ok(result) => {
-            use ettlex_memory::commands::engine_query::EngineQueryResult;
-            if let EngineQueryResult::EttleListEps(eps) = result {
-                let items: Vec<Value> = eps
-                    .iter()
-                    .map(|ep| {
-                        json!({
-                            "id": ep.id,
-                            "ettle_id": ep.ettle_id,
-                            "ordinal": ep.ordinal,
-                            "normative": ep.normative,
-                        })
-                    })
-                    .collect();
-                McpResult::Ok(json!({ "items": items }))
-            } else {
-                McpResult::Err(McpError::new("Internal", "unexpected result variant"))
-            }
-        }
-        Err(e) => McpResult::Err(McpError::from_ex_error(e)),
-    }
-}
-
 /// Handle `ettle_list_decisions`.
 ///
 /// Params: `{ ettle_id: String, include_eps?: bool, include_ancestors?: bool }`

@@ -1,8 +1,7 @@
 //! Constraint domain model
 //!
 //! This module defines the domain model for constraints, which are family-agnostic
-//! validation rules attached to EPs. Constraints participate in snapshot manifests
-//! and maintain deterministic ordering.
+//! validation rules. The EP construct and EpConstraintRef have been retired (Slice 03).
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -113,47 +112,6 @@ impl fmt::Display for Constraint {
     }
 }
 
-/// EP-to-Constraint attachment record
-///
-/// Represents the many-to-many relationship between EPs and constraints.
-/// The ordinal field ensures deterministic ordering for manifest generation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EpConstraintRef {
-    /// EP identifier
-    pub ep_id: String,
-
-    /// Constraint identifier
-    pub constraint_id: String,
-
-    /// Ordinal position for deterministic ordering
-    pub ordinal: i32,
-
-    /// Attachment timestamp
-    pub created_at: DateTime<Utc>,
-}
-
-impl EpConstraintRef {
-    /// Create a new EP-to-constraint attachment
-    pub fn new(ep_id: String, constraint_id: String, ordinal: i32) -> Self {
-        Self {
-            ep_id,
-            constraint_id,
-            ordinal,
-            created_at: Utc::now(),
-        }
-    }
-}
-
-impl fmt::Display for EpConstraintRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "EpConstraintRef(ep={}, constraint={}, ordinal={})",
-            self.ep_id, self.constraint_id, self.ordinal
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,14 +195,5 @@ mod tests {
         assert_eq!(constraint.payload_json, payload2);
         assert_ne!(constraint.payload_digest, old_digest);
         assert!(constraint.updated_at > old_updated);
-    }
-
-    #[test]
-    fn test_ep_constraint_ref_new() {
-        let ref_record = EpConstraintRef::new("ep1".to_string(), "c1".to_string(), 0);
-
-        assert_eq!(ref_record.ep_id, "ep1");
-        assert_eq!(ref_record.constraint_id, "c1");
-        assert_eq!(ref_record.ordinal, 0);
     }
 }

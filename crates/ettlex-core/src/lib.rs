@@ -33,7 +33,7 @@ pub mod traversal;
 pub use apply::apply;
 pub use commands::Command;
 pub use errors::{ExError, ExErrorKind, Result};
-pub use model::{Ep, Ettle, Metadata};
+pub use model::Ettle;
 pub use ops::Store;
 pub use policy::{AnchorPolicy, CommitPolicyHook, DenyAllCommitPolicyHook, NoopCommitPolicyHook};
 pub use policy_provider::{DenyAllPolicyProvider, NoopPolicyProvider, PolicyProvider};

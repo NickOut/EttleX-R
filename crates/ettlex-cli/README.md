@@ -2,7 +2,7 @@
 
 **EttleX Command-Line Interface**
 
-Command-line tool for managing EttleX semantic architectures, seed import, and rendering.
+Command-line tool for managing EttleX semantic architectures and rendering.
 
 ## Overview
 
@@ -80,38 +80,6 @@ ettlex snapshot commit --root <ROOT_ETTLE_ID>
 ```bash
 ettlex snapshot commit --root ettle:root
 ```
-
-### `seed` - Seed Operations
-
-Import seed YAML files into the repository.
-
-```bash
-ettlex seed import <path>
-```
-
-**Arguments**:
-
-- `<path>` - Path to seed YAML file
-
-**Example**:
-
-```bash
-ettlex seed import handoff/seed_snapshot_commit_v4.yaml
-```
-
-**Output**:
-
-```
-Importing handoff/seed_snapshot_commit_v4.yaml...
-✓ Imported (digest: ce110808dd873059470af8e81d94b3ba9ac0e5f5d6acaafc83b2db26b4d1fe2d)
-```
-
-**Features**:
-
-- Cross-seed reference support (references entities from previously imported seeds)
-- Transaction-based atomic import with automatic rollback on failure
-- Provenance event tracking (started/applied/completed)
-- Duplicate child mapping detection (enforces EP uniqueness invariant)
 
 ### `render` - Render to Markdown
 
@@ -200,7 +168,7 @@ EttleX CLI expects the following repository structure:
         └── {digest}.{ext}
 ```
 
-This structure is automatically created by the first `seed import` operation.
+This structure is automatically created on first use.
 
 ## Error Handling
 
@@ -224,7 +192,6 @@ ettlex-cli/
 └── src/
     ├── commands/
     │   ├── mod.rs       # Command module registry
-    │   ├── seed.rs      # Seed import commands
     │   ├── snapshot.rs  # Snapshot commit commands
     │   └── render.rs    # Render commands
     └── main.rs          # CLI argument parsing and dispatch

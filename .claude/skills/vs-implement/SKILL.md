@@ -72,9 +72,21 @@ For any new or changed public surface introduced by this scenario:
 1. Update the crate-level `README.md` in every affected crate.
 2. Update rustdoc (`//!` module doc or `///` item doc) for every new public function, struct, or module.
 3. Update product documentation under `docs/` for any user-visible workflow change.
-4. Run `make doc`.
-5. Confirm documentation builds without new warnings. Pre-existing warnings in unrelated crates are acceptable.
-6. Update `handoff/slice_wip.md`: fill Doc Files and Doc Evidence columns, set Status = DONE.
+4. **MCP tool surface** — if this scenario introduces or removes any write command (dispatched through `ettlex_apply`) or read tool (a `tool_def` entry in `handle_tools_list()`):
+   - Open `crates/ettlex-mcp/src/main.rs` and locate `handle_tools_list()`.
+   - For each **new write command tag**: add it to the `ettlex_apply` description string AND to the `command.description` schema field inside the JSON object.
+   - For each **removed write command tag**: remove it from both.
+   - For each **new read tool**: add a `tool_def(...)` block with correct name, description, and input schema.
+   - For each **removed read tool** (e.g. backing table dropped): remove its `tool_def(...)` block entirely.
+   - Run `make lint` and confirm no regressions before proceeding.
+5. Run `make doc`.
+6. Confirm documentation builds without new warnings. Pre-existing warnings in unrelated crates are acceptable.
+7. **For destructive scenarios (any deletion)** — stale documentation is actively misleading. Before marking 4C complete, run for EACH deleted entity:
+   ```
+   grep -rn "<deleted_entity_name>" crates/*/README.md docs/
+   ```
+   Every hit MUST be removed or updated. This step is NON-NEGOTIABLE — "I deleted code, there is nothing to document" is incorrect. Removals require more documentation work, not less.
+8. Update `handoff/slice_wip.md`: fill Doc Files and Doc Evidence columns, set Status = DONE.
 
 Do NOT move to the next scenario until Status = DONE.
 

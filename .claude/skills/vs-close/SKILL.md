@@ -48,6 +48,17 @@ Run each command in order. Capture full output for Step 10.
    - MUST complete without warnings. Pre-existing warnings in crates outside the slice boundary are acceptable.
    - If new warnings appear in slice boundary crates — fix them before proceeding.
 
+7. **MCP tools/list audit** — read `crates/ettlex-mcp/src/main.rs` and perform the following checks:
+   - Extract every command tag listed in the `ettlex_apply` tool description string and in the `command.description` schema field inside `handle_tools_list()`.
+   - Extract every `tool_def` name for read tools in the same function.
+   - Cross-check against the slice plan's scenario inventory:
+     - Every write command introduced by this slice MUST appear in both the description string and the schema field.
+     - Every write command removed or deprecated by this slice MUST NOT appear in either.
+     - Every read tool introduced by this slice MUST have a `tool_def` entry.
+     - Every read tool whose backing table or entity was dropped by this slice MUST NOT have a `tool_def` entry.
+   - If any mismatch is found — STOP. Fix `handle_tools_list()`, run `make lint`, and re-run this gate before proceeding.
+   - Record: "MCP tools/list: PASS — N commands advertised, 0 deprecated tools present."
+
 If any gate fails (other than pre-authorised `make test` failures), stop and report to the user. Do not proceed to Step 6 until all gates pass.
 
 ---
@@ -137,7 +148,7 @@ The report MUST contain all 18 of the following sections. Missing any section is
 14. **`make doc` confirmation** — output confirming clean build
 15. **Slice Registry entry** — verbatim TOML as appended to `handoff/slice_registry.toml`
 16. **Helper test justification** — if any test helper functions were written, justify them here; if none, state "None"
-17. **Acceptance gate results** — all six Step 5 commands with their outcomes
+17. **Acceptance gate results** — all seven Step 5 gates with their outcomes
 18. **Integrity confirmation** — output verbatim:
 
 > All 18 completion report sections are present.
@@ -145,6 +156,7 @@ The report MUST contain all 18 of the following sections. Missing any section is
 > make test: M failures, all pre-authorised.
 > make coverage-check: PASS (N%).
 > make doc: PASS, no warnings in slice boundary crates.
+> MCP tools/list audit: PASS — N commands advertised, 0 deprecated tools present.
 > Slice registry updated.
 > Plan vs Actual: N matches, 0 unjustified mismatches.
 > TDD integrity: confirmed.
@@ -165,7 +177,7 @@ This clears the working files so the next /vs-plan invocation starts clean.
 ## Final Output
 
 ```
-STEP 5 COMPLETE — lint: PASS, test-slice: N passed, test: M pre-authorised failures, coverage: PASS, doc: PASS
+STEP 5 COMPLETE — lint: PASS, test-slice: N passed, test: M pre-authorised failures, coverage: PASS, doc: PASS, mcp-tools-audit: PASS
 STEP 6 COMPLETE — slice_registry.toml updated with N tests and M pre-authorised failures
 STEP 7 COMPLETE — Plan vs Actual: N rows, 0 unjustified mismatches
 STEP 8 COMPLETE — TDD integrity confirmed

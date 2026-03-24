@@ -332,14 +332,9 @@ pub fn generate_manifest(
 
 /// Derive the ep_digest for a manifest entry.
 ///
-/// Uses the EP's `content_digest` (SHA-256 of WHY+WHAT+HOW) when the EP is
-/// present in `store`.  Falls back to a SHA-256 of the ep_id string for EPs
-/// not yet hydrated into the in-memory store (legacy/test compatibility).
-fn ep_content_digest(ep_id: &str, store: &Store) -> String {
-    if let Ok(ep) = store.get_ep(ep_id) {
-        return ep.content_digest.clone();
-    }
-    // Fallback: hash the ep_id so callers always get a 64-char hex string.
+/// EP-era content_digest is retired in Slice 03. Falls back to a SHA-256 of the
+/// ep_id string so callers always get a 64-char hex string.
+fn ep_content_digest(ep_id: &str, _store: &Store) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(ep_id.as_bytes());

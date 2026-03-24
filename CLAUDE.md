@@ -40,6 +40,8 @@ is structured in strict dependency layers. No upward dependencies are permitted.
 ```
 ettlex-cli  ettlex-mcp  ettlex-tauri       ← binary entry points
                 ↓
+          ettlex-memory                    ← memory/context manager: routes MCP dispatch,
+                ↓                            manages context assembly (Slice 02+)
           ettlex-engine                    ← orchestration layer: action dispatch,
                 ↓                            snapshot commit pipeline, command handlers
           ettlex-store                     ← persistence layer: SQLite via rusqlite,
@@ -113,8 +115,11 @@ MUST NOT contain: MCP/CLI transport concerns, JSON serialisation for external AP
 MUST return `ExError` from all fallible public APIs.
 MUST NOT invent a separate engine-level outcome type.
 
-The engine owns: state_version increment (via `mcp_command_log`), provenance event append,
+The engine owns: state_version increment (via `command_log`), provenance event append,
 and all business rule validation.
+
+**EP construct is prohibited** (retired by Slice 03). Do not reference `Ep`, `EpConstraintRef`,
+ep_ops, or any EP-era field (`parent_id`, `parent_ep_id`, `ep_ids`, `deleted`) in any new code.
 
 **ettlex-mcp**
 MCP transport layer. Thin wrappers over engine action layer. Schema validation only —
@@ -164,7 +169,7 @@ Single initialisation point via the logging facility. See:
 
 - SQLite via `rusqlite` with the `bundled` feature (SQLite 3.43.x).
 - Schema managed via numbered migration files in `crates/ettlex-store/src/migrations/`.
-- All mutations go through `action:commands::apply`. No direct store writes from CLI or MCP.
+- All mutations go through `apply_command` (engine action layer). No direct store writes from CLI or MCP.
 - State version is a global monotonic OCC counter incremented on every successful mutation.
 - Provenance events are appended for every successful mutation and never deleted.
 

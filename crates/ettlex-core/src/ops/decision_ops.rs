@@ -292,9 +292,9 @@ pub fn attach_decision_to_target(
             .with_message("Decision is tombstoned and cannot be linked"));
     }
 
-    // Validate target_kind
+    // Validate target_kind — EP construct retired in Slice 03; "ep" is no longer valid
     match target_kind.as_str() {
-        "ep" | "ettle" | "constraint" | "decision" => {}
+        "ettle" | "constraint" | "decision" => {}
         _ => {
             return Err(ExError::new(ExErrorKind::InvalidTargetKind)
                 .with_message(format!("Invalid target kind: {}", target_kind.clone())))
@@ -303,9 +303,6 @@ pub fn attach_decision_to_target(
 
     // Verify target exists
     match target_kind.as_str() {
-        "ep" => {
-            store.get_ep(&target_id)?;
-        }
         "ettle" => {
             store.get_ettle(&target_id)?;
         }
@@ -399,33 +396,14 @@ pub fn supersede_decision(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ops::{ep_ops, ettle_ops};
+    use crate::ops::ettle_ops;
 
-    fn setup_store_with_ep() -> (Store, String, String) {
+    fn setup_store_with_ettle() -> (Store, String) {
         let mut store = Store::new();
 
-        let ettle_id = ettle_ops::create_ettle(
-            &mut store,
-            "Test Ettle".to_string(),
-            None,
-            None,
-            Some("what".to_string()),
-            Some("how".to_string()),
-        )
-        .unwrap();
+        let ettle_id = ettle_ops::create_ettle(&mut store, "Test Ettle".to_string()).unwrap();
 
-        let ep_id = ep_ops::create_ep(
-            &mut store,
-            &ettle_id,
-            1,
-            false,
-            "why".to_string(),
-            "what".to_string(),
-            "how".to_string(),
-        )
-        .unwrap();
-
-        (store, ettle_id, ep_id)
+        (store, ettle_id)
     }
 
     #[test]
@@ -478,8 +456,8 @@ mod tests {
     }
 
     #[test]
-    fn test_attach_decision_to_ep() {
-        let (mut store, _ettle_id, ep_id) = setup_store_with_ep();
+    fn test_attach_decision_to_ettle() {
+        let (mut store, ettle_id) = setup_store_with_ettle();
 
         let decision_id = create_decision(
             &mut store,
@@ -500,8 +478,8 @@ mod tests {
         let result = attach_decision_to_target(
             &mut store,
             &decision_id,
-            "ep".to_string(),
-            ep_id,
+            "ettle".to_string(),
+            ettle_id,
             "grounds".to_string(),
             0,
         );

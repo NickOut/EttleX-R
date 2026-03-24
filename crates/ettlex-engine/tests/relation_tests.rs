@@ -17,12 +17,12 @@ use tempfile::TempDir;
 // Test helpers
 // ---------------------------------------------------------------------------
 
-fn setup_db() -> (Connection, TempDir) {
-    let dir = TempDir::new().expect("temp dir");
-    let mut conn = Connection::open_in_memory().expect("in-memory db");
-    apply_migrations(&mut conn).expect("migrations should apply");
-    (conn, dir)
-}
+//fn setup_db() -> (Connection, TempDir) {
+//    let dir = TempDir::new().expect("temp dir");
+//    let mut conn = Connection::open_in_memory().expect("in-memory db");
+//    apply_migrations(&mut conn).expect("migrations should apply");
+//    (conn, dir)
+//}
 
 fn setup_db_with_cas() -> (Connection, FsStore, TempDir) {
     let dir = TempDir::new().expect("temp dir");

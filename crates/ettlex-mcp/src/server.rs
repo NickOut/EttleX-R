@@ -11,8 +11,7 @@ use crate::context::RequestContext;
 use crate::error::{McpError, MCP_AUTH_REQUIRED, MCP_REQUEST_TOO_LARGE, MCP_TOOL_NOT_FOUND};
 pub use crate::error::{McpResponse, McpResult};
 use crate::tools::{
-    apply, approval, constraint, decision, ep, ept, ettle, policy, predicate, profile, snapshot,
-    state,
+    apply, approval, constraint, decision, ettle, policy, predicate, profile, snapshot, state,
 };
 
 // ---------------------------------------------------------------------------
@@ -106,14 +105,6 @@ impl McpServer {
             // ── Ettle ──────────────────────────────────────────────────────
             "ettle_get" => ettle::handle_ettle_get(p, conn, cas, policy_provider),
             "ettle_list" => ettle::handle_ettle_list(p, conn, cas, policy_provider),
-            "ettle_list_eps" => ettle::handle_ettle_list_eps(p, conn, cas, policy_provider),
-
-            // ── EP ─────────────────────────────────────────────────────────
-            "ep_get" => ep::handle_ep_get(p, conn, cas, policy_provider),
-            "ep_list_children" => ep::handle_ep_list_children(p, conn, cas, policy_provider),
-            "ep_list_parents" => ep::handle_ep_list_parents(p, conn, cas, policy_provider),
-            "ep_list_constraints" => ep::handle_ep_list_constraints(p, conn, cas, policy_provider),
-            "ep_list_decisions" => ep::handle_ep_list_decisions(p, conn, cas, policy_provider),
 
             // ── Ettle (decisions) ──────────────────────────────────────────
             "ettle_list_decisions" => {
@@ -131,12 +122,6 @@ impl McpServer {
             "decision_list" => decision::handle_decision_list(p, conn, cas, policy_provider),
             "decision_list_by_target" => {
                 decision::handle_decision_list_by_target(p, conn, cas, policy_provider)
-            }
-
-            // ── EPT ────────────────────────────────────────────────────────
-            "ept_compute" => ept::handle_ept_compute(p, conn, cas, policy_provider),
-            "ept_compute_decision_context" => {
-                ept::handle_ept_compute_decision_context(p, conn, cas, policy_provider)
             }
 
             // ── State ──────────────────────────────────────────────────────
