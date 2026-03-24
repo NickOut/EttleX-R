@@ -1510,6 +1510,59 @@ impl SqliteRepo {
         Ok(rows_changed > 0)
     }
 
+    /// List group membership records filtered by optional `group_id` and/or `ettle_id`.
+    ///
+    /// At least one of `group_id` or `ettle_id` should be supplied by the caller;
+    /// this function does not enforce that constraint (callers must).
+    ///
+    /// Results are ordered `created_at ASC, id ASC`.
+    pub fn list_group_members_by_filter(
+        conn: &Connection,
+        group_id: Option<&str>,
+        ettle_id: Option<&str>,
+        include_tombstoned: bool,
+    ) -> Result<Vec<GroupMemberRecord>> {
+        let mut clauses: Vec<String> = Vec::new();
+        if !include_tombstoned {
+            clauses.push("tombstoned_at IS NULL".to_string());
+        }
+        if let Some(gid) = group_id {
+            clauses.push(format!("group_id = '{}'", gid.replace('\'', "''")));
+        }
+        if let Some(eid) = ettle_id {
+            clauses.push(format!("ettle_id = '{}'", eid.replace('\'', "''")));
+        }
+
+        let where_clause = if clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", clauses.join(" AND "))
+        };
+
+        let sql = format!(
+            "SELECT id, group_id, ettle_id, created_at, tombstoned_at \
+             FROM group_members {} ORDER BY created_at ASC, id ASC",
+            where_clause
+        );
+
+        let mut stmt = conn.prepare(&sql).map_err(from_rusqlite)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(GroupMemberRecord {
+                    id: row.get(0)?,
+                    group_id: row.get(1)?,
+                    ettle_id: row.get(2)?,
+                    created_at: row.get(3)?,
+                    tombstoned_at: row.get(4)?,
+                })
+            })
+            .map_err(from_rusqlite)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(from_rusqlite)?;
+
+        Ok(rows)
+    }
+
     /// Get all active groups that contain the given ettle_id.
     pub fn get_active_groups_for_ettle(
         conn: &Connection,

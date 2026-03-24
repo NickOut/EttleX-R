@@ -465,6 +465,70 @@ fn handle_tools_list() -> Value {
                 }
             }),
         ),
+        // ── Relation (read) ───────────────────────────────────────────────
+        tool_def(
+            "relation_get",
+            "Get a single relation by ID. Returns the record even if tombstoned.",
+            json!({
+                "type": "object",
+                "required": ["relation_id"],
+                "properties": {
+                    "relation_id": { "type": "string", "description": "Relation ID (rel:...)" }
+                }
+            }),
+        ),
+        tool_def(
+            "relation_list",
+            "List relations filtered by source and/or target ettle. At least one of source_ettle_id or target_ettle_id must be supplied.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "source_ettle_id": { "type": "string", "description": "Filter by source ettle ID" },
+                    "target_ettle_id": { "type": "string", "description": "Filter by target ettle ID" },
+                    "include_tombstoned": { "type": "boolean", "description": "Include tombstoned relations (default false)" },
+                    "limit": { "type": "integer", "description": "Max results (default 100)" },
+                    "cursor": { "type": "string", "description": "Opaque pagination cursor" }
+                }
+            }),
+        ),
+        // ── Group (read) ──────────────────────────────────────────────────
+        tool_def(
+            "group_get",
+            "Get a single group by ID. Returns the record even if tombstoned.",
+            json!({
+                "type": "object",
+                "required": ["group_id"],
+                "properties": {
+                    "group_id": { "type": "string", "description": "Group ID (grp:...)" }
+                }
+            }),
+        ),
+        tool_def(
+            "group_list",
+            "List groups with pagination.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "include_tombstoned": { "type": "boolean", "description": "Include tombstoned groups (default false)" },
+                    "limit": { "type": "integer", "description": "Max results (default 100)" },
+                    "cursor": { "type": "string", "description": "Opaque pagination cursor" }
+                }
+            }),
+        ),
+        tool_def(
+            "group_member_list",
+            "List group memberships filtered by group and/or ettle. At least one of group_id or ettle_id must be supplied.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "group_id": { "type": "string", "description": "Filter by group ID" },
+                    "ettle_id": { "type": "string", "description": "Filter by ettle ID" },
+                    "include_tombstoned": { "type": "boolean", "description": "Include tombstoned memberships (default false)" },
+                    "limit": { "type": "integer", "description": "Max results (default 100)" },
+                    "cursor": { "type": "string", "description": "Opaque pagination cursor" }
+                }
+            }),
+        ),
     ];
     json!({ "tools": tools })
 }

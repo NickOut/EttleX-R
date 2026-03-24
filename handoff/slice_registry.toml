@@ -1441,3 +1441,587 @@ scenario = "SC-S04-07"
 [[slice.pre_authorised_failures]]
 test = "make coverage-check"
 reason = "Coverage pre-authorized at 69% (threshold 80%) from Slice 03. Snapshot pipeline stub (NotImplemented) is untestable at depth. Seed removal effect on coverage is roughly neutral."
+
+[[slice]]
+id = "slice-02b-mcp-read-surface-patch"
+ettle_id = "ettle:019d1d8d-d483-7941-a694-cd6924df612b"
+description = "MCP read surface patch for Relations and Groups — 5 new read tools (relation_get, relation_list, group_get, group_list, group_member_list), bypassing write path"
+layers = ["store", "mcp"]
+status = "complete"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_returns_full_record"
+scenario = "SC-S02b-01"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_returns_tombstoned_record"
+scenario = "SC-S02b-02"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_not_found"
+scenario = "SC-S02b-03"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_does_not_use_apply_path"
+scenario = "SC-S02b-04"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_byte_identical_repeated"
+scenario = "SC-S02b-05"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_error_logged_with_relation_id"
+scenario = "SC-S02b-06"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_does_not_mutate_state"
+scenario = "SC-S02b-07"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_get_fields_match_stored_record"
+scenario = "SC-S02b-08"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_by_source_returns_matching"
+scenario = "SC-S02b-09"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_by_target_returns_matching"
+scenario = "SC-S02b-10"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_by_source_and_target_returns_intersection"
+scenario = "SC-S02b-11"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_include_tombstoned"
+scenario = "SC-S02b-12"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_no_filter_returns_invalid_input"
+scenario = "SC-S02b-13"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_empty_when_no_match"
+scenario = "SC-S02b-14"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_pagination_complete_non_overlapping"
+scenario = "SC-S02b-15"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_does_not_use_apply_path"
+scenario = "SC-S02b-16"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_ordering_deterministic"
+scenario = "SC-S02b-17"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/relation_read_tools_tests.rs"
+test = "test_s02b_relation_list_does_not_mutate_state"
+scenario = "SC-S02b-18"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_get_returns_full_record"
+scenario = "SC-S02b-19"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_get_returns_tombstoned_group"
+scenario = "SC-S02b-20"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_get_not_found"
+scenario = "SC-S02b-21"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_get_does_not_use_apply_path"
+scenario = "SC-S02b-22"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_get_does_not_mutate_state"
+scenario = "SC-S02b-23"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_get_fields_match_stored_record"
+scenario = "SC-S02b-24"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_list_returns_active_groups"
+scenario = "SC-S02b-25"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_list_include_tombstoned"
+scenario = "SC-S02b-26"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_list_pagination_complete_non_overlapping"
+scenario = "SC-S02b-27"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_list_empty_when_no_groups"
+scenario = "SC-S02b-28"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_list_ordering_deterministic"
+scenario = "SC-S02b-29"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_list_does_not_mutate_state"
+scenario = "SC-S02b-30"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_by_group_id"
+scenario = "SC-S02b-31"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_by_ettle_id"
+scenario = "SC-S02b-32"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_by_group_and_ettle_intersection"
+scenario = "SC-S02b-33"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_include_tombstoned"
+scenario = "SC-S02b-34"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_no_filter_returns_invalid_input"
+scenario = "SC-S02b-35"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_empty_when_no_match"
+scenario = "SC-S02b-36"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_pagination_complete_non_overlapping"
+scenario = "SC-S02b-37"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_does_not_use_apply_path"
+scenario = "SC-S02b-38"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_ordering_deterministic"
+scenario = "SC-S02b-39"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_all_five_tools_registered_at_startup"
+scenario = "SC-S02b-40"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_group_member_list_does_not_mutate_state"
+scenario = "SC-S02b-41"
+
+[[slice.tests]]
+crate = "ettlex-mcp"
+file = "tests/group_read_tools_tests.rs"
+test = "test_s02b_no_new_tool_invokes_write_command_path"
+scenario = "SC-S02b-42"
+
+[[slice]]
+id = "agent-api-ettle"
+ettle_id = "ettle:019cf3a7-0b26-78f0-95b5-fab62af26b71"
+description = "Agent API for Ettle/Relation/Group CRUD. All 53 scenarios: read/write/OCC for Ettles, Relations, Groups, and group members; conformance tests for dependency boundary and logging constraints."
+layers = ["agent-api"]
+status = "complete"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_get_returns_full_record"
+scenario = "SC-01"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_get_returns_tombstoned"
+scenario = "SC-02"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_get_not_found"
+scenario = "SC-03"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_get_byte_identical"
+scenario = "SC-04"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_get_lifecycle_events"
+scenario = "SC-05"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_context_assembled"
+scenario = "SC-06"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_context_not_found"
+scenario = "SC-07"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_list_active_deterministic"
+scenario = "SC-08"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_list_pagination"
+scenario = "SC-09"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_list_limit_zero_rejected"
+scenario = "SC-10"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_create_title_only"
+scenario = "SC-11"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_create_empty_title"
+scenario = "SC-12"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_create_rejects_caller_id"
+scenario = "SC-13"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_create_link_without_type"
+scenario = "SC-14"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_update_fields"
+scenario = "SC-15"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_update_clears_reasoning_link"
+scenario = "SC-16"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_update_preserves_unspecified"
+scenario = "SC-17"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_update_rejects_tombstoned"
+scenario = "SC-18"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_tombstone_marks_inactive"
+scenario = "SC-19"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_ettle_tombstone_rejects_active_dependants"
+scenario = "SC-20"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_occ_correct_version"
+scenario = "SC-21"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_ettle_tests.rs"
+test = "test_agent_occ_wrong_version"
+scenario = "SC-22"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_create_succeeds"
+scenario = "SC-23"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_create_rejects_caller_id"
+scenario = "SC-24"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_create_unknown_type"
+scenario = "SC-25"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_create_self_referential"
+scenario = "SC-26"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_create_missing_source"
+scenario = "SC-27"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_create_tombstoned_source"
+scenario = "SC-28"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_get_returns_full_record"
+scenario = "SC-29"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_get_not_found"
+scenario = "SC-30"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_list_by_source"
+scenario = "SC-31"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_list_no_filter_fails"
+scenario = "SC-32"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_list_ordering_deterministic"
+scenario = "SC-33"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_tombstone_marks_inactive"
+scenario = "SC-34"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_tombstone_not_found"
+scenario = "SC-35"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_relation_tests.rs"
+test = "test_agent_relation_tombstone_already_tombstoned"
+scenario = "SC-36"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_create_succeeds"
+scenario = "SC-37"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_create_empty_name_fails"
+scenario = "SC-38"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_get_returns_full_record"
+scenario = "SC-39"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_get_not_found"
+scenario = "SC-40"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_list_active_deterministic"
+scenario = "SC-41"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_member_add_succeeds"
+scenario = "SC-42"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_member_add_duplicate_fails"
+scenario = "SC-43"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_member_add_tombstoned_group_fails"
+scenario = "SC-44"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_member_remove_marks_tombstoned"
+scenario = "SC-45"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_member_remove_not_found_fails"
+scenario = "SC-46"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_member_list_by_group_id"
+scenario = "SC-47"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_group_tests.rs"
+test = "test_agent_group_member_list_no_filter_fails"
+scenario = "SC-48"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_conformance_tests.rs"
+test = "test_agent_api_only_memory_dep"
+scenario = "SC-49"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_conformance_tests.rs"
+test = "test_agent_api_writes_route_through_memory"
+scenario = "SC-50"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_conformance_tests.rs"
+test = "test_agent_api_single_boundary_module"
+scenario = "SC-51"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_conformance_tests.rs"
+test = "test_agent_api_no_why_what_how_in_logs"
+scenario = "SC-52"
+
+[[slice.tests]]
+crate = "ettlex-agent-api"
+file = "tests/agent_api_conformance_tests.rs"
+test = "test_agent_api_no_apply_mcp_command"
+scenario = "SC-53"

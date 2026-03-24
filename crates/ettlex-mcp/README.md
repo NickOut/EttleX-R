@@ -40,6 +40,11 @@ surface unchanged via `MemoryManager`.
 | `profile_get_default`           | Get the default profile                                   |
 | `approval_get`                  | Get an approval request by token                          |
 | `constraint_predicates_preview` | Preview constraint predicate resolution (read-only)       |
+| `relation_get`                  | Get a relation by ID (returns even if tombstoned)         |
+| `relation_list`                 | List relations by source/target ettle (paginated)         |
+| `group_get`                     | Get a group by ID (returns even if tombstoned)            |
+| `group_list`                    | List groups (paginated)                                   |
+| `group_member_list`             | List group memberships by group/ettle (paginated)         |
 
 ---
 

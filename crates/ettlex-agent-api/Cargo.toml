@@ -9,5 +9,10 @@ path = "src/lib.rs"
 
 [dependencies]
 ettlex-memory = { path = "../ettlex-memory" }
+base64 = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+tempfile = "3.0"
+toml = { workspace = true }

@@ -11,7 +11,8 @@ use crate::context::RequestContext;
 use crate::error::{McpError, MCP_AUTH_REQUIRED, MCP_REQUEST_TOO_LARGE, MCP_TOOL_NOT_FOUND};
 pub use crate::error::{McpResponse, McpResult};
 use crate::tools::{
-    apply, approval, constraint, decision, ettle, policy, predicate, profile, snapshot, state,
+    apply, approval, constraint, decision, ettle, group, policy, predicate, profile, relation,
+    snapshot, state,
 };
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,17 @@ impl McpServer {
         match call.tool_name.as_str() {
             // ── Write ──────────────────────────────────────────────────────
             "ettlex_apply" => apply::handle_apply(p, conn, cas, policy_provider, approval_router),
+
+            // ── Relation (read) ────────────────────────────────────────────
+            "relation_get" => relation::handle_relation_get_tool(p, conn, cas, policy_provider),
+            "relation_list" => relation::handle_relation_list_tool(p, conn, cas, policy_provider),
+
+            // ── Group (read) ────────────────────────────────────────────────
+            "group_get" => group::handle_group_get_tool(p, conn, cas, policy_provider),
+            "group_list" => group::handle_group_list_tool(p, conn, cas, policy_provider),
+            "group_member_list" => {
+                group::handle_group_member_list_tool(p, conn, cas, policy_provider)
+            }
 
             // ── Ettle ──────────────────────────────────────────────────────
             "ettle_get" => ettle::handle_ettle_get(p, conn, cas, policy_provider),

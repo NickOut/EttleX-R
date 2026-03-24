@@ -155,20 +155,65 @@ A group can only be tombstoned if it has no active members. Remove all members f
 
 ---
 
+## MCP Read Tools (Slice 02b)
+
+Five read tools are available directly via MCP (bypass `ettlex_apply`, do not increment `state_version`):
+
+### `relation_get`
+
+```json
+{ "relation_id": "rel:..." }
+```
+
+Returns: `{ relation_id, source_ettle_id, target_ettle_id, relation_type, properties_json, created_at, tombstoned_at }`.
+Returns the record even if tombstoned. Returns `NotFound` if not found.
+
+### `relation_list`
+
+```json
+{ "source_ettle_id": "ettle:...", "target_ettle_id": "ettle:...", "include_tombstoned": false, "limit": 100, "cursor": "..." }
+```
+
+At least one of `source_ettle_id` or `target_ettle_id` must be supplied (returns `InvalidInput` otherwise).
+Returns `{ items: [...], cursor? }` with cursor-based pagination.
+
+### `group_get`
+
+```json
+{ "group_id": "grp:..." }
+```
+
+Returns: `{ group_id, name, created_at, tombstoned_at }`.
+Returns the record even if tombstoned. Returns `NotFound` if not found.
+
+### `group_list`
+
+```json
+{ "include_tombstoned": false, "limit": 100, "cursor": "..." }
+```
+
+Returns `{ items: [{ group_id, name, created_at, tombstoned_at }], cursor? }`.
+
+### `group_member_list`
+
+```json
+{ "group_id": "grp:...", "ettle_id": "ettle:...", "include_tombstoned": false, "limit": 100, "cursor": "..." }
+```
+
+At least one of `group_id` or `ettle_id` must be supplied (returns `InvalidInput` otherwise).
+Returns `{ items: [{ id, group_id, ettle_id, created_at, tombstoned_at }], cursor? }`.
+
 ## Read Queries (Engine layer)
 
-The following `EngineQuery` variants are available for relations and groups:
+The following engine handler functions are available for relations and groups:
 
-| Query | Description |
-|-------|-------------|
-| `RelationGet { relation_id }` | Fetch a single relation |
-| `RelationList { source_ettle_id?, relation_type?, include_tombstoned? }` | List relations (at least one filter required) |
-| `GroupGet { group_id }` | Fetch a single group |
-| `GroupList` | List all active groups |
-| `GroupMemberList { group_id, include_tombstoned? }` | List members of a group |
-
-> **MCP read tools for relations and groups** will be exposed in a future slice.
-> Write commands are available now via `ettlex_apply`.
+| Function | Description |
+|----------|-------------|
+| `handle_relation_get(conn, relation_id)` | Fetch a single relation |
+| `handle_relation_list(conn, source?, target?, relation_type?, include_tombstoned)` | List relations (at least one filter required) |
+| `handle_group_get(conn, group_id)` | Fetch a single group |
+| `handle_group_list(conn, include_tombstoned)` | List all groups |
+| `handle_group_member_list(conn, group_id, include_tombstoned)` | List members of a group by group_id |
 
 ---
 
